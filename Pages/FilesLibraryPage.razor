@@ -1,0 +1,131 @@
+@page "/files"
+@inject IndexedDbService Db
+@inject NavigationManager Nav
+@inject AppStateService AppState
+
+<PageTitle>Files Library — Simply Job Application</PageTitle>
+
+<h4 class="mb-4">Files Library</h4>
+
+@if (_loading)
+{
+    <div class="text-center py-5"><div class="spinner-border" role="status"></div></div>
+}
+else if (_files.Count == 0)
+{
+    <div class="alert alert-info">No files stored yet.</div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>File Name</th>
+                    <th>Sessions</th>
+                    <th>Last Used</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var f in _files)
+                {
+                    <tr>
+                        <td>@f.Name</td>
+                        <td>
+                            @if (f.SessionCount > 0)
+                            {
+                                <span class="badge bg-secondary" style="cursor:pointer"
+                                      @onclick="() => ToggleSessionList(f.Id)"
+                                      title="Click to view sessions">
+                                    @f.SessionCount session@(f.SessionCount == 1 ? "" : "s")
+                                </span>
+                                @if (_expandedFileId == f.Id && _sessionsByFile.TryGetValue(f.Id, out var sessions))
+                                {
+                                    <div class="mt-1 ms-1">
+                                        @foreach (var s in sessions)
+                                        {
+                                            <div class="small">
+                                                <a href="/history/@s.Id">@s.CompanyName — @s.JobTitle</a>
+                                                <span class="text-muted ms-1">(@s.CreatedAt.ToLocalTime().ToString("d"))</span>
+                                            </div>
+                                        }
+                                    </div>
+                                }
+                            }
+                            else
+                            {
+                                <span class="text-muted small">—</span>
+                            }
+                        </td>
+                        <td class="text-muted small">@f.LastUsedAt.ToLocalTime().ToString("g")</td>
+                        <td class="text-end">
+                            <button class="btn btn-sm btn-outline-primary me-1"
+                                    @onclick="() => DownloadAsync(f.Id, f.Name)">
+                                Download
+                            </button>
+                            <button class="btn btn-sm btn-outline-secondary"
+                                    @onclick="() => UseAsResume(f.Id, f.Name)"
+                                    title="Use as resume on Apply screen">
+                                Use as Resume
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger mt-3">@_error</div>
+}
+
+@code {
+    List<StoredFileMeta> _files = new();
+    List<SessionRecord> _allSessions = new();
+    Dictionary<string, List<SessionRecord>> _sessionsByFile = new();
+    string? _expandedFileId;
+    bool _loading = true;
+    string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _files = (await Db.GetAllFileMetaAsync()).OrderByDescending(f => f.LastUsedAt).ToList();
+        _allSessions = await Db.GetAllSessionsAsync();
+
+        foreach (var s in _allSessions)
+        {
+            foreach (var fileId in new[] { s.InputResumeFileId, s.TailoredResumeFileId, s.CoverLetterFileId }
+                         .Where(id => id is not null).Cast<string>())
+            {
+                if (!_sessionsByFile.ContainsKey(fileId))
+                    _sessionsByFile[fileId] = new();
+                if (!_sessionsByFile[fileId].Any(x => x.Id == s.Id))
+                    _sessionsByFile[fileId].Add(s);
+            }
+        }
+
+        _loading = false;
+    }
+
+    void ToggleSessionList(string fileId)
+    {
+        _expandedFileId = _expandedFileId == fileId ? null : fileId;
+    }
+
+    async Task DownloadAsync(string fileId, string fileName)
+    {
+        var file = await Db.GetFileAsync(fileId);
+        if (file is null) { _error = "File not found."; return; }
+        await Db.DownloadFileAsync(fileName, Convert.FromBase64String(file.DataBase64));
+    }
+
+    void UseAsResume(string fileId, string fileName)
+    {
+        AppState.PendingResumeFileId = fileId;
+        AppState.PendingResumeFileName = fileName;
+        Nav.NavigateTo("/");
+    }
+}

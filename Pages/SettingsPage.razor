@@ -1,0 +1,168 @@
+@page "/settings"
+@inject IndexedDbService Db
+@inject AiProviderFactory Providers
+
+<PageTitle>Settings — Simply Job Application</PageTitle>
+
+<h4 class="mb-4">Settings</h4>
+
+<div class="row g-4">
+    <div class="col-12 col-md-7">
+        <div class="card">
+            <div class="card-header">AI Provider</div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Provider</label>
+                    <select class="form-select" @bind="_selectedProvider" @bind:after="OnProviderChanged">
+                        @foreach (var p in Providers.All)
+                        {
+                            <option value="@p.ProviderId">@p.DisplayName</option>
+                        }
+                    </select>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">API Key</label>
+                    <input type="password" class="form-control" @bind="_apiKey"
+                           placeholder="sk-…" autocomplete="off" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Model</label>
+                    <select class="form-select" @bind="_selectedModel">
+                        @foreach (var m in _models)
+                        {
+                            <option value="@m.Id">@m.DisplayName</option>
+                        }
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header">Storage Limits</div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Session history limit</label>
+                    <input type="number" class="form-control" @bind="_historyLimit" min="1" max="500" />
+                    <div class="form-text">Oldest sessions are removed first when the limit is exceeded.</div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Files library limit</label>
+                    <input type="number" class="form-control" @bind="_filesLimit" min="1" max="500" />
+                    <div class="form-text">Least recently used files are removed first.</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="d-flex gap-2 mt-3">
+            <button class="btn btn-primary" @onclick="SaveAsync">Save</button>
+            <button class="btn btn-outline-danger ms-auto" @onclick="() => _confirmClear = true">
+                Clear Storage
+            </button>
+        </div>
+
+        @if (_saved)
+        {
+            <div class="alert alert-success mt-3">Settings saved.</div>
+        }
+        @if (_error is not null)
+        {
+            <div class="alert alert-danger mt-3">@_error</div>
+        }
+    </div>
+</div>
+
+@if (_confirmClear)
+{
+    <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4)">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Clear Storage</h5>
+                    <button class="btn-close" @onclick="() => _confirmClear = false"></button>
+                </div>
+                <div class="modal-body">
+                    This will permanently delete all session history and stored files.
+                    Settings (API key, model, limits) will not be affected.
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="() => _confirmClear = false">Cancel</button>
+                    <button class="btn btn-danger" @onclick="ClearStorageAsync">Yes, clear everything</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    string _selectedProvider = "openai";
+    string _apiKey = "";
+    string _selectedModel = "";
+    int _historyLimit = 20;
+    int _filesLimit = 41;
+
+    bool _saved;
+    bool _confirmClear;
+    string? _error;
+
+    IReadOnlyList<AiModel> _models = Array.Empty<AiModel>();
+    AppSettings _settings = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _settings = await Db.GetSettingsAsync();
+        _selectedProvider = _settings.AiProvider;
+        _historyLimit = _settings.HistoryLimit;
+        _filesLimit = _settings.FilesLimit;
+        LoadProviderFields();
+    }
+
+    void LoadProviderFields()
+    {
+        var provider = Providers.Get(_selectedProvider);
+        _models = provider.AvailableModels;
+        _apiKey = _settings.ProviderApiKeys.GetValueOrDefault(_selectedProvider) ?? "";
+        _selectedModel = _settings.ProviderModels.GetValueOrDefault(_selectedProvider)
+                         ?? provider.DefaultModelId;
+    }
+
+    void OnProviderChanged()
+    {
+        if (_saved) _saved = false;
+        LoadProviderFields();
+    }
+
+    async Task SaveAsync()
+    {
+        _error = null;
+        _saved = false;
+        try
+        {
+            _settings.AiProvider = _selectedProvider;
+            _settings.ProviderApiKeys[_selectedProvider] = _apiKey;
+            _settings.ProviderModels[_selectedProvider] = _selectedModel;
+            _settings.HistoryLimit = _historyLimit;
+            _settings.FilesLimit = _filesLimit;
+            await Db.SaveSettingsAsync(_settings);
+            _saved = true;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+
+    async Task ClearStorageAsync()
+    {
+        _confirmClear = false;
+        try
+        {
+            await Db.ClearSessionsAsync();
+            await Db.ClearFilesAsync();
+            _saved = true;
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+    }
+}

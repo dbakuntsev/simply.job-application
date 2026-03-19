@@ -1,0 +1,505 @@
+@page "/"
+@inject IndexedDbService Db
+@inject DocxService Docx
+@inject AiProviderFactory Providers
+@inject AppStateService AppState
+@inject NavigationManager Nav
+
+<PageTitle>Apply — Simply Job Application</PageTitle>
+
+<h4 class="mb-4">Job Application</h4>
+
+@if (!_hasApiKey)
+{
+    <div class="alert alert-warning">
+        No API key configured for the selected provider.
+        <a href="/settings">Go to Settings</a> to enter your key.
+    </div>
+}
+
+<div class="row g-3">
+    <div class="col-12 col-lg-5">
+        <div class="card">
+            <div class="card-header">Job Description</div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Company Name</label>
+                    <input class="form-control" @bind="_companyName" placeholder="Acme Corp" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Job Title</label>
+                    <input class="form-control" @bind="_jobTitle" placeholder="Software Engineer" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Job Details</label>
+                    <textarea class="form-control" rows="10" @bind="_jobDetails"
+                              placeholder="Paste the full job description here…"></textarea>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mt-3">
+            <div class="card-header">Resume</div>
+            <div class="card-body">
+                @if (_selectedFileName is not null)
+                {
+                    <div class="alert alert-success py-2 d-flex justify-content-between align-items-center mb-2">
+                        <span>📄 @_selectedFileName</span>
+                        <button class="btn btn-sm btn-outline-danger" @onclick="ClearResume">✕</button>
+                    </div>
+                }
+                <div class="mb-2">
+                    <label class="form-label">Upload DOCX</label>
+                    <InputFile class="form-control" accept=".docx" OnChange="OnFileUpload" />
+                </div>
+                <div class="text-center text-muted small my-2">— or —</div>
+                <button class="btn btn-outline-secondary w-100" type="button"
+                        @onclick="() => _showFilePicker = true">
+                    Choose from Files Library
+                </button>
+            </div>
+        </div>
+
+        <div class="d-flex gap-2 mt-3">
+            <button class="btn btn-primary flex-grow-1 py-2"
+                    disabled="@(!CanEvaluate)"
+                    @onclick="EvaluateAsync">
+                @if (_evaluating)
+                {
+                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                    <span>@_loadingStep</span>
+                }
+                else
+                {
+                    <span>Evaluate</span>
+                }
+            </button>
+            <button class="btn btn-outline-secondary py-2"
+                    disabled="@(_evaluating || _generating)"
+                    @onclick="NewSession">
+                New
+            </button>
+        </div>
+        @if (_error is not null)
+        {
+            <div class="alert alert-danger mt-3">@_error</div>
+        }
+    </div>
+
+    <div class="col-12 col-lg-7">
+        @if (_evaluation is not null)
+        {
+            <div class="card mb-3">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <span>Match Evaluation</span>
+                    <span class="badge @ScoreBadgeClass(_evaluation.Score)">@_evaluation.Score</span>
+                </div>
+                <div class="card-body">
+                    @if (_evaluation.Strengths.Count > 0)
+                    {
+                        <p class="mb-1 fw-semibold text-success">Strengths:</p>
+                        <ul class="mb-3">
+                            @foreach (var strength in _evaluation.Strengths)
+                            {
+                                <li>@strength</li>
+                            }
+                        </ul>
+                    }
+
+                    @if (_evaluation.Gaps.Count > 0)
+                    {
+                        <p class="mb-1 fw-semibold">Areas needing attention:</p>
+                        <ul class="mb-0">
+                            @foreach (var gap in _evaluation.Gaps)
+                            {
+                                <li>@gap</li>
+                            }
+                        </ul>
+                    }
+                    else
+                    {
+                        <p class="mb-0 text-success">No significant gaps identified.</p>
+                    }
+
+                </div>
+            </div>
+
+            @if (_materials is null)
+            {
+                <button class="btn btn-success w-100 mb-3 py-2"
+                        disabled="@_generating"
+                        @onclick="GenerateAsync">
+                    @if (_generating)
+                    {
+                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                        <span>@_loadingStep</span>
+                    }
+                    else
+                    {
+                        <span>Generate</span>
+                    }
+                </button>
+            }
+
+            @if (_materials is not null)
+            {
+                <div class="card mb-3">
+                    <div class="card-header">Why Apply</div>
+                    <div class="card-body">
+                        <p class="mb-0">@_materials.WhyApplyText</p>
+                    </div>
+                </div>
+
+                <div class="card mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        Cover Letter
+                        @if (_coverLetterFileId is not null)
+                        {
+                            <button class="btn btn-sm btn-outline-primary"
+                                    @onclick="DownloadCoverLetter">
+                                Download DOCX
+                            </button>
+                        }
+                    </div>
+                    <div class="card-body">
+                        @foreach (var para in _materials.CoverLetterText.Split(new[] { "\n\n", "\r\n\r\n" }, StringSplitOptions.RemoveEmptyEntries))
+                        {
+                            <p>@para</p>
+                        }
+                    </div>
+                </div>
+
+                <div class="card mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        Tailored Resume
+                        @if (_tailoredResumeFileId is not null)
+                        {
+                            <button class="btn btn-sm btn-outline-primary"
+                                    @onclick="DownloadTailoredResume">
+                                Download DOCX
+                            </button>
+                        }
+                    </div>
+                    <div class="card-body text-muted small">
+                        Tailored resume has been generated and saved to the Files Library.
+                    </div>
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@if (_showFilePicker)
+{
+    <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4)">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Choose Resume from Files Library</h5>
+                    <button class="btn-close" @onclick="() => _showFilePicker = false"></button>
+                </div>
+                <div class="modal-body">
+                    @if (_fileMeta.Count == 0)
+                    {
+                        <p class="text-muted">No files stored yet.</p>
+                    }
+                    else
+                    {
+                        <div class="list-group">
+                            @foreach (var f in _fileMeta.OrderByDescending(x => x.LastUsedAt))
+                            {
+                                <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
+                                        @onclick="() => SelectStoredFile(f.Id, f.Name)">
+                                    <span>@f.Name</span>
+                                    <small class="text-muted">@f.LastUsedAt.ToLocalTime().ToString("g")</small>
+                                </button>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    string _companyName = "", _jobTitle = "", _jobDetails = "";
+    byte[]? _resumeBytes;
+    string? _selectedFileName;
+    string? _selectedFileId;
+
+    bool _evaluating;
+    bool _generating;
+    string? _loadingStep;
+    string? _error;
+    bool _hasApiKey = true;
+
+    MatchEvaluation? _evaluation;
+    GeneratedMaterials? _materials;
+    string? _tailoredResumeFileId;
+    string? _coverLetterFileId;
+
+    // Persisted between Turn 1 and Turn 2
+    string? _resumeMarkdown;
+    string? _inputFileId;
+
+    bool _showFilePicker;
+    List<StoredFileMeta> _fileMeta = new();
+    AppSettings _settings = new();
+
+    bool CanEvaluate => !_evaluating && !_generating && _hasApiKey &&
+                        !string.IsNullOrWhiteSpace(_companyName) &&
+                        !string.IsNullOrWhiteSpace(_jobTitle) &&
+                        !string.IsNullOrWhiteSpace(_jobDetails) &&
+                        _resumeBytes is not null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _settings = await Db.GetSettingsAsync();
+        _hasApiKey = !string.IsNullOrWhiteSpace(
+            _settings.ProviderApiKeys.GetValueOrDefault(_settings.AiProvider));
+        _fileMeta = await Db.GetAllFileMetaAsync();
+
+        if (AppState.PendingResumeFileId is not null)
+        {
+            await SelectStoredFile(AppState.PendingResumeFileId, AppState.PendingResumeFileName ?? "resume.docx");
+            AppState.PendingResumeFileId = null;
+            AppState.PendingResumeFileName = null;
+        }
+    }
+
+    async Task OnFileUpload(InputFileChangeEventArgs e)
+    {
+        try
+        {
+            var file = e.File;
+            using var ms = new MemoryStream();
+            await file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024).CopyToAsync(ms);
+            _resumeBytes = ms.ToArray();
+            _selectedFileName = file.Name;
+            _selectedFileId = null;
+        }
+        catch (Exception ex)
+        {
+            _error = $"Error reading file: {ex.Message}";
+        }
+    }
+
+    async Task SelectStoredFile(string id, string name)
+    {
+        var file = await Db.GetFileAsync(id);
+        if (file is null) { _error = "File not found in storage."; return; }
+        _resumeBytes = Convert.FromBase64String(file.DataBase64);
+        _selectedFileName = name;
+        _selectedFileId = id;
+        _showFilePicker = false;
+    }
+
+    void ClearResume()
+    {
+        _resumeBytes = null;
+        _selectedFileName = null;
+        _selectedFileId = null;
+    }
+
+    void NewSession()
+    {
+        _companyName = "";
+        _jobTitle = "";
+        _jobDetails = "";
+        _resumeBytes = null;
+        _selectedFileName = null;
+        _selectedFileId = null;
+        _evaluation = null;
+        _materials = null;
+        _tailoredResumeFileId = null;
+        _coverLetterFileId = null;
+        _resumeMarkdown = null;
+        _inputFileId = null;
+        _error = null;
+    }
+
+    async Task EvaluateAsync()
+    {
+        _error = null;
+        _evaluation = null;
+        _materials = null;
+        _tailoredResumeFileId = null;
+        _coverLetterFileId = null;
+        _resumeMarkdown = null;
+        _inputFileId = null;
+        _evaluating = true;
+
+        try
+        {
+            _settings = await Db.GetSettingsAsync();
+            var apiKey = _settings.ProviderApiKeys.GetValueOrDefault(_settings.AiProvider) ?? "";
+            var modelId = _settings.ProviderModels.GetValueOrDefault(_settings.AiProvider)
+                          ?? Providers.Get(_settings.AiProvider).DefaultModelId;
+            var provider = Providers.Get(_settings.AiProvider);
+
+            _loadingStep = "Extracting resume…";
+            StateHasChanged();
+            _resumeMarkdown = Docx.ExtractMarkdown(_resumeBytes!);
+
+            _loadingStep = "Evaluating match…";
+            StateHasChanged();
+            var job = new JobDescription
+            {
+                CompanyName = _companyName,
+                JobTitle = _jobTitle,
+                JobDetails = _jobDetails,
+            };
+            _evaluation = await provider.EvaluateMatchAsync(job, _resumeMarkdown, modelId, apiKey);
+
+            // Store resume in file library (needed for session record).
+            _inputFileId = _selectedFileId;
+            if (_inputFileId is null)
+            {
+                _inputFileId = Guid.NewGuid().ToString();
+                await Db.SaveFileAsync(new StoredFile
+                {
+                    Id = _inputFileId,
+                    Name = _selectedFileName ?? "resume.docx",
+                    DataBase64 = Convert.ToBase64String(_resumeBytes!),
+                    LastUsedAt = DateTime.UtcNow,
+                    SessionCount = 1,
+                });
+                await Db.EnforceFileLimitAsync(_settings.FilesLimit);
+            }
+            else
+            {
+                var existing = await Db.GetFileAsync(_inputFileId);
+                if (existing is not null)
+                {
+                    existing.LastUsedAt = DateTime.UtcNow;
+                    existing.SessionCount++;
+                    await Db.SaveFileAsync(existing);
+                }
+            }
+
+
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _evaluating = false;
+            _loadingStep = null;
+        }
+    }
+
+    async Task GenerateAsync()
+    {
+        if (_evaluation is null || _resumeMarkdown is null) return;
+
+        _error = null;
+        _generating = true;
+
+        try
+        {
+            _settings = await Db.GetSettingsAsync();
+            var apiKey = _settings.ProviderApiKeys.GetValueOrDefault(_settings.AiProvider) ?? "";
+            var modelId = _settings.ProviderModels.GetValueOrDefault(_settings.AiProvider)
+                          ?? Providers.Get(_settings.AiProvider).DefaultModelId;
+            var provider = Providers.Get(_settings.AiProvider);
+
+            var job = new JobDescription
+            {
+                CompanyName = _companyName,
+                JobTitle = _jobTitle,
+                JobDetails = _jobDetails,
+            };
+
+            _loadingStep = "Generating materials…";
+            StateHasChanged();
+            _materials = await provider.GenerateMaterialsAsync(job, _resumeMarkdown, _evaluation, modelId, apiKey);
+
+            var resumeDocxBytes = Docx.GenerateResumeDocx(_resumeBytes!, _materials.ResumeMarkdown);
+            var resumeFileId = Guid.NewGuid().ToString();
+            await Db.SaveFileAsync(new StoredFile
+            {
+                Id = resumeFileId,
+                Name = $"Resume - {_companyName} - {_jobTitle}.docx",
+                DataBase64 = Convert.ToBase64String(resumeDocxBytes),
+                LastUsedAt = DateTime.UtcNow,
+                SessionCount = 1,
+            });
+            _tailoredResumeFileId = resumeFileId;
+
+            var clDocx = Docx.GenerateCoverLetterDocx(_materials.CoverLetterText);
+            var clFileId = Guid.NewGuid().ToString();
+            await Db.SaveFileAsync(new StoredFile
+            {
+                Id = clFileId,
+                Name = $"Cover Letter - {_companyName} - {_jobTitle}.docx",
+                DataBase64 = Convert.ToBase64String(clDocx),
+                LastUsedAt = DateTime.UtcNow,
+                SessionCount = 1,
+            });
+            _coverLetterFileId = clFileId;
+
+            await Db.EnforceFileLimitAsync(_settings.FilesLimit);
+            await SaveSessionAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _generating = false;
+            _loadingStep = null;
+        }
+    }
+
+    async Task SaveSessionAsync()
+    {
+        var session = new SessionRecord
+        {
+            CompanyName = _companyName,
+            JobTitle = _jobTitle,
+            JobDetails = _jobDetails,
+            InputResumeFileId = _inputFileId ?? "",
+            MatchScore = _evaluation?.Score ?? "",
+            MatchGaps = _evaluation?.Gaps ?? new(),
+            MatchStrengths = _evaluation?.Strengths ?? new(),
+            CoverLetterText = _materials?.CoverLetterText ?? "",
+            WhyApplyText = _materials?.WhyApplyText ?? "",
+            TailoredResumeFileId = _tailoredResumeFileId,
+            CoverLetterFileId = _coverLetterFileId,
+        };
+        await Db.SaveSessionAsync(session);
+        await Db.EnforceSessionLimitAsync(_settings.HistoryLimit);
+    }
+
+    async Task DownloadCoverLetter()
+    {
+        if (_coverLetterFileId is null) return;
+        await DownloadFileAsync(_coverLetterFileId, $"Cover Letter - {_jobTitle}.docx");
+    }
+
+    async Task DownloadTailoredResume()
+    {
+        if (_tailoredResumeFileId is null) return;
+        await DownloadFileAsync(_tailoredResumeFileId, $"Resume - {_companyName} - {_jobTitle}.docx");
+    }
+
+    async Task DownloadFileAsync(string fileId, string fileName)
+    {
+        var file = await Db.GetFileAsync(fileId);
+        if (file is null) { _error = "File not found."; return; }
+        var bytes = Convert.FromBase64String(file.DataBase64);
+        await Db.DownloadFileAsync(fileName, bytes);
+    }
+
+    static string ScoreBadgeClass(string score) => score switch
+    {
+        "Excellent" => "bg-success",
+        "Good"      => "bg-primary",
+        "Fair"      => "bg-warning text-dark",
+        _           => "bg-danger",
+    };
+}

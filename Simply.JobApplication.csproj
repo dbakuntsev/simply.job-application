@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="8.0.11" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="8.0.11" PrivateAssets="all" />
+  </ItemGroup>
+
+  <!--
+    Cache-buster for app.css.
+    Stamps ?v=<sha1> onto the app.css href in index.html using the file's content hash,
+    so browsers re-fetch the stylesheet on every change without any manual version bumps.
+    The regex replace handles both the initial placeholder and any previously stamped hash,
+    so the correct hash is always written regardless of the current state of index.html.
+  -->
+  <Target Name="InjectAppCssVersion" BeforeTargets="Build">
+    <PropertyGroup>
+      <_AppCssPath>$(MSBuildProjectDirectory)\wwwroot\css\app.css</_AppCssPath>
+      <_IndexHtmlPath>$(MSBuildProjectDirectory)\wwwroot\index.html</_IndexHtmlPath>
+    </PropertyGroup>
+    <GetFileHash Files="$(_AppCssPath)" Algorithm="SHA256">
+      <Output TaskParameter="Hash" PropertyName="_AppCssHash" />
+    </GetFileHash>
+    <!--
+      Replace  css/app.css?v=<anything>  with  css/app.css?v=<newhash>
+      The \?v=[^"]* pattern matches both the __APP_CSS_VERSION__ placeholder on first
+      build and any previously written hash on subsequent builds.
+    -->
+    <Exec Command="powershell -NoProfile -Command &quot;$p='$(_IndexHtmlPath)'; $h='$(_AppCssHash)'; $c=[IO.File]::ReadAllText($p,[Text.Encoding]::UTF8); $r='app.css?v='+$h; $c=$c -replace 'app\.css\?v=[^\x22]*',$r; [IO.File]::WriteAllText($p,$c,[Text.Encoding]::UTF8)&quot;" />
+  </Target>
+
+</Project>

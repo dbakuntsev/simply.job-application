@@ -1,0 +1,188 @@
+@page "/history/{Id}"
+@inject IndexedDbService Db
+@inject NavigationManager Nav
+
+<PageTitle>Session Detail — Simply Job Application</PageTitle>
+
+@if (_loading)
+{
+    <div class="text-center py-5"><div class="spinner-border" role="status"></div></div>
+}
+else if (_session is null)
+{
+    <div class="alert alert-warning">Session not found.</div>
+    <a href="/history" class="btn btn-secondary">Back to History</a>
+}
+else
+{
+    <div class="d-flex align-items-center mb-4 gap-3">
+        <a href="/history" class="btn btn-outline-secondary btn-sm">← Back</a>
+        <h4 class="mb-0">@_session.CompanyName — @_session.JobTitle</h4>
+        <span class="badge @ScoreBadgeClass(_session.MatchScore) ms-auto">@_session.MatchScore</span>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-12 col-md-5">
+            <div class="card">
+                <div class="card-header">Job Description</div>
+                <div class="card-body">
+                    <dl class="mb-0">
+                        <dt>Company</dt>
+                        <dd>@_session.CompanyName</dd>
+                        <dt>Title</dt>
+                        <dd>@_session.JobTitle</dd>
+                        <dt>Details</dt>
+                        <dd><pre class="small text-wrap">@_session.JobDetails</pre></dd>
+                    </dl>
+                </div>
+            </div>
+
+            <div class="card mt-3">
+                <div class="card-header">Resume Used</div>
+                <div class="card-body">
+                    @if (_resumeMeta is not null)
+                    {
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span>@_resumeMeta.Name</span>
+                            <button class="btn btn-sm btn-outline-primary"
+                                    @onclick="() => DownloadFileAsync(_session.InputResumeFileId, _resumeMeta.Name)">
+                                Download
+                            </button>
+                        </div>
+                    }
+                    else
+                    {
+                        <span class="text-muted small">File no longer in library.</span>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="col-12 col-md-7">
+            <div class="card mb-3">
+                <div class="card-header">Match Evaluation</div>
+                <div class="card-body">
+                    @if (_session.MatchStrengths.Count > 0)
+                    {
+                        <p class="mb-1 fw-semibold text-success">Strengths:</p>
+                        <ul class="mb-3">
+                            @foreach (var s in _session.MatchStrengths)
+                            {
+                                <li>@s</li>
+                            }
+                        </ul>
+                    }
+
+                    @if (_session.MatchGaps.Count > 0)
+                    {
+                        <p class="mb-1 fw-semibold">Areas needing attention:</p>
+                        <ul class="mb-0">
+                            @foreach (var g in _session.MatchGaps)
+                            {
+                                <li>@g</li>
+                            }
+                        </ul>
+                    }
+                    else
+                    {
+                        <span class="text-muted">No significant gaps identified.</span>
+                    }
+                </div>
+            </div>
+
+            @if (!string.IsNullOrEmpty(_session.WhyApplyText))
+            {
+                <div class="card mb-3">
+                    <div class="card-header">Why Apply</div>
+                    <div class="card-body"><p class="mb-0">@_session.WhyApplyText</p></div>
+                </div>
+            }
+
+            @if (!string.IsNullOrEmpty(_session.CoverLetterText))
+            {
+                <div class="card mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        Cover Letter
+                        @if (_session.CoverLetterFileId is not null && _clMeta is not null)
+                        {
+                            <button class="btn btn-sm btn-outline-primary"
+                                    @onclick="() => DownloadFileAsync(_session.CoverLetterFileId, _clMeta.Name)">
+                                Download DOCX
+                            </button>
+                        }
+                    </div>
+                    <div class="card-body">
+                        @foreach (var para in _session.CoverLetterText.Split(new[] { "\n\n", "\r\n\r\n" }, StringSplitOptions.RemoveEmptyEntries))
+                        {
+                            <p>@para</p>
+                        }
+                    </div>
+                </div>
+            }
+
+            @if (_session.TailoredResumeFileId is not null && _resumeFileMeta is not null)
+            {
+                <div class="card mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        Tailored Resume
+                        <button class="btn btn-sm btn-outline-primary"
+                                @onclick="() => DownloadFileAsync(_session.TailoredResumeFileId!, _resumeFileMeta.Name)">
+                            Download DOCX
+                        </button>
+                    </div>
+                    <div class="card-body text-muted small">
+                        @_resumeFileMeta.Name
+                    </div>
+                </div>
+            }
+
+            @if (_error is not null)
+            {
+                <div class="alert alert-danger">@_error</div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string Id { get; set; } = "";
+
+    SessionRecord? _session;
+    StoredFileMeta? _resumeMeta;
+    StoredFileMeta? _resumeFileMeta;
+    StoredFileMeta? _clMeta;
+    bool _loading = true;
+    string? _error;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _session = await Db.GetSessionAsync(Id);
+        if (_session is null) { _loading = false; return; }
+
+        var allMeta = await Db.GetAllFileMetaAsync();
+        var metaMap = allMeta.ToDictionary(f => f.Id);
+
+        metaMap.TryGetValue(_session.InputResumeFileId, out _resumeMeta);
+        if (_session.TailoredResumeFileId is not null)
+            metaMap.TryGetValue(_session.TailoredResumeFileId, out _resumeFileMeta);
+        if (_session.CoverLetterFileId is not null)
+            metaMap.TryGetValue(_session.CoverLetterFileId, out _clMeta);
+
+        _loading = false;
+    }
+
+    async Task DownloadFileAsync(string fileId, string fileName)
+    {
+        var file = await Db.GetFileAsync(fileId);
+        if (file is null) { _error = "File no longer in storage."; return; }
+        await Db.DownloadFileAsync(fileName, Convert.FromBase64String(file.DataBase64));
+    }
+
+    static string ScoreBadgeClass(string score) => score switch
+    {
+        "Excellent" => "bg-success",
+        "Good"      => "bg-primary",
+        "Fair"      => "bg-warning text-dark",
+        _           => "bg-danger",
+    };
+}

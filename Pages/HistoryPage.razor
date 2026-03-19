@@ -1,0 +1,61 @@
+@page "/history"
+@inject IndexedDbService Db
+@inject NavigationManager Nav
+
+<PageTitle>History — Simply Job Application</PageTitle>
+
+<h4 class="mb-4">Session History</h4>
+
+@if (_loading)
+{
+    <div class="text-center py-5">
+        <div class="spinner-border" role="status"></div>
+    </div>
+}
+else if (_sessions.Count == 0)
+{
+    <div class="alert alert-info">No sessions recorded yet. Submit a job application on the Apply screen.</div>
+}
+else
+{
+    <div class="list-group">
+        @foreach (var s in _sessions)
+        {
+            <button class="list-group-item list-group-item-action"
+                    @onclick="() => GoToSession(s.Id)">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <div class="fw-semibold">@s.CompanyName</div>
+                        <div class="text-muted">@s.JobTitle</div>
+                    </div>
+                    <div class="d-flex flex-column align-items-end gap-1">
+                        <span class="badge @ScoreBadgeClass(s.MatchScore)">@s.MatchScore</span>
+                        <small class="text-muted">@s.CreatedAt.ToLocalTime().ToString("g")</small>
+                    </div>
+                </div>
+            </button>
+        }
+    </div>
+}
+
+@code {
+    List<SessionRecord> _sessions = new();
+    bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var all = await Db.GetAllSessionsAsync();
+        _sessions = all.OrderByDescending(s => s.CreatedAt).ToList();
+        _loading = false;
+    }
+
+    void GoToSession(string id) => Nav.NavigateTo("/history/" + id);
+
+    static string ScoreBadgeClass(string score) => score switch
+    {
+        "Excellent" => "bg-success",
+        "Good"      => "bg-primary",
+        "Fair"      => "bg-warning text-dark",
+        _           => "bg-danger",
+    };
+}
