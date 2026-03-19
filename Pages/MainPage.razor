@@ -7,7 +7,14 @@
 
 <PageTitle>Apply — Simply Job Application</PageTitle>
 
-<h4 class="mb-4">Job Application</h4>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0">Job Application</h4>
+    <button class="btn btn-outline-secondary"
+            disabled="@(_evaluating || _generating)"
+            @onclick="NewSession">
+        New
+    </button>
+</div>
 
 @if (!_hasApiKey)
 {
@@ -18,22 +25,27 @@
 }
 
 <div class="row g-3">
-    <div class="col-12 col-lg-5">
+    <div class="@(_evaluation is null ? "col-12 col-md-10 col-xl-8 mx-auto" : "col-12 col-lg-5")">
         <div class="card">
             <div class="card-header">Job Description</div>
             <div class="card-body">
-                <div class="mb-3">
-                    <label class="form-label">Company Name</label>
-                    <input class="form-control" @bind="_companyName" placeholder="Acme Corp" />
+                <div class="row g-2 mb-3">
+                    <div class="col-6">
+                        <label class="form-label">Company Name</label>
+                        <input class="form-control" @bind="_companyName" placeholder="Acme Corp"
+                               readonly="@_inputsLocked" />
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label">Job Title</label>
+                        <input class="form-control" @bind="_jobTitle" placeholder="Software Engineer"
+                               readonly="@_inputsLocked" />
+                    </div>
                 </div>
-                <div class="mb-3">
-                    <label class="form-label">Job Title</label>
-                    <input class="form-control" @bind="_jobTitle" placeholder="Software Engineer" />
-                </div>
-                <div class="mb-3">
+                <div class="mb-0">
                     <label class="form-label">Job Details</label>
-                    <textarea class="form-control" rows="10" @bind="_jobDetails"
-                              placeholder="Paste the full job description here…"></textarea>
+                    <textarea class="form-control" rows="6" @bind="_jobDetails"
+                              placeholder="Paste the full job description here…"
+                              readonly="@_inputsLocked"></textarea>
                 </div>
             </div>
         </div>
@@ -45,48 +57,48 @@
                 {
                     <div class="alert alert-success py-2 d-flex justify-content-between align-items-center mb-2">
                         <span>📄 @_selectedFileName</span>
-                        <button class="btn btn-sm btn-outline-danger" @onclick="ClearResume">✕</button>
+                        @if (!_inputsLocked)
+                        {
+                            <button class="btn btn-sm btn-outline-danger" @onclick="ClearResume">✕</button>
+                        }
                     </div>
                 }
-                <div class="mb-2">
-                    <label class="form-label">Upload DOCX</label>
-                    <InputFile class="form-control" accept=".docx" OnChange="OnFileUpload" />
-                </div>
-                <div class="text-center text-muted small my-2">— or —</div>
-                <button class="btn btn-outline-secondary w-100" type="button"
-                        @onclick="() => _showFilePicker = true">
-                    Choose from Files Library
-                </button>
+                @if (!_inputsLocked)
+                {
+                    <div class="mb-2">
+                        <label class="form-label">Upload DOCX</label>
+                        <InputFile class="form-control" accept=".docx" OnChange="OnFileUpload" />
+                    </div>
+                    <div class="text-center text-muted small my-2">— or —</div>
+                    <button class="btn btn-outline-secondary w-100" type="button"
+                            @onclick="() => _showFilePicker = true">
+                        Choose from Files Library
+                    </button>
+                }
             </div>
         </div>
 
-        <div class="d-flex gap-2 mt-3">
-            <button class="btn btn-primary flex-grow-1 py-2"
-                    disabled="@(!CanEvaluate)"
-                    @onclick="EvaluateAsync">
-                @if (_evaluating)
-                {
-                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
-                    <span>@_loadingStep</span>
-                }
-                else
-                {
-                    <span>Evaluate</span>
-                }
-            </button>
-            <button class="btn btn-outline-secondary py-2"
-                    disabled="@(_evaluating || _generating)"
-                    @onclick="NewSession">
-                New
-            </button>
-        </div>
+        <button class="btn btn-primary w-100 mt-3 py-2"
+                disabled="@(!CanEvaluate)"
+                @onclick="EvaluateAsync">
+            @if (_evaluating)
+            {
+                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                <span>@_loadingStep</span>
+            }
+            else
+            {
+                <span>Evaluate</span>
+            }
+        </button>
+
         @if (_error is not null)
         {
             <div class="alert alert-danger mt-3">@_error</div>
         }
     </div>
 
-    <div class="col-12 col-lg-7">
+    <div class="@(_evaluation is null ? "d-none" : "col-12 col-lg-7")">
         @if (_evaluation is not null)
         {
             <div class="card mb-3">
@@ -230,6 +242,7 @@
 
     bool _evaluating;
     bool _generating;
+    bool _inputsLocked;
     string? _loadingStep;
     string? _error;
     bool _hasApiKey = true;
@@ -242,12 +255,13 @@
     // Persisted between Turn 1 and Turn 2
     string? _resumeMarkdown;
     string? _inputFileId;
+    string? _sessionId;
 
     bool _showFilePicker;
     List<StoredFileMeta> _fileMeta = new();
     AppSettings _settings = new();
 
-    bool CanEvaluate => !_evaluating && !_generating && _hasApiKey &&
+    bool CanEvaluate => !_evaluating && !_generating && !_inputsLocked && _hasApiKey &&
                         !string.IsNullOrWhiteSpace(_companyName) &&
                         !string.IsNullOrWhiteSpace(_jobTitle) &&
                         !string.IsNullOrWhiteSpace(_jobDetails) &&
@@ -316,6 +330,8 @@
         _coverLetterFileId = null;
         _resumeMarkdown = null;
         _inputFileId = null;
+        _sessionId = null;
+        _inputsLocked = false;
         _error = null;
     }
 
@@ -328,6 +344,7 @@
         _coverLetterFileId = null;
         _resumeMarkdown = null;
         _inputFileId = null;
+        _inputsLocked = true;
         _evaluating = true;
 
         try
@@ -378,11 +395,14 @@
                 }
             }
 
-
+            _sessionId = Guid.NewGuid().ToString();
+            await SaveSessionAsync();
+            await Db.EnforceSessionLimitAsync(_settings.HistoryLimit);
         }
         catch (Exception ex)
         {
             _error = ex.Message;
+            _inputsLocked = false;
         }
         finally
         {
@@ -442,7 +462,7 @@
             _coverLetterFileId = clFileId;
 
             await Db.EnforceFileLimitAsync(_settings.FilesLimit);
-            await SaveSessionAsync();
+            await SaveSessionAsync();   // updates the record created during Evaluate
         }
         catch (Exception ex)
         {
@@ -457,8 +477,13 @@
 
     async Task SaveSessionAsync()
     {
+        // _sessionId is pinned when Evaluate succeeds; Generate reuses the same ID
+        // so IndexedDB put() overwrites the existing record rather than inserting a new one.
+        var existing = _sessionId is not null ? await Db.GetSessionAsync(_sessionId) : null;
         var session = new SessionRecord
         {
+            Id        = _sessionId ?? Guid.NewGuid().ToString(),
+            CreatedAt = existing?.CreatedAt ?? DateTime.UtcNow,
             CompanyName = _companyName,
             JobTitle = _jobTitle,
             JobDetails = _jobDetails,
@@ -472,7 +497,6 @@
             CoverLetterFileId = _coverLetterFileId,
         };
         await Db.SaveSessionAsync(session);
-        await Db.EnforceSessionLimitAsync(_settings.HistoryLimit);
     }
 
     async Task DownloadCoverLetter()
