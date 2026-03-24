@@ -66,7 +66,7 @@ else
                             </button>
                             <button class="btn btn-sm btn-outline-secondary"
                                     @onclick="() => UseAsResume(f.Id, f.Name)"
-                                    title="Use as resume on Apply screen">
+                                    title="Use as resume on Evaluate &amp; Generate screen">
                                 Use as Resume
                             </button>
                         </td>
@@ -126,6 +126,6 @@ else
     {
         AppState.PendingResumeFileId = fileId;
         AppState.PendingResumeFileName = fileName;
-        Nav.NavigateTo("/");
+        Nav.NavigateTo("/evaluate");
     }
 }

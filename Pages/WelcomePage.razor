@@ -1,0 +1,185 @@
+@page "/"
+
+<PageTitle>Welcome — Simply Job Application</PageTitle>
+
+<div class="welcome-hero py-5 text-center mb-5">
+    <h1 class="display-5 fw-bold mb-2">Simply Job Application</h1>
+    <p class="lead text-muted mx-auto" style="max-width:560px">
+        AI-powered resume tailoring and cover letter generation — entirely in your browser,
+        with no data sent to any server except the AI model of your choice.
+    </p>
+    <div class="d-flex justify-content-center gap-3 mt-4">
+        <a href="/evaluate" class="btn btn-primary btn-lg px-4">Get Started</a>
+        <a href="/settings" class="btn btn-outline-secondary btn-lg px-4">Configure API Key</a>
+    </div>
+</div>
+
+<div class="row g-4 mb-5">
+    <div class="col-12">
+        <h5 class="text-uppercase text-muted fw-semibold small mb-3 letter-spacing-1">What it does</h5>
+    </div>
+
+    <div class="col-12 col-md-4">
+        <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body">
+                <div class="welcome-step-num mb-3">1</div>
+                <h6 class="fw-bold mb-2">Evaluate the Match</h6>
+                <p class="text-muted small mb-0">
+                    Paste a job description and upload your resume. The AI scores how well you
+                    match the role, identifies your strongest qualifications, and flags any gaps
+                    against the stated requirements.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-md-4">
+        <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body">
+                <div class="welcome-step-num mb-3">2</div>
+                <h6 class="fw-bold mb-2">Add Missing Keywords</h6>
+                <p class="text-muted small mb-0">
+                    Review AI-suggested keywords that appear in the job description but not in
+                    your resume. Check the ones you genuinely have experience with, or type your
+                    own. Re-run the evaluation to see how the score changes.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-12 col-md-4">
+        <div class="card h-100 border-0 shadow-sm">
+            <div class="card-body">
+                <div class="welcome-step-num mb-3">3</div>
+                <h6 class="fw-bold mb-2">Generate Tailored Materials</h6>
+                <p class="text-muted small mb-0">
+                    With one click, get a tailored resume DOCX, a two-paragraph cover letter,
+                    and a concise "why apply" summary — all optimised for ATS and ready to
+                    download.
+                </p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-5">
+    <div class="col-12">
+        <h5 class="text-uppercase text-muted fw-semibold small mb-3">Who it's for</h5>
+    </div>
+    <div class="col-12 col-md-6">
+        <ul class="list-unstyled d-flex flex-column gap-2 mb-0">
+            <li class="d-flex gap-2">
+                <span class="text-success fw-bold">✓</span>
+                <span class="text-muted small">Job seekers who apply to multiple roles and need
+                    position-specific resumes without rewriting from scratch each time.</span>
+            </li>
+            <li class="d-flex gap-2">
+                <span class="text-success fw-bold">✓</span>
+                <span class="text-muted small">Professionals returning to the market who want
+                    to quickly gauge how well their experience aligns with modern job postings.</span>
+            </li>
+            <li class="d-flex gap-2">
+                <span class="text-success fw-bold">✓</span>
+                <span class="text-muted small">Anyone who wants to maximise ATS pass-through
+                    without guessing which keywords matter for a specific role.</span>
+            </li>
+        </ul>
+    </div>
+    <div class="col-12 col-md-6">
+        <ul class="list-unstyled d-flex flex-column gap-2 mb-0">
+            <li class="d-flex gap-2">
+                <span class="text-success fw-bold">✓</span>
+                <span class="text-muted small">Works across professions — the AI adapts its
+                    evaluation criteria and terminology to whatever role you are applying for.</span>
+            </li>
+            <li class="d-flex gap-2">
+                <span class="text-success fw-bold">✓</span>
+                <span class="text-muted small">Privacy-conscious users who want AI assistance
+                    without uploading their resume to a third-party service.</span>
+            </li>
+            <li class="d-flex gap-2">
+                <span class="text-success fw-bold">✓</span>
+                <span class="text-muted small">Users who maintain a files library of resumes
+                    and want to quickly pick the right base document for each application.</span>
+            </li>
+        </ul>
+    </div>
+</div>
+
+<div class="row g-4 mb-5">
+    <div class="col-12">
+        <h5 class="text-uppercase text-muted fw-semibold small mb-3">How to get started</h5>
+    </div>
+    <div class="col-12 col-md-8 col-lg-6">
+        <ol class="d-flex flex-column gap-3 ps-0" style="list-style:none;counter-reset:steps">
+            <li class="d-flex gap-3 align-items-start welcome-how-step">
+                <span class="welcome-step-num flex-shrink-0">1</span>
+                <span class="text-muted small">
+                    <strong class="text-body">Get an API key.</strong>
+                    Simply Job Application uses the OpenAI API.
+                    Create a key at <strong>platform.openai.com</strong> and paste it into
+                    <a href="/settings">Settings</a>.
+                    Your key is stored only in your browser's local storage.
+                </span>
+            </li>
+            <li class="d-flex gap-3 align-items-start welcome-how-step">
+                <span class="welcome-step-num flex-shrink-0">2</span>
+                <span class="text-muted small">
+                    <strong class="text-body">Upload your resume.</strong>
+                    On the <a href="/evaluate">Evaluate &amp; Generate</a> screen, upload a DOCX
+                    file. The document is parsed locally — hyperlinks and formatting are
+                    preserved for the round-trip back to DOCX.
+                </span>
+            </li>
+            <li class="d-flex gap-3 align-items-start welcome-how-step">
+                <span class="welcome-step-num flex-shrink-0">3</span>
+                <span class="text-muted small">
+                    <strong class="text-body">Paste the job description</strong> and click
+                    <strong>Evaluate</strong>. Review the match score, strengths, gaps, and
+                    suggested keywords. Select any keywords you are comfortable claiming and
+                    optionally re-evaluate.
+                </span>
+            </li>
+            <li class="d-flex gap-3 align-items-start welcome-how-step">
+                <span class="welcome-step-num flex-shrink-0">4</span>
+                <span class="text-muted small">
+                    <strong class="text-body">Click Generate</strong> to produce your tailored
+                    resume, cover letter, and why-apply summary. Download the DOCX files and
+                    submit your application.
+                </span>
+            </li>
+        </ol>
+    </div>
+</div>
+
+<div class="card border-0 bg-light mb-5">
+    <div class="card-body py-4">
+        <h6 class="fw-bold mb-2">🔒 Your data stays in your browser</h6>
+        <p class="text-muted small mb-0">
+            Resumes, job descriptions, evaluation results, and generated materials are stored
+            exclusively in your browser's IndexedDB. Nothing is sent to any server operated by
+            this application. The only external calls are to the OpenAI API using your own key,
+            subject to OpenAI's data handling policies.
+        </p>
+    </div>
+</div>
+
+<div class="text-center py-3 mb-2">
+    <a href="/evaluate" class="btn btn-primary btn-lg px-5">Start Matching</a>
+</div>
+
+<style>
+    .welcome-step-num {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2rem;
+        height: 2rem;
+        border-radius: 50%;
+        background: #0d6efd;
+        color: #fff;
+        font-size: 0.8rem;
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+</style>
