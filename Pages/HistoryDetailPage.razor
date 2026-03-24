@@ -101,7 +101,7 @@ else
                             <div class="d-flex flex-wrap gap-2 mb-1">
                                 @foreach (var kw in group)
                                 {
-                                    <span class="badge text-bg-secondary">@kw.Keyword</span>
+                                    <span class="badge text-bg-info">@kw.Keyword</span>
                                 }
                             </div>
                         }
@@ -201,7 +201,7 @@ else
     {
         "Excellent" => "bg-success",
         "Good"      => "bg-primary",
-        "Fair"      => "bg-warning text-dark",
+        "Fair"      => "bg-warning",
         _           => "bg-danger",
     };
 }

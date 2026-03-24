@@ -35,7 +35,7 @@ else
                         <td>
                             @if (f.SessionCount > 0)
                             {
-                                <span class="badge bg-secondary" style="cursor:pointer"
+                                <span class="badge bg-info" style="cursor:pointer"
                                       @onclick="() => ToggleSessionList(f.Id)"
                                       title="Click to view sessions">
                                     @f.SessionCount session@(f.SessionCount == 1 ? "" : "s")

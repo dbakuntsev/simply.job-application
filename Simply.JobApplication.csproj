@@ -22,6 +22,7 @@
     <PropertyGroup>
       <_AppCssPath>$(MSBuildProjectDirectory)\wwwroot\css\app.css</_AppCssPath>
       <_AppJsPath>$(MSBuildProjectDirectory)\wwwroot\js\app.js</_AppJsPath>
+      <_BootstrapCssPath>$(MSBuildProjectDirectory)\wwwroot\css\bootstrap.min.css</_BootstrapCssPath>
       <_IndexHtmlPath>$(MSBuildProjectDirectory)\wwwroot\index.html</_IndexHtmlPath>
     </PropertyGroup>
     <GetFileHash Files="$(_AppCssPath)" Algorithm="SHA256">
@@ -30,12 +31,10 @@
     <GetFileHash Files="$(_AppJsPath)" Algorithm="SHA256">
       <Output TaskParameter="Hash" PropertyName="_AppJsHash" />
     </GetFileHash>
-    <!--
-      Replace css/app.css?v=<anything> with css/app.css?v=<newhash> and js/app.js?v=<anything> with js/app.js?v=<newhash> in index.html.
-      The \?v=[^"]* pattern matches both the __APP_CSS_VERSION__/__APP_JS_VERSION__ placeholder on first
-      build and any previously written hash on subsequent builds.
-    -->
-    <Exec Command="powershell -NoProfile -Command &quot;$p='$(_IndexHtmlPath)'; $h1='$(_AppCssHash)'; $h2='$(_AppJsHash)'; $c=[IO.File]::ReadAllText($p,[Text.Encoding]::UTF8); $r1='app.css?v='+$h1; $c=$c -replace 'app\.css\?v=[^\x22]*',$r1; $r2='app.js?v='+$h2; $c=$c -replace 'app\.js\?v=[^\x22]*',$r2; [IO.File]::WriteAllText($p,$c,[Text.Encoding]::UTF8)&quot;" />
+    <GetFileHash Files="$(_BootstrapCssPath)" Algorithm="SHA256">
+      <Output TaskParameter="Hash" PropertyName="_BootstrapCssHash" />
+    </GetFileHash>
+    <Exec Command="powershell -NoProfile -Command &quot;$p='$(_IndexHtmlPath)'; $h1='$(_AppCssHash)'; $h2='$(_AppJsHash)'; $h3='$(_BootstrapCssHash)'; $c=[IO.File]::ReadAllText($p,[Text.Encoding]::UTF8); $r1='app.css?v='+$h1; $c=$c -replace 'app\.css\?v=[^\x22]*',$r1; $r2='app.js?v='+$h2; $c=$c -replace 'app\.js\?v=[^\x22]*',$r2; $r3='bootstrap.min.css?v='+$h3; $c=$c -replace 'bootstrap\.min\.css\?v=[^\x22]*',$r3; [IO.File]::WriteAllText($p,$c,[Text.Encoding]::UTF8)&quot;" />
   </Target>
 
 </Project>

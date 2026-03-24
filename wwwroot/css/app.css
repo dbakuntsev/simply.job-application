@@ -1,7 +1,3 @@
-html, body {
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-}
-
 #blazor-error-ui .dismiss {
     cursor: pointer;
     position: absolute;
@@ -18,10 +14,6 @@ pre.text-wrap {
     border: none;
     padding: 0;
     margin: 0;
-}
-
-.navbar .active {
-    font-weight: 600;
 }
 
 /* ── Swimlane layout ──────────────────────────────────────────────────────── */
