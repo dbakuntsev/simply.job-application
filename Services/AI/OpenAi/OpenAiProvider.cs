@@ -43,11 +43,19 @@ public class OpenAiProvider : IAiProvider
             Heading levels (#, ##) reflect the document's section structure. **Bold** spans indicate
             emphasized phrases. Links preserve the original hyperlinks.
 
-            Evaluate how well the candidate matches the job description. Scoring definition:
+            Adapt terminology, categorization, and evaluation criteria to the profession implied by the job description.
+
+            ### Evaluation Objective
+
+            Evaluate how well the candidate matches the job description.
+            
+            Scoring definition:
             - Excellent: Candidate meets most required qualifications and many preferred ones.
             - Good: Candidate meets the majority of required qualifications but may lack some preferred skills.
             - Fair: Candidate meets some required qualifications but lacks several key requirements.
             - Poor: Candidate lacks most required qualifications.
+
+            ### Internal Analysis
 
             Internally identify:
             - required technologies
@@ -56,44 +64,74 @@ public class OpenAiProvider : IAiProvider
             - preferred qualifications
             Then evaluate match.
 
+            ### Evaluation Rules
+
             Base the evaluation only on information explicitly present in the resume and, if provided, the
             "Additional Keywords Confirmed by Candidate" section.
 
             Compare the job description requirements directly against evidence in the resume.
 
-            Treat as requirements only items that describe skills, technologies, years of experience, certifications, or responsibilities required to perform the role.
+            Treat as requirements only items that describe:
+            - skills
+            - tools or systems
+            - methodologies or practices
+            - certifications
+            - years of experience
+            - responsibilities necessary to perform the role
 
-            Pay special attention to matching programming languages, frameworks, cloud platforms, and core technologies.
+            Pay special attention to matching job-relevant skills, tools, systems, and core practices.
 
-            Technologies include programming languages, frameworks, cloud platforms, databases, and developer tools.
+            These may include (depending on profession):
+            - technical tools or platforms
+            - analytical methods
+            - professional practices
+            - operational systems
+            - role-specific competencies
 
-            Consider both technology match and responsibility scope when determining the score.
+            Consider both:
+            - skill/tool alignment
+            - responsibility scope and impact
+            when determining the score.
+
+            ### Seniority and Scope
 
             Consider whether the candidate's experience level aligns with the seniority implied in the job description.
 
-            Consider years of experience, leadership responsibilities, and role titles when evaluating seniority alignment.
+            Evaluate:
+            - years of experience
+            - leadership responsibilities
+            - scope of ownership
+            - complexity and impact of work
 
             Evaluate whether the candidate's responsibilities reflect similar scope or impact as the role described.
 
+            ### Matching Logic
+
             Consider common synonyms and variations of technologies when comparing resume and job description.
 
-            If the job description lists a single specific programming language, framework, or technology that is explicitly required
-            but there is no evidence of it in the resume, this should be considered a significant gap, and the score should not be higher
-            than "Fair".
+            If the job description lists a single specific required skill, tool, system, or certification and there is no evidence of 
+            it in the resume, this should be considered a significant gap, and the score should not be higher than "Fair".
 
-            If the candidate meets most required technologies and responsibilities, the score should not be lower than "Good".
+            If the candidate meets most required skills and responsibilities, the score should not be lower than "Good".
 
-            If the candidate meets most required technologies but lacks some responsibilities, the score should typically be "Good" rather than "Fair".
+            If the candidate meets most required skills but lacks some responsibilities, the score should typically be "Good" rather than "Fair".
+
+            # Suggested Keywords (ATS Optimization)
 
             Additionally, identify non-domain-specific keywords that:
             - are explicitly mentioned in the job description
             - do NOT appear in the resume
             - do NOT appear in "Additional Keywords Confirmed by Candidate" (if provided)
 
-            Non-domain-specific keywords include technologies, tools, frameworks, platforms,
-            or general engineering practices that are transferable across industries.
+            Non-domain-specific keywords include:
+            - skills, tools, systems, methodologies, or professional practices
+            - transferable across organizations within the same profession or across industries
 
-            Exclude domain-specific concepts (e.g., fintech operations, healthcare regulations).
+            Exclude:
+            - organization-specific processes
+            - highly specialized domain expertise (e.g., regulatory frameworks, niche industry systems)
+
+            ### Ranking Criteria
 
             Rank suggested keywords by estimated ATS impact using the following priority:
             1. Keywords explicitly listed as required
@@ -101,8 +139,12 @@ public class OpenAiProvider : IAiProvider
             3. Keywords tied to core responsibilities
             4. Frequently emphasized preferred qualifications
 
-            Only suggest keywords that are reasonably inferable from the candidate’s existing
-            experience, adjacent technologies, or role responsibilities.
+            ### Suggestion Constraints
+
+            Only suggest keywords that are reasonably inferable from the candidate’s:
+            - existing experience
+            - adjacent skills
+            - role responsibilities
 
             Do not assume the candidate has experience with a keyword. Only suggest it as a
             potential addition if it is plausible but not explicitly stated.
@@ -111,22 +153,29 @@ public class OpenAiProvider : IAiProvider
             - soft skills (e.g., communication, teamwork)
             - redundant or overlapping keywords
             - keywords already clearly present in the resume
-            - keywords already confirmed by the candidate (if "Additional Keywords Confirmed by Candidate" are provided)
+            - keywords already confirmed by the candidate
 
-            Group each keyword under a concise category such as:
-            - Programming Languages
-            - Cloud Platforms
-            - DevOps / CI-CD
-            - Databases
-            - APIs / Integration
-            - Testing
-            - Monitoring / Observability
-            - Developer Tools
+            ### Keyword Categorization
+
+            Group each keyword under a concise category appropriate to the role, such as:
+            - Tools / Systems
+            - Technical Skills
+            - Professional Practices
+            - Analytical Methods
+            - Platforms
+            - Frameworks / Methodologies
+            - Data / Reporting
+            - Client / Stakeholder Work
+            - Operations / Process
+            Use categories that best fit the profession implied by the job description.
 
             Return the keywords sorted in descending order of estimated ATS impact.
             Limit the total to 10 keywords.
 
+            # Output Format
+
             Respond with a JSON object only — no markdown, no explanation — using this exact schema:
+            
             {
               "score": "Poor" | "Fair" | "Good" | "Excellent",
               "gaps": ["string", ...],
@@ -134,26 +183,35 @@ public class OpenAiProvider : IAiProvider
               "isGoodMatch": true | false,
               "suggestedKeywords": [{"category": "string", "keyword": "string"}, ...]
             }
-            Rules:
+
+            # Output Rules
+
             - "gaps" lists specific qualifications, requirements, or experience areas where the candidate is poorly matched.
             - Only list gaps for required qualifications or clearly critical responsibilities.
             - Only report gaps that are explicitly mentioned in the job description.
-            - Each gap should reference a specific requirement, technology, or responsibility from the job description.
-            - Limit the gap list to the 5 most important gaps.
-            - Phrase gaps as absence of evidence in the resume, not definitive lack of skill. Quote the relevant requirement from the job description in each gap.
+            - Each gap must reference a specific requirement and quote relevant wording from the job description.
+            - Phrase gaps as absence of evidence, not definitive lack of skill
+            - Limit gaps to the 5 most important.
             - Prioritize gaps in this order:
-              * Missing required technologies
+              * Missing required skills/tools/systems
               * Missing critical responsibilities
               * Missing required experience level
             - Avoid duplicate or overlapping gaps.
-            - "strengths" should identify qualifications or experience that clearly align with the job description requirements.
-            - Limit strengths to the 5 most relevant matches.
-            - Prefer strengths that correspond directly to technologies or responsibilities mentioned in the job description.
-            - Prefer strengths demonstrated in recent roles when possible.
-            - Each strength should reference a specific technology, responsibility, or qualification from the job description.
+            - "strengths" must:
+              * reflect clear alignment with job requirements
+              * be supported by explicit resume evidence
+              * reference specific skills, tools, responsibilities, or qualifications
+              * prioritize recent experience
+              * be limited to 5 items
+              * avoid duplication
             - "isGoodMatch" must be true only when score is "Good" or "Excellent".
-            - "suggestedKeywords" must be an array (may be empty). Each element must have "category" and "keyword" string fields.
-            - Output must contain valid JSON, must match schema exactly and must contain no additional fields.
+            - "suggestedKeywords" must:
+              * be an array (may be empty)
+              * contain objects with "category" and "keyword" string fields.
+            - Output must:
+              * be valid JSON
+              * match schema exactly 
+              * contain no additional fields.
             """;
 
         var additionalSection = additionalKeywords is { Count: > 0 }
@@ -199,9 +257,15 @@ public class OpenAiProvider : IAiProvider
 
             Generate tailored job application materials based on the candidate's resume and the job description.
 
+            Adapt terminology, categorization, and phrasing to the profession implied by the job description.
+
+            ## Inputs
+
             Inputs available in this conversation:
             1. Job description text
             2. Original resume in Markdown format (structure and formatting preserved from the original DOCX)
+
+            ## Markdown Structure
 
             The Markdown resume uses these conventions:
             - Line 1: candidate name (Title style)
@@ -212,19 +276,16 @@ public class OpenAiProvider : IAiProvider
             - **...** spans: emphasized phrases (Emphasis character style)
             - [text](url): hyperlinks from the original resume
 
+            ## Internal Analysis
+
             Internally identify:
-            - top 5 required technologies
-            - top 3 responsibilities
-            - seniority level
-            - industry or domain context, such as:
-              * fintech
-              * healthcare
-              * developer tools
-              * enterprise SaaS
-              * AI/ML
-              * cloud infrastructure
-              * consumer apps
+            - top 5 required skills, tools, systems, or professional practices
+            - top 3 core responsibilities or activities
+            - seniority level (years, scope, leadership expectations)
+            - industry or domain context (if present)
             Use this context when framing experience. Use domain context to emphasize relevant industry experience when present.
+
+            ## Pre-Rewrite Planning
 
             Before generating outputs, internally determine:
             - job_keywords
@@ -234,125 +295,160 @@ public class OpenAiProvider : IAiProvider
             - experiences_to_deemphasize
             Then perform rewriting.
 
-            When rewriting bullet points, naturally incorporate matching job keywords where they accurately describe the candidate's experience.
+            ## Rewriting Principles
 
-            When rewriting bullet points, prioritize including resume_matching_keywords where they accurately describe the work performed.
+            When rewriting:
+            - Use terminology from the job description when describing equivalent experience
+            - Incorporate resume_matching_keywords where they accurately reflect actual work
+            - Avoid artificial keyword repetition
+            - Each keyword should appear only where it naturally fits
 
-            Avoid artificial keyword repetition. Each keyword should appear only where it naturally fits the described work.
+            Prioritize highlighting:
+            - experience from the last 5–8 years
+            - work most relevant to the role’s responsibilities and requirements
 
-            Prioritize terminology used in the job description when describing equivalent experience.
+            ## Prioritization Framework
 
-            Prioritize highlighting experience from the last 5–8 years when emphasizing technologies and achievements.
-
-            Prioritize the following order when tailoring:
-            1. Explicit required technologies (directly listed in the job description)
-            2. Explicit preferred technologies (directly listed in the job description)
-            3. Implied technologies from responsibilities
-            4. Closely related technologies
+            Prioritize the following when tailoring:
+            1. Explicit required skills/tools/practices
+            2. Explicit preferred skills/tools/practices
+            3. Skills implied by responsibilities
+            4. Closely related or adjacent capabilities
             5. General transferable skills
+            Only treat as explicit skills when clearly named in the job description.
 
-            Technologies must only be counted if explicitly named tools, languages, frameworks, or platforms appear in the job description.
+            Skills may include:
+            - tools or systems
+            - technical or professional capabilities
+            - analytical methods
+            - platforms or environments
+            - role-specific practices
 
-            Technologies include programming languages, frameworks, libraries, cloud platforms, databases, and developer tools.
+            Do NOT treat general concepts (e.g., teamwork, communication, general methodologies) as primary skills unless explicitly emphasized.
 
-            Methodologies or concepts (e.g., Agile, distributed systems, REST architecture) should not be counted as technologies.
+            ## Structure Preservation
 
             Maintain the same high-level section structure as the original resume unless reordering improves relevance.
 
             Only reorder sections if doing so clearly improves ATS keyword visibility (for example moving Skills above Experience).
 
-            If the original resume contains a professional summary paragraph between the contact information and the first section heading,
-            retain this summary in the tailored resume and rewrite it to highlight the most relevant technologies, responsibilities,
-            and domain context from the job description. Do not remove the summary unless it is clearly redundant.
-
-            If a professional summary exists, place it immediately after the contact/location lines and before the first # section heading. 
-            The summary should be 2–4 concise sentences and include 2–3 key technologies or capabilities that appear in both the resume and 
-            the job description.
-
             Do not remove, change or rephrase:
             - applicant's name
             - contact information
-            - company names
-            - job titles
+            - organization names
+            - job/role titles
             - employment dates
 
-            Do not add seniority modifiers (e.g., Senior, Lead, Principal) to job titles unless they appear in the original resume.
+            Do not add seniority modifiers to titles unless present in the original resume.
 
-            Do not change degree names, institutions, graduation dates, or certifications.
+            Do not change education details, certifications, or credentials.
+
+            ## Professional Summary Handling
+            
+            If the original resume contains a professional summary paragraph between the contact information and the first section heading, then:
+            - Retain and rewrite it
+            - Place it immediately after contact/location lines
+            - Keep it 2–4 concise sentences
+
+            The summary should:
+            - highlight 2–3 key skills or capabilities aligned with the job description
+            - reflect relevant responsibilities or domain context
+            - prioritize clarity and keyword relevance
+
+            Do not remove the summary unless it is clearly redundant.
+            
+            If a professional summary exists, place it immediately after the contact/location lines and before the first # section heading. 
+
+            If content must be shortened, prioritize trimming older experience before removing the summary.
+
+            ## Experience Section Optimization
+            
+            When modifying experience:
+            - Move the most relevant achievements to the top of each role
+            - De-emphasize or shorten less relevant content
+            - Preserve factual accuracy
+
+            Each achievement should:
+            - reflect real experience from the resume
+            - emphasize impact, outcomes, or scope where available
+            - align with job-relevant responsibilities
+
+            ## ATS Optimization
 
             Optimize the resume for Applicant Tracking Systems (ATS):
             - Use clear job-relevant keywords
-            - Avoid unusual formatting
-            - Prefer simple structures
-            - Use measurable outcomes when present in the original resume
+            - Prefer simple, readable structures
             - Prefer standard section titles (Skills, Experience, Education)
-            - When modifying professional experience:
-              * Move the most relevant bullet points to the top of each role
-              * Less relevant bullets may be shortened or removed
-            - If the resume contains a professional summary or profile section, rewrite it to emphasize the top technologies and responsibilities from the job description.
+            - Avoid unusual formatting
+            - Include measurable outcomes when present in the original resume
+            
+            ## Handling Missing Skills
 
             If the job description includes skills not present in the resume:
             - Do NOT claim experience with them.
             - Instead emphasize adjacent technologies or transferable experience.
 
+            ## Additional Keywords Confirmed by Candidate
+
             If "Additional Keywords Confirmed by Candidate" are provided:
-            - The candidate has explicitly confirmed they possess these skills
-            - Ensure ALL confirmed keywords are included in the Skills (or equivalent) section
-            - Do not omit any confirmed keyword
+            - Treat them as verified skills
+            - Ensure ALL are included in the Skills section
+            - Do not omit any
 
-            "Additional Keywords Confirmed by Candidate" Placement and formatting:
-            - Place confirmed keywords prominently within the Skills section
-            - Group them into appropriate categories where possible
-            - If categories are not used, include them in a clear, scannable list
-            - Do not duplicate keywords already present in the resume
-            - Ensure consistent naming and formatting for ATS readability
-            - Avoid embedding keywords only within sentences; they must appear as discrete skills
+            Placement and formatting:
+            - Integrate into the Skills section (not appended separately)
+            - Group logically where possible
+            - Ensure consistent naming
+            - Avoid duplication
+            - Present as discrete, scannable entries
 
-            "Additional Keywords Confirmed by Candidate" Integration:
-            - Integrate confirmed keywords with existing resume skills to form a cohesive section
-            - Avoid appending them as an isolated or disconnected list
+            Usage in experience:
+            - Reference only when they plausibly align with actual work
+            - Do not force inclusion
 
-            "Additional Keywords Confirmed by Candidate" Usage in experience:
-            - You may reference confirmed keywords in experience bullet points only when
-              they plausibly align with the described work
-            - Do not force inclusion where it would appear artificial
-
-            "Additional Keywords Confirmed by Candidate" Keyword discipline:
+            Keyword discipline:
             - Do not overuse confirmed keywords across multiple sections
             - Primary placement must be in the Skills section
 
+            ## Suggested Keywords (Unconfirmed)
+
             If "Suggested Keywords" from prior analysis are provided:
-            - Treat them as unconfirmed
-            - Include them ONLY if they are strongly implied by the candidate’s experience
-            - Do not include them if doing so would introduce unsupported claims
+            - Treat them as unverified
+            - Include only if strongly supported by existing experience
+            - Do not introduce unsupported claims
+
+            ## Skills Section Rules
 
             The Skills section should contain:
-            - Core skills already present in the resume
-            - All confirmed additional keywords
-            - Relevant job-aligned skills already supported by experience
+            - existing resume skills
+            - all confirmed additional keywords
+            - relevant, supported job-aligned skills
 
-            The Skills section should NOT include:
+            The Skills section must NOT include:
             - unsupported or inferred skills
-            - redundant variations of the same keyword
+            - redundant variations
+
+            ## Cover Letter
             
             The cover letter is comprised of 2 paragraphs:
             - Paragraph 1:
-              * State interest in the role
-              * Mention the company or product
-              * Mention a specific element from the job description (technology, product, or responsibility)
-              * Reference 1–2 key job requirements
+              * Express interest in the role
+              * Mention the organization or product
+              * Reference a specific requirement, responsibility, or capability from the job description
             - Paragraph 2:
               * Highlight 2–3 relevant experiences
-              * Briefly address any skill gap with transferable expertise
-              * Avoid repeating resume bullet points
-              * Focus on impact, alignment with role responsibilities, and enthusiasm for company mission
+              * Briefly address any skill gap using transferable strengths
+              * Focus on impact, alignment with role responsibilities
               * End with a forward-looking statement
+            Avoid repeating resume bullet points
 
-            For the tailored resume, output the content in Markdown using these conventions:
+            ## Output Format (Markdown Resume)
+
+            Output the resume in Markdown:
             - Line 1: candidate's name (becomes Title style)
             - Lines before the first # heading: contact / location lines (become Subtitle style)
             - # for top-level section headings (e.g. # Professional History)
-            - ## for job title + company + date lines (e.g. ## Chief Architect • 2015–2026 TeamFusion, Inc.)
+            - ## for job/role title + organization + date lines (e.g. ## Janitor • 2015–2026 Beverly Hills High School.)
             - ### for any sub-headings if needed
             - **...** for key phrases to emphasize (Emphasis character style will be applied)
             - [display text](url) for hyperlinks — preserve URLs from the original resume exactly
@@ -361,29 +457,54 @@ public class OpenAiProvider : IAiProvider
             - Use blank lines between sections for readability
             - Do not use code fences, HTML, or OOXML
 
+            ## Final Output
+
             Respond with a JSON object only — no markdown, no explanation — using this exact schema:
+
             {
               "resumeMarkdown": "Markdown string",
               "coverLetterText": "paragraph1\n\nparagraph2",
               "whyApplyText": "1-2 sentences"
             }
-            Rules:
-            - Output must be valid JSON and contain only the keys specified. No additional keys.
-            - resumeMarkdown must contain the full tailored resume in Markdown as described above.
-            - The tailored resume must be suitable for max 2 printed pages. If content must be shortened to meet the two-page limit, prioritize shortening older job descriptions before removing the professional summary.
-            - coverLetterText must have exactly 2 paragraphs separated by a blank line (\n\n).
-            - whyApplyText is 1-2 sentences on why this position is a great fit.
-            - whyApplyText should:
-              * reference the company, mission, product, or technology stack if present
-              * mention one relevant skill or experience
-              * reference one concrete detail from the job description
-              * remain conversational and concise
-              * avoid generic phrases like "I am excited to apply" or "This role aligns with my career goals"
-            - Emphasise skills and experience most relevant to the job description.
-            - Do not invent skills, technologies, job roles, companies, certifications, or achievements not present in the original resume.
-              * You may only reference technologies that appear in the resume.
-              * You may describe related concepts, but not claim use of specific tools unless present.
-            - Only claim experience with technologies that appear explicitly in the resume.
+
+            ## Output Rules
+
+            - must be valid JSON 
+            - contain only the keys specified
+            - no additional keys
+
+            ### resumeMarkdown
+
+            - full tailored resume in Markdown as described above
+            - max 2 printed pages
+            - preserve structure and factual integrity
+
+            ### coverLetterText
+
+            - must have exactly 2 paragraphs separated by a blank line (\n\n).
+
+            ### whyApplyText
+
+            - 1-2 sentences.
+            - reference:
+              * organization, product, or mission if present
+              * one relevant skill or experience
+              * one concrete detail from the job description
+            - keep concise and natural
+            - avoid generic phrases like "I am excited to apply" or "This role aligns with my career goals"
+            - emphasise skills and experience most relevant to the job description.
+
+            ## Integrity Constraints
+
+            - Do not invent:
+              * skills
+              * tools or systems
+              * roles
+              * organizations
+              * certifications
+              * achievements
+            - Only reference capabilities explicitly present in the resume
+            - Related concepts may be described, but not claimed as direct experience
             """;
 
         var additionalSection = additionalKeywords is { Count: > 0 }
