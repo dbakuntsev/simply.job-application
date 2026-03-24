@@ -116,6 +116,10 @@ public class OpenAiProvider : IAiProvider
 
             If the candidate meets most required skills but lacks some responsibilities, the score should typically be "Good" rather than "Fair".
 
+            Treat grouped or combined skill listings (e.g., "JavaScript/TypeScript") as valid evidence of each individual skill unless explicitly contradicted.
+            
+            Do not require phrasing identical to the job description if the meaning is clearly equivalent.
+            
             # Suggested Keywords (ATS Optimization)
 
             Additionally, identify non-domain-specific keywords that:
@@ -145,7 +149,7 @@ public class OpenAiProvider : IAiProvider
             - existing experience
             - adjacent skills
             - role responsibilities
-
+            
             Do not assume the candidate has experience with a keyword. Only suggest it as a
             potential addition if it is plausible but not explicitly stated.
 
@@ -154,7 +158,11 @@ public class OpenAiProvider : IAiProvider
             - redundant or overlapping keywords
             - keywords already clearly present in the resume
             - keywords already confirmed by the candidate
-
+            
+            Suggested keywords must be concrete, scannable terms usable in ATS (e.g., tools, systems, methods)
+            
+            Exclude abstract phrases, cultural descriptors, or vague competencies (e.g., "fast-paced environment", "engineering excellence")
+            
             ### Keyword Categorization
 
             Group each keyword under a concise category appropriate to the role, such as:
@@ -168,6 +176,12 @@ public class OpenAiProvider : IAiProvider
             - Client / Stakeholder Work
             - Operations / Process
             Use categories that best fit the profession implied by the job description.
+            
+            Use consistent, non-overlapping categories.
+
+            Prefer a normalized set of categories adapted to the role.
+            
+            Do not create semantically redundant categories (e.g., "Technical Skills" vs "Tools / Systems").
 
             Return the keywords sorted in descending order of estimated ATS impact.
             Limit the total to 10 keywords.
@@ -190,13 +204,21 @@ public class OpenAiProvider : IAiProvider
             - Only list gaps for required qualifications or clearly critical responsibilities.
             - Only report gaps that are explicitly mentioned in the job description.
             - Each gap must reference a specific requirement and quote relevant wording from the job description.
-            - Phrase gaps as absence of evidence, not definitive lack of skill
-            - Limit gaps to the 5 most important.
+            - Phrase gaps as absence of evidence using varied, natural phrasing
+            - Avoid repeating identical sentence structures across all gaps
+            - Include up to 5 gaps only if they exist; do not invent or retain weak gaps to reach a count.
             - Prioritize gaps in this order:
               * Missing required skills/tools/systems
               * Missing critical responsibilities
               * Missing required experience level
             - Avoid duplicate or overlapping gaps.
+            - Do NOT include any item in "gaps" if the requirement is clearly satisfied or exceeded.
+            - If a requirement is exceeded, it must NOT appear in "gaps" under any circumstances.
+            - Before finalizing output:
+              * Remove any gap that contradicts the strengths or overall evaluation
+              * Ensure all gaps represent true deficiencies, not satisfied or exceeded requirements
+            - Do NOT include meta-commentary, corrections, or explanations inside gap entries
+            - Each gap must be a clean statement of missing or insufficient evidence
             - "strengths" must:
               * reflect clear alignment with job requirements
               * be supported by explicit resume evidence
@@ -212,6 +234,14 @@ public class OpenAiProvider : IAiProvider
               * be valid JSON
               * match schema exactly 
               * contain no additional fields.
+            
+              ### Final Consistency Check
+
+            Before output:
+            - Ensure no gap contradicts any listed strength
+            - Ensure no preferred qualification is listed as a gap
+            - Ensure all suggestedKeywords comply with keyword constraints
+            - Ensure no filler or weak gaps are included
             """;
 
         var additionalSection = additionalKeywords is { Count: > 0 }
