@@ -18,20 +18,24 @@
     The regex replace handles both the initial placeholder and any previously stamped hash,
     so the correct hash is always written regardless of the current state of index.html.
   -->
-  <Target Name="InjectAppCssVersion" BeforeTargets="Build">
+  <Target Name="InjectDependencyVersion" BeforeTargets="Build">
     <PropertyGroup>
       <_AppCssPath>$(MSBuildProjectDirectory)\wwwroot\css\app.css</_AppCssPath>
+      <_AppJsPath>$(MSBuildProjectDirectory)\wwwroot\js\app.js</_AppJsPath>
       <_IndexHtmlPath>$(MSBuildProjectDirectory)\wwwroot\index.html</_IndexHtmlPath>
     </PropertyGroup>
     <GetFileHash Files="$(_AppCssPath)" Algorithm="SHA256">
       <Output TaskParameter="Hash" PropertyName="_AppCssHash" />
     </GetFileHash>
+    <GetFileHash Files="$(_AppJsPath)" Algorithm="SHA256">
+      <Output TaskParameter="Hash" PropertyName="_AppJsHash" />
+    </GetFileHash>
     <!--
-      Replace  css/app.css?v=<anything>  with  css/app.css?v=<newhash>
-      The \?v=[^"]* pattern matches both the __APP_CSS_VERSION__ placeholder on first
+      Replace css/app.css?v=<anything> with css/app.css?v=<newhash> and js/app.js?v=<anything> with js/app.js?v=<newhash> in index.html.
+      The \?v=[^"]* pattern matches both the __APP_CSS_VERSION__/__APP_JS_VERSION__ placeholder on first
       build and any previously written hash on subsequent builds.
     -->
-    <Exec Command="powershell -NoProfile -Command &quot;$p='$(_IndexHtmlPath)'; $h='$(_AppCssHash)'; $c=[IO.File]::ReadAllText($p,[Text.Encoding]::UTF8); $r='app.css?v='+$h; $c=$c -replace 'app\.css\?v=[^\x22]*',$r; [IO.File]::WriteAllText($p,$c,[Text.Encoding]::UTF8)&quot;" />
+    <Exec Command="powershell -NoProfile -Command &quot;$p='$(_IndexHtmlPath)'; $h1='$(_AppCssHash)'; $h2='$(_AppJsHash)'; $c=[IO.File]::ReadAllText($p,[Text.Encoding]::UTF8); $r1='app.css?v='+$h1; $c=$c -replace 'app\.css\?v=[^\x22]*',$r1; $r2='app.js?v='+$h2; $c=$c -replace 'app\.js\?v=[^\x22]*',$r2; [IO.File]::WriteAllText($p,$c,[Text.Encoding]::UTF8)&quot;" />
   </Target>
 
 </Project>

@@ -4,103 +4,183 @@
 @inject AiProviderFactory Providers
 @inject AppStateService AppState
 @inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Apply — Simply Job Application</PageTitle>
 
-<div class="d-flex justify-content-between align-items-center mb-4">
-    <h4 class="mb-0">Job Application</h4>
-    <button class="btn btn-outline-secondary"
+@if (!_hasApiKey)
+{
+    <div class="alert alert-warning sja-api-alert" role="alert">
+        No API key configured for the selected provider.
+        <a href="/settings">Go to Settings</a> to enter your key.
+    </div>
+}
+
+<!-- ── Sticky progress bar ─────────────────────────────────────────────── -->
+<div class="sja-progress-bar" role="navigation" aria-label="Application progress">
+    <nav class="sja-steps" aria-label="Steps">
+        <div class="sja-step @StepClass(1)" aria-current="@(StepClass(1) == "active" ? "step" : null)">
+            @if (StepClass(1) == "completed") { <span class="sja-step-icon" aria-hidden="true">✓</span> }
+            <span>Input</span>
+        </div>
+        <div class="sja-step-connector" aria-hidden="true"></div>
+        <div class="sja-step @StepClass(2)" aria-current="@(StepClass(2) == "active" ? "step" : null)">
+            @if (StepClass(2) == "completed") { <span class="sja-step-icon" aria-hidden="true">✓</span> }
+            <span>Evaluation</span>
+        </div>
+        <div class="sja-step-connector" aria-hidden="true"></div>
+        <div class="sja-step @StepClass(3)" aria-current="@(StepClass(3) == "active" ? "step" : null)">
+            @if (StepClass(3) == "completed") { <span class="sja-step-icon" aria-hidden="true">✓</span> }
+            <span>Generation</span>
+        </div>
+    </nav>
+    <button class="btn btn-outline-secondary btn-sm"
             disabled="@(_evaluating || _reevaluating || _generating)"
             @onclick="NewSession">
         New
     </button>
 </div>
 
-@if (!_hasApiKey)
-{
-    <div class="alert alert-warning">
-        No API key configured for the selected provider.
-        <a href="/settings">Go to Settings</a> to enter your key.
+<!-- ══ Swimlane 1: User Input ════════════════════════════════════════════ -->
+<section id="lane-input" class="sja-swimlane sja-lane-input" aria-label="User Input">
+    <div class="sja-swimlane-header">
+        <h5 class="mb-0">Job/Role &amp; Resume Input</h5>
     </div>
-}
-
-<div class="row g-3">
-    <div class="@(_evaluation is null ? "col-12 col-md-10 col-xl-8 mx-auto" : "col-12 col-lg-5")">
-        <div class="card">
-            <div class="card-header">Job Description</div>
-            <div class="card-body">
-                <div class="row g-2 mb-3">
-                    <div class="col-6">
-                        <label class="form-label">Company Name</label>
-                        <input class="form-control" @bind="_companyName" placeholder="Acme Corp"
-                               readonly="@_inputsLocked" />
+    <div class="sja-swimlane-body">
+        <div class="row g-3">
+            <div class="col-12 col-lg-7">
+                <div class="card h-100">
+                    <div class="card-header">Job Description</div>
+                    <div class="card-body">
+                        <div class="row g-2 mb-3">
+                            <div class="col-6">
+                                <label class="form-label">Company Name</label>
+                                <input class="form-control" @bind="_companyName" placeholder="Acme Corp"
+                                       readonly="@_inputsLocked" />
+                            </div>
+                            <div class="col-6">
+                                <label class="form-label">Job Title</label>
+                                <input class="form-control" @bind="_jobTitle" placeholder="Software Engineer"
+                                       readonly="@_inputsLocked" />
+                            </div>
+                        </div>
+                        <div>
+                            <label class="form-label">Job Details</label>
+                            <textarea class="form-control" rows="8" @bind="_jobDetails"
+                                      placeholder="Paste the full job description here…"
+                                      readonly="@_inputsLocked"></textarea>
+                        </div>
                     </div>
-                    <div class="col-6">
-                        <label class="form-label">Job Title</label>
-                        <input class="form-control" @bind="_jobTitle" placeholder="Software Engineer"
-                               readonly="@_inputsLocked" />
-                    </div>
-                </div>
-                <div class="mb-0">
-                    <label class="form-label">Job Details</label>
-                    <textarea class="form-control" rows="6" @bind="_jobDetails"
-                              placeholder="Paste the full job description here…"
-                              readonly="@_inputsLocked"></textarea>
                 </div>
             </div>
-        </div>
-
-        <div class="card mt-3">
-            <div class="card-header">Resume</div>
-            <div class="card-body">
-                @if (_selectedFileName is not null)
-                {
-                    <div class="alert alert-success py-2 d-flex justify-content-between align-items-center mb-2">
-                        <span>📄 @_selectedFileName</span>
+            <div class="col-12 col-lg-5">
+                <div class="card h-100">
+                    <div class="card-header">Resume</div>
+                    <div class="card-body">
+                        @if (_selectedFileName is not null)
+                        {
+                            <div class="alert alert-success py-2 d-flex justify-content-between align-items-center mb-3">
+                                <span>📄 @_selectedFileName</span>
+                                @if (!_inputsLocked)
+                                {
+                                    <button class="btn btn-sm btn-outline-danger"
+                                            @onclick="ClearResume"
+                                            aria-label="Clear selected resume">✕</button>
+                                }
+                            </div>
+                        }
                         @if (!_inputsLocked)
                         {
-                            <button class="btn btn-sm btn-outline-danger" @onclick="ClearResume">✕</button>
+                            <div class="mb-2">
+                                <label class="form-label">Upload DOCX</label>
+                                <InputFile class="form-control" accept=".docx" OnChange="OnFileUpload" />
+                            </div>
+                            <div class="text-center text-muted small my-2">— or —</div>
+                            <button class="btn btn-outline-secondary w-100" type="button"
+                                    @onclick="OpenFilePickerAsync">
+                                Choose from Files Library
+                            </button>
                         }
                     </div>
-                }
-                @if (!_inputsLocked)
-                {
-                    <div class="mb-2">
-                        <label class="form-label">Upload DOCX</label>
-                        <InputFile class="form-control" accept=".docx" OnChange="OnFileUpload" />
-                    </div>
-                    <div class="text-center text-muted small my-2">— or —</div>
-                    <button class="btn btn-outline-secondary w-100" type="button"
-                            @onclick="OpenFilePickerAsync">
-                        Choose from Files Library
-                    </button>
-                }
+                </div>
             </div>
         </div>
-
-        <button class="btn btn-primary w-100 mt-3 py-2"
-                disabled="@(!CanEvaluate)"
-                @onclick="EvaluateAsync">
-            @if (_evaluating)
-            {
-                <span class="spinner-border spinner-border-sm me-2" role="status"></span>
-                <span>@_loadingStep</span>
-            }
-            else
-            {
-                <span>Evaluate</span>
-            }
-        </button>
 
         @if (_error is not null)
         {
-            <div class="alert alert-danger mt-3">@_error</div>
+            <div class="alert alert-danger mt-3" role="alert">@_error</div>
         }
-    </div>
 
-    <div class="@(_evaluation is null ? "d-none" : "col-12 col-lg-7")">
-        @if (_evaluation is not null)
+        <div class="d-flex justify-content-end mt-3">
+            <button class="btn btn-primary px-4"
+                    disabled="@(!CanEvaluate)"
+                    @onclick="EvaluateWithScrollAsync"
+                    aria-label="Evaluate match">
+                @if (_evaluating)
+                {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                    <span>@_loadingStep</span>
+                }
+                else { <span>Evaluate</span> }
+            </button>
+        </div>
+    </div>
+</section>
+
+<!-- ══ Swimlane 2: Evaluation ════════════════════════════════════════════ -->
+<section id="lane-evaluation" class="sja-swimlane sja-lane-eval" aria-label="Evaluation">
+    <div class="sja-swimlane-header">
+        <h5 class="mb-0">Match Evaluation &amp; ATS fitting</h5>
+    </div>
+    <div class="sja-swimlane-body">
+        @if (_evaluating || _reevaluating)
         {
+            <div class="card mb-3" aria-busy="true" aria-label="Loading match evaluation">
+                <div class="card-header d-flex justify-content-between align-items-center">
+                    <div class="sja-skeleton" style="width:9rem;height:0.9rem"></div>
+                    <div class="sja-skeleton" style="width:4.5rem;height:1.4rem;border-radius:0.75rem"></div>
+                </div>
+                <div class="card-body d-flex flex-column gap-2">
+                    <div class="sja-skeleton" style="height:0.8rem;width:32%"></div>
+                    <div class="sja-skeleton" style="height:0.8rem;width:90%"></div>
+                    <div class="sja-skeleton" style="height:0.8rem;width:76%"></div>
+                    <div class="sja-skeleton" style="height:0.8rem;width:84%"></div>
+                    <div class="sja-skeleton mt-2" style="height:0.8rem;width:28%"></div>
+                    <div class="sja-skeleton" style="height:0.8rem;width:93%"></div>
+                    <div class="sja-skeleton" style="height:0.8rem;width:70%"></div>
+                </div>
+            </div>
+            <div class="card" aria-busy="true" aria-label="Loading keyword suggestions">
+                <div class="card-header"><div class="sja-skeleton" style="width:14rem;height:0.9rem"></div></div>
+                <div class="card-body d-flex flex-column gap-2">
+                    <div class="sja-skeleton" style="height:0.8rem;width:58%"></div>
+                    <div class="sja-skeleton" style="height:0.8rem;width:70%"></div>
+                    <div class="sja-skeleton" style="height:0.8rem;width:48%"></div>
+                </div>
+            </div>
+        }
+        else if (_evaluation is null)
+        {
+            <div class="sja-empty-state">
+                <p class="text-muted mb-3">Evaluate your input to see match analysis and keyword suggestions.</p>
+                <button class="btn btn-outline-secondary btn-sm"
+                        @onclick="@(() => ScrollToAsync("lane-input"))"
+                        aria-label="Go to User Input section">
+                    ↑ Go to Input
+                </button>
+            </div>
+        }
+        else
+        {
+            var currentKwSet = _evaluation.SuggestedKeywords
+                .Select(k => k.Keyword)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var previouslyConfirmed = _confirmedKeywords
+                .Where(k => !currentKwSet.Contains(k.Keyword))
+                .ToList();
+            var usedKeywords = GetAllKeywordsForSession();
+
+            <!-- Match evaluation -->
             <div class="card mb-3">
                 <div class="card-header d-flex justify-content-between align-items-center">
                     <span>Match Evaluation</span>
@@ -111,45 +191,29 @@
                     {
                         <p class="mb-1 fw-semibold text-success">Strengths:</p>
                         <ul class="mb-3">
-                            @foreach (var strength in _evaluation.Strengths)
-                            {
-                                <li>@strength</li>
-                            }
+                            @foreach (var s in _evaluation.Strengths) { <li>@s</li> }
                         </ul>
                     }
-
                     @if (_evaluation.Gaps.Count > 0)
                     {
                         <p class="mb-1 fw-semibold">Areas needing attention:</p>
                         <ul class="mb-0">
-                            @foreach (var gap in _evaluation.Gaps)
-                            {
-                                <li>@gap</li>
-                            }
+                            @foreach (var g in _evaluation.Gaps) { <li>@g</li> }
                         </ul>
                     }
                     else
                     {
                         <p class="mb-0 text-success">No significant gaps identified.</p>
                     }
-
                 </div>
             </div>
 
-            var currentKwSet = _evaluation.SuggestedKeywords
-                .Select(k => k.Keyword)
-                .ToHashSet(StringComparer.OrdinalIgnoreCase);
-            var previouslyConfirmed = _confirmedKeywords
-                .Where(k => !currentKwSet.Contains(k.Keyword))
-                .ToList();
-            var usedKeywords = GetAllKeywordsForSession();
-
-            if (_materials is null)
+            <!-- Keywords card: interactive before generate, read-only after -->
+            @if (_materials is null)
             {
                 <div class="card mb-3">
                     <div class="card-header">Additional Keywords for ATS</div>
                     <div class="card-body">
-
                         @if (previouslyConfirmed.Count > 0)
                         {
                             <p class="fw-semibold small mb-1">Previously selected</p>
@@ -165,6 +229,7 @@
                                         @kw.Keyword
                                         <button type="button" class="btn-close btn-close-white"
                                                 style="font-size:0.6rem"
+                                                aria-label="Remove @kw.Keyword"
                                                 @onclick="() => RemoveConfirmedKeyword(kwCopy.Keyword)"></button>
                                     </span>
                                 }
@@ -213,34 +278,32 @@
                         {
                             <button class="btn btn-outline-secondary btn-sm w-100 mt-3"
                                     disabled="@(_reevaluating || _generating)"
-                                    @onclick="ReEvaluateAsync">
+                                    @onclick="ReEvaluateAsync"
+                                    aria-label="Re-evaluate with selected keywords">
                                 @if (_reevaluating)
                                 {
-                                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
                                     <span>Re-evaluating…</span>
                                 }
-                                else
-                                {
-                                    <span>Re-evaluate with Selected Keywords</span>
-                                }
+                                else { <span>Re-evaluate with Selected Keywords</span> }
                             </button>
                         }
                     </div>
                 </div>
 
-                <button class="btn btn-success w-100 mb-3 py-2"
-                        disabled="@(_generating || _reevaluating)"
-                        @onclick="GenerateAsync">
-                    @if (_generating)
-                    {
-                        <span class="spinner-border spinner-border-sm me-2" role="status"></span>
-                        <span>@_loadingStep</span>
-                    }
-                    else
-                    {
-                        <span>Generate</span>
-                    }
-                </button>
+                <div class="d-flex justify-content-end">
+                    <button class="btn btn-success px-4"
+                            disabled="@(_generating || _reevaluating)"
+                            @onclick="GenerateWithScrollAsync"
+                            aria-label="Generate application materials">
+                        @if (_generating)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                            <span>@_loadingStep</span>
+                        }
+                        else { <span>Generate</span> }
+                    </button>
+                </div>
             }
             else if (usedKeywords.Count > 0)
             {
@@ -260,63 +323,131 @@
                     </div>
                 </div>
             }
-
-            @if (_materials is not null)
-            {
-                <div class="card mb-3">
-                    <div class="card-header">Why Apply</div>
-                    <div class="card-body">
-                        <p class="mb-0">@_materials.WhyApplyText</p>
-                    </div>
-                </div>
-
-                <div class="card mb-3">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        Cover Letter
-                        @if (_coverLetterFileId is not null)
-                        {
-                            <button class="btn btn-sm btn-outline-primary"
-                                    @onclick="DownloadCoverLetter">
-                                Download DOCX
-                            </button>
-                        }
-                    </div>
-                    <div class="card-body">
-                        @foreach (var para in _materials.CoverLetterText.Split(new[] { "\n\n", "\r\n\r\n" }, StringSplitOptions.RemoveEmptyEntries))
-                        {
-                            <p>@para</p>
-                        }
-                    </div>
-                </div>
-
-                <div class="card mb-3">
-                    <div class="card-header d-flex justify-content-between align-items-center">
-                        Tailored Resume
-                        @if (_tailoredResumeFileId is not null)
-                        {
-                            <button class="btn btn-sm btn-outline-primary"
-                                    @onclick="DownloadTailoredResume">
-                                Download DOCX
-                            </button>
-                        }
-                    </div>
-                    <div class="card-body text-muted small">
-                        Tailored resume has been generated and saved to the Files Library.
-                    </div>
-                </div>
-            }
         }
     </div>
-</div>
+</section>
 
+<!-- ══ Swimlane 3: Generated Content ════════════════════════════════════ -->
+<section id="lane-generated" class="sja-swimlane sja-lane-gen" aria-label="Generated Content">
+    <div class="sja-swimlane-header">
+        <h5 class="mb-0">Generated Customized Content</h5>
+    </div>
+    <div class="sja-swimlane-body">
+        @if (_generating)
+        {
+            <div class="row g-3" aria-busy="true">
+                <div class="col-12 col-lg-6">
+                    <div class="card h-100" aria-label="Loading tailored resume">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <div class="sja-skeleton" style="width:8rem;height:0.9rem"></div>
+                            <div class="sja-skeleton" style="width:6.5rem;height:1.8rem;border-radius:0.25rem"></div>
+                        </div>
+                        <div class="card-body"><div class="sja-skeleton" style="height:0.8rem;width:75%"></div></div>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-6">
+                    <div class="card h-100" aria-label="Loading why apply">
+                        <div class="card-header"><div class="sja-skeleton" style="width:5rem;height:0.9rem"></div></div>
+                        <div class="card-body d-flex flex-column gap-2">
+                            <div class="sja-skeleton" style="height:0.8rem;width:95%"></div>
+                            <div class="sja-skeleton" style="height:0.8rem;width:68%"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="card" aria-label="Loading cover letter">
+                        <div class="card-header"><div class="sja-skeleton" style="width:6rem;height:0.9rem"></div></div>
+                        <div class="card-body d-flex flex-column gap-2">
+                            <div class="sja-skeleton" style="height:0.8rem;width:91%"></div>
+                            <div class="sja-skeleton" style="height:0.8rem;width:83%"></div>
+                            <div class="sja-skeleton" style="height:0.8rem;width:62%"></div>
+                            <div class="sja-skeleton mt-2" style="height:0.8rem;width:88%"></div>
+                            <div class="sja-skeleton" style="height:0.8rem;width:74%"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+        else if (_materials is null)
+        {
+            <div class="sja-empty-state">
+                <p class="text-muted mb-2">To generate tailored application materials:</p>
+                <ol class="text-muted mb-3 d-inline-block text-start ps-3">
+                    <li>Complete evaluation</li>
+                    <li>Click Generate</li>
+                </ol>
+                <br />
+                <button class="btn btn-outline-secondary btn-sm"
+                        @onclick="@(() => ScrollToAsync("lane-evaluation"))"
+                        aria-label="Go to Evaluation section">
+                    ↑ Go to Evaluation
+                </button>
+            </div>
+        }
+        else
+        {
+            <div class="row g-3">
+                <div class="col-12 col-lg-6">
+                    <div class="card h-100">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span>Tailored Resume</span>
+                            @if (_tailoredResumeFileId is not null)
+                            {
+                                <button class="btn btn-sm btn-primary" @onclick="DownloadTailoredResume">
+                                    Download DOCX
+                                </button>
+                            }
+                        </div>
+                        <div class="card-body text-muted small">
+                            Tailored resume generated and saved to the Files Library.
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-lg-6">
+                    <div class="card h-100">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span>Why Apply</span>
+                        </div>
+                        <div class="card-body">
+                            <p class="mb-0">@_materials.WhyApplyText</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span>Cover Letter</span>
+                            @if (_coverLetterFileId is not null)
+                            {
+                                <button class="btn btn-sm btn-outline-primary" @onclick="DownloadCoverLetter">
+                                    Download DOCX
+                                </button>
+                            }
+                        </div>
+                        <div class="card-body">
+                            @foreach (var para in _materials.CoverLetterText.Split(
+                                new[] { "\n\n", "\r\n\r\n" }, StringSplitOptions.RemoveEmptyEntries))
+                            {
+                                <p>@para</p>
+                            }
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+    </div>
+</section>
+
+<!-- File picker modal -->
 @if (_showFilePicker)
 {
-    <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4)">
+    <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4)"
+         role="dialog" aria-modal="true" aria-label="Choose Resume from Files Library">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Choose Resume from Files Library</h5>
-                    <button class="btn-close" @onclick="() => _showFilePicker = false"></button>
+                    <button class="btn-close" @onclick="() => _showFilePicker = false" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     @if (_fileMeta.Count == 0)
@@ -395,6 +526,37 @@
         }
     }
 
+    // ── Scroll helpers ────────────────────────────────────────────────────────
+
+    Task ScrollToAsync(string id) =>
+        JS.InvokeVoidAsync("sjaScrollTo", id).AsTask();
+
+    async Task EvaluateWithScrollAsync()
+    {
+        await ScrollToAsync("lane-evaluation");
+        await EvaluateAsync();
+    }
+
+    async Task GenerateWithScrollAsync()
+    {
+        await ScrollToAsync("lane-generated");
+        await GenerateAsync();
+    }
+
+    // ── Progress step state ───────────────────────────────────────────────────
+
+    string StepClass(int step) => step switch
+    {
+        1 => _inputsLocked              ? "completed" : "active",
+        2 => _materials is not null     ? "completed"
+           : _inputsLocked             ? "active"
+                                       : "",
+        3 => _materials is not null     ? "active"    : "",
+        _ => ""
+    };
+
+    // ── File handling ─────────────────────────────────────────────────────────
+
     async Task OnFileUpload(InputFileChangeEventArgs e)
     {
         try
@@ -456,6 +618,8 @@
         _error = null;
     }
 
+    // ── AI turns ──────────────────────────────────────────────────────────────
+
     async Task EvaluateAsync()
     {
         _error = null;
@@ -487,8 +651,8 @@
             var job = new JobDescription
             {
                 CompanyName = _companyName,
-                JobTitle = _jobTitle,
-                JobDetails = _jobDetails,
+                JobTitle    = _jobTitle,
+                JobDetails  = _jobDetails,
             };
             _evaluation = await provider.EvaluateMatchAsync(job, _resumeMarkdown, modelId, apiKey, null);
 
@@ -499,10 +663,10 @@
                 _inputFileId = Guid.NewGuid().ToString();
                 await Db.SaveFileAsync(new StoredFile
                 {
-                    Id = _inputFileId,
-                    Name = _selectedFileName ?? "resume.docx",
-                    DataBase64 = Convert.ToBase64String(_resumeBytes!),
-                    LastUsedAt = DateTime.UtcNow,
+                    Id           = _inputFileId,
+                    Name         = _selectedFileName ?? "resume.docx",
+                    DataBase64   = Convert.ToBase64String(_resumeBytes!),
+                    LastUsedAt   = DateTime.UtcNow,
                     SessionCount = 1,
                 });
                 await Db.EnforceFileLimitAsync(_settings.FilesLimit);
@@ -552,35 +716,35 @@
             var job = new JobDescription
             {
                 CompanyName = _companyName,
-                JobTitle = _jobTitle,
-                JobDetails = _jobDetails,
+                JobTitle    = _jobTitle,
+                JobDetails  = _jobDetails,
             };
 
             _loadingStep = "Generating materials…";
             StateHasChanged();
-            _materials = await provider.GenerateMaterialsAsync(job, _resumeMarkdown, _evaluation, modelId, apiKey,
-                GetAdditionalKeywords());
+            _materials = await provider.GenerateMaterialsAsync(
+                job, _resumeMarkdown, _evaluation, modelId, apiKey, GetAdditionalKeywords());
 
             var resumeDocxBytes = Docx.GenerateResumeDocx(_resumeBytes!, _materials.ResumeMarkdown);
             var resumeFileId = Guid.NewGuid().ToString();
             await Db.SaveFileAsync(new StoredFile
             {
-                Id = resumeFileId,
-                Name = $"Resume - {_companyName} - {_jobTitle}.docx",
-                DataBase64 = Convert.ToBase64String(resumeDocxBytes),
-                LastUsedAt = DateTime.UtcNow,
+                Id           = resumeFileId,
+                Name         = $"Resume - {_companyName} - {_jobTitle}.docx",
+                DataBase64   = Convert.ToBase64String(resumeDocxBytes),
+                LastUsedAt   = DateTime.UtcNow,
                 SessionCount = 1,
             });
             _tailoredResumeFileId = resumeFileId;
 
-            var clDocx = Docx.GenerateCoverLetterDocx(_materials.CoverLetterText);
-            var clFileId = Guid.NewGuid().ToString();
+            var clDocx    = Docx.GenerateCoverLetterDocx(_materials.CoverLetterText);
+            var clFileId  = Guid.NewGuid().ToString();
             await Db.SaveFileAsync(new StoredFile
             {
-                Id = clFileId,
-                Name = $"Cover Letter - {_companyName} - {_jobTitle}.docx",
-                DataBase64 = Convert.ToBase64String(clDocx),
-                LastUsedAt = DateTime.UtcNow,
+                Id           = clFileId,
+                Name         = $"Cover Letter - {_companyName} - {_jobTitle}.docx",
+                DataBase64   = Convert.ToBase64String(clDocx),
+                LastUsedAt   = DateTime.UtcNow,
                 SessionCount = 1,
             });
             _coverLetterFileId = clFileId;
@@ -624,8 +788,8 @@
                 JobDetails  = _jobDetails,
             };
 
-            _evaluation = await provider.EvaluateMatchAsync(job, _resumeMarkdown, modelId, apiKey,
-                GetAdditionalKeywords());
+            _evaluation = await provider.EvaluateMatchAsync(
+                job, _resumeMarkdown, modelId, apiKey, GetAdditionalKeywords());
 
             await SaveSessionAsync();
         }
@@ -639,8 +803,9 @@
         }
     }
 
+    // ── Keyword helpers ───────────────────────────────────────────────────────
+
     // Returns deduplicated union of confirmed + parsed custom keywords as SuggestedKeyword list.
-    // Used for session saving and for passing to the AI.
     List<SuggestedKeyword> GetAllKeywordsForSession()
     {
         var seen   = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -701,30 +866,34 @@
     void RemoveConfirmedKeyword(string keyword) =>
         _confirmedKeywords.RemoveAll(c => string.Equals(c.Keyword, keyword, StringComparison.OrdinalIgnoreCase));
 
+    // ── Session persistence ───────────────────────────────────────────────────
+
     async Task SaveSessionAsync()
     {
         // _sessionId is pinned when Evaluate succeeds; Generate reuses the same ID
         // so IndexedDB put() overwrites the existing record rather than inserting a new one.
         var existing = _sessionId is not null ? await Db.GetSessionAsync(_sessionId) : null;
-        var session = new SessionRecord
+        var session  = new SessionRecord
         {
-            Id        = _sessionId ?? Guid.NewGuid().ToString(),
-            CreatedAt = existing?.CreatedAt ?? DateTime.UtcNow,
-            CompanyName = _companyName,
-            JobTitle = _jobTitle,
-            JobDetails = _jobDetails,
+            Id                = _sessionId ?? Guid.NewGuid().ToString(),
+            CreatedAt         = existing?.CreatedAt ?? DateTime.UtcNow,
+            CompanyName       = _companyName,
+            JobTitle          = _jobTitle,
+            JobDetails        = _jobDetails,
             InputResumeFileId = _inputFileId ?? "",
-            MatchScore = _evaluation?.Score ?? "",
-            MatchGaps = _evaluation?.Gaps ?? new(),
-            MatchStrengths = _evaluation?.Strengths ?? new(),
+            MatchScore        = _evaluation?.Score ?? "",
+            MatchGaps         = _evaluation?.Gaps ?? new(),
+            MatchStrengths    = _evaluation?.Strengths ?? new(),
             AdditionalKeywords = GetAllKeywordsForSession(),
-            CoverLetterText = _materials?.CoverLetterText ?? "",
-            WhyApplyText = _materials?.WhyApplyText ?? "",
+            CoverLetterText   = _materials?.CoverLetterText ?? "",
+            WhyApplyText      = _materials?.WhyApplyText ?? "",
             TailoredResumeFileId = _tailoredResumeFileId,
-            CoverLetterFileId = _coverLetterFileId,
+            CoverLetterFileId    = _coverLetterFileId,
         };
         await Db.SaveSessionAsync(session);
     }
+
+    // ── Downloads ─────────────────────────────────────────────────────────────
 
     async Task DownloadCoverLetter()
     {
@@ -742,8 +911,7 @@
     {
         var file = await Db.GetFileAsync(fileId);
         if (file is null) { _error = "File not found."; return; }
-        var bytes = Convert.FromBase64String(file.DataBase64);
-        await Db.DownloadFileAsync(fileName, bytes);
+        await Db.DownloadFileAsync(fileName, Convert.FromBase64String(file.DataBase64));
     }
 
     static string ScoreBadgeClass(string score) => score switch

@@ -23,3 +23,127 @@ pre.text-wrap {
 .navbar .active {
     font-weight: 600;
 }
+
+/* ── Swimlane layout ──────────────────────────────────────────────────────── */
+
+/* Bleed backgrounds to container edges by countering the container's gutter */
+.sja-swimlane {
+    margin-left: -0.75rem;
+    margin-right: -0.75rem;
+    padding-left: 0.75rem;
+    padding-right: 0.75rem;
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+    margin-top: 2rem;
+    scroll-margin-top: 2.5rem;
+}
+
+.sja-lane-input {
+    background: #ffffff;
+}
+.sja-lane-eval {
+    background: #dffeeb;
+}
+.sja-lane-gen {
+    background: #f0f5ff;
+}
+
+.sja-swimlane-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 0.75rem;
+    margin-bottom: 1.5rem;
+    border-bottom: 2px solid rgba(0, 0, 0, 0.08);
+}
+
+    .sja-swimlane-header h5 {
+        text-transform: uppercase;
+    }
+
+    .sja-swimlane-body {
+        max-width: 100%;
+    }
+
+/* ── Sticky progress bar ──────────────────────────────────────────────────── */
+
+.sja-progress-bar {
+    position: sticky;
+    top: 0;
+    z-index: 200;
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-left: -0.75rem;
+    margin-right: -0.75rem;
+    padding: 0.5rem 0.75rem;
+    background: #ffffff;
+    border-bottom: 1px solid #dee2e6;
+    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.sja-steps {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-grow: 1;
+}
+
+.sja-step {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: #adb5bd;
+    transition: color 0.2s;
+    white-space: nowrap;
+}
+
+.sja-step.active {
+    color: #0d6efd;
+    font-weight: 700;
+}
+
+.sja-step.completed {
+    color: #198754;
+}
+
+.sja-step-icon {
+    font-size: 0.75rem;
+}
+
+.sja-step-connector {
+    flex-shrink: 0;
+    height: 1px;
+    width: 2rem;
+    background: #dee2e6;
+}
+
+/* ── Empty states ─────────────────────────────────────────────────────────── */
+
+.sja-empty-state {
+    padding: 3rem 1rem;
+    text-align: center;
+}
+
+/* ── Skeleton loader ──────────────────────────────────────────────────────── */
+
+.sja-skeleton {
+    display: block;
+    background: linear-gradient(90deg, #ececec 25%, #ddd 50%, #ececec 75%);
+    background-size: 200% 100%;
+    animation: sja-shimmer 1.4s ease-in-out infinite;
+    border-radius: 0.25rem;
+}
+
+@keyframes sja-shimmer {
+    0%   { background-position:  200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* ── API key alert: no gap before progress bar ────────────────────────────── */
+.sja-api-alert {
+    margin-bottom: 0;
+    border-radius: 0;
+}
