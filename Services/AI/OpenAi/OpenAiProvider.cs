@@ -33,7 +33,8 @@ public class OpenAiProvider : IAiProvider
     // ── Public interface ──────────────────────────────────────────────────────
 
     public async Task<MatchEvaluation> EvaluateMatchAsync(
-        JobDescription job, string resumeMarkdown, string modelId, string apiKey)
+        JobDescription job, string resumeMarkdown, string modelId, string apiKey,
+        IReadOnlyList<string>? additionalKeywords = null)
     {
         const string instructions = """
             You are an expert resume analyst.
@@ -55,7 +56,8 @@ public class OpenAiProvider : IAiProvider
             - preferred qualifications
             Then evaluate match.
 
-            Base the evaluation only on information explicitly present in the resume.
+            Base the evaluation only on information explicitly present in the resume and, if provided, the
+            "Additional Keywords Confirmed by Candidate" section.
 
             Compare the job description requirements directly against evidence in the resume.
 
@@ -75,20 +77,62 @@ public class OpenAiProvider : IAiProvider
 
             Consider common synonyms and variations of technologies when comparing resume and job description.
 
-            If the job description lists a single specific programming language, framework, or technology that is explicitly required 
+            If the job description lists a single specific programming language, framework, or technology that is explicitly required
             but there is no evidence of it in the resume, this should be considered a significant gap, and the score should not be higher
             than "Fair".
-            
+
             If the candidate meets most required technologies and responsibilities, the score should not be lower than "Good".
 
             If the candidate meets most required technologies but lacks some responsibilities, the score should typically be "Good" rather than "Fair".
+
+            Additionally, identify non-domain-specific keywords that:
+            - are explicitly mentioned in the job description
+            - do NOT appear in the resume
+            - do NOT appear in "Additional Keywords Confirmed by Candidate" (if provided)
+
+            Non-domain-specific keywords include technologies, tools, frameworks, platforms,
+            or general engineering practices that are transferable across industries.
+
+            Exclude domain-specific concepts (e.g., fintech operations, healthcare regulations).
+
+            Rank suggested keywords by estimated ATS impact using the following priority:
+            1. Keywords explicitly listed as required
+            2. Keywords repeated multiple times in the job description
+            3. Keywords tied to core responsibilities
+            4. Frequently emphasized preferred qualifications
+
+            Only suggest keywords that are reasonably inferable from the candidate’s existing
+            experience, adjacent technologies, or role responsibilities.
+
+            Do not assume the candidate has experience with a keyword. Only suggest it as a
+            potential addition if it is plausible but not explicitly stated.
+
+            Avoid suggesting:
+            - soft skills (e.g., communication, teamwork)
+            - redundant or overlapping keywords
+            - keywords already clearly present in the resume
+            - keywords already confirmed by the candidate (if "Additional Keywords Confirmed by Candidate" are provided)
+
+            Group each keyword under a concise category such as:
+            - Programming Languages
+            - Cloud Platforms
+            - DevOps / CI-CD
+            - Databases
+            - APIs / Integration
+            - Testing
+            - Monitoring / Observability
+            - Developer Tools
+
+            Return the keywords sorted in descending order of estimated ATS impact.
+            Limit the total to 10 keywords.
 
             Respond with a JSON object only — no markdown, no explanation — using this exact schema:
             {
               "score": "Poor" | "Fair" | "Good" | "Excellent",
               "gaps": ["string", ...],
               "strengths": ["string", ...],
-              "isGoodMatch": true | false
+              "isGoodMatch": true | false,
+              "suggestedKeywords": [{"category": "string", "keyword": "string"}, ...]
             }
             Rules:
             - "gaps" lists specific qualifications, requirements, or experience areas where the candidate is poorly matched.
@@ -108,8 +152,13 @@ public class OpenAiProvider : IAiProvider
             - Prefer strengths demonstrated in recent roles when possible.
             - Each strength should reference a specific technology, responsibility, or qualification from the job description.
             - "isGoodMatch" must be true only when score is "Good" or "Excellent".
+            - "suggestedKeywords" must be an array (may be empty). Each element must have "category" and "keyword" string fields.
             - Output must contain valid JSON, must match schema exactly and must contain no additional fields.
             """;
+
+        var additionalSection = additionalKeywords is { Count: > 0 }
+            ? $"\n\nAdditional Keywords Confirmed by Candidate:\n{string.Join("\n", additionalKeywords.Select(k => $"- {k}"))}"
+            : "";
 
         var userText = $"""
             Job Description
@@ -119,7 +168,7 @@ public class OpenAiProvider : IAiProvider
             {job.JobDetails}
 
             Candidate Resume (Markdown):
-            {resumeMarkdown}
+            {resumeMarkdown}{additionalSection}
 
             Respond in JSON.
             """;
@@ -142,7 +191,8 @@ public class OpenAiProvider : IAiProvider
     }
 
     public async Task<GeneratedMaterials> GenerateMaterialsAsync(
-        JobDescription job, string resumeMarkdown, MatchEvaluation evaluation, string modelId, string apiKey)
+        JobDescription job, string resumeMarkdown, MatchEvaluation evaluation, string modelId, string apiKey,
+        IReadOnlyList<string>? additionalKeywords = null)
     {
         const string instructions = """
             You are an expert resume writer and career coach.
@@ -245,6 +295,46 @@ public class OpenAiProvider : IAiProvider
             - Do NOT claim experience with them.
             - Instead emphasize adjacent technologies or transferable experience.
 
+            If "Additional Keywords Confirmed by Candidate" are provided:
+            - The candidate has explicitly confirmed they possess these skills
+            - Ensure ALL confirmed keywords are included in the Skills (or equivalent) section
+            - Do not omit any confirmed keyword
+
+            "Additional Keywords Confirmed by Candidate" Placement and formatting:
+            - Place confirmed keywords prominently within the Skills section
+            - Group them into appropriate categories where possible
+            - If categories are not used, include them in a clear, scannable list
+            - Do not duplicate keywords already present in the resume
+            - Ensure consistent naming and formatting for ATS readability
+            - Avoid embedding keywords only within sentences; they must appear as discrete skills
+
+            "Additional Keywords Confirmed by Candidate" Integration:
+            - Integrate confirmed keywords with existing resume skills to form a cohesive section
+            - Avoid appending them as an isolated or disconnected list
+
+            "Additional Keywords Confirmed by Candidate" Usage in experience:
+            - You may reference confirmed keywords in experience bullet points only when
+              they plausibly align with the described work
+            - Do not force inclusion where it would appear artificial
+
+            "Additional Keywords Confirmed by Candidate" Keyword discipline:
+            - Do not overuse confirmed keywords across multiple sections
+            - Primary placement must be in the Skills section
+
+            If "Suggested Keywords" from prior analysis are provided:
+            - Treat them as unconfirmed
+            - Include them ONLY if they are strongly implied by the candidate’s experience
+            - Do not include them if doing so would introduce unsupported claims
+
+            The Skills section should contain:
+            - Core skills already present in the resume
+            - All confirmed additional keywords
+            - Relevant job-aligned skills already supported by experience
+
+            The Skills section should NOT include:
+            - unsupported or inferred skills
+            - redundant variations of the same keyword
+            
             The cover letter is comprised of 2 paragraphs:
             - Paragraph 1:
               * State interest in the role
@@ -296,14 +386,18 @@ public class OpenAiProvider : IAiProvider
             - Only claim experience with technologies that appear explicitly in the resume.
             """;
 
+        var additionalSection = additionalKeywords is { Count: > 0 }
+            ? $"\n\nAdditional Keywords Confirmed by Candidate:\n{string.Join("\n", additionalKeywords.Select(k => $"- {k}"))}"
+            : "";
+
         string raw;
         if (!string.IsNullOrEmpty(evaluation.AiResponseId))
         {
             // Turn 1 already supplied the Markdown resume and job description.
-            // Just ask for generation — no need to resend context.
+            // Append additional keywords if the user selected any.
+            var continuationText = "Generate the tailored job application materials. Respond in JSON." + additionalSection;
             (_, raw) = await ContinueResponseAsync(
-                modelId, apiKey, instructions, evaluation.AiResponseId,
-                "Generate the tailored job application materials. Respond in JSON.");
+                modelId, apiKey, instructions, evaluation.AiResponseId, continuationText);
         }
         else
         {
@@ -325,7 +419,7 @@ public class OpenAiProvider : IAiProvider
                 - {gapsSummary}
 
                 Original Resume (Markdown):
-                {resumeMarkdown}
+                {resumeMarkdown}{additionalSection}
 
                 Respond in JSON.
                 """;

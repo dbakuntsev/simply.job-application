@@ -10,7 +10,7 @@
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h4 class="mb-0">Job Application</h4>
     <button class="btn btn-outline-secondary"
-            disabled="@(_evaluating || _generating)"
+            disabled="@(_evaluating || _reevaluating || _generating)"
             @onclick="NewSession">
         New
     </button>
@@ -71,7 +71,7 @@
                     </div>
                     <div class="text-center text-muted small my-2">— or —</div>
                     <button class="btn btn-outline-secondary w-100" type="button"
-                            @onclick="() => _showFilePicker = true">
+                            @onclick="OpenFilePickerAsync">
                         Choose from Files Library
                     </button>
                 }
@@ -136,10 +136,100 @@
                 </div>
             </div>
 
-            @if (_materials is null)
+            var currentKwSet = _evaluation.SuggestedKeywords
+                .Select(k => k.Keyword)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var previouslyConfirmed = _confirmedKeywords
+                .Where(k => !currentKwSet.Contains(k.Keyword))
+                .ToList();
+            var usedKeywords = GetAllKeywordsForSession();
+
+            if (_materials is null)
             {
+                <div class="card mb-3">
+                    <div class="card-header">Additional Keywords for ATS</div>
+                    <div class="card-body">
+
+                        @if (previouslyConfirmed.Count > 0)
+                        {
+                            <p class="fw-semibold small mb-1">Previously selected</p>
+                            <div class="d-flex flex-wrap gap-2 mb-3">
+                                @foreach (var kw in previouslyConfirmed)
+                                {
+                                    var kwCopy = kw;
+                                    <span class="badge text-bg-secondary d-flex align-items-center gap-1">
+                                        @if (!string.IsNullOrEmpty(kw.Category))
+                                        {
+                                            <span class="opacity-75 small">@kw.Category:</span>
+                                        }
+                                        @kw.Keyword
+                                        <button type="button" class="btn-close btn-close-white"
+                                                style="font-size:0.6rem"
+                                                @onclick="() => RemoveConfirmedKeyword(kwCopy.Keyword)"></button>
+                                    </span>
+                                }
+                            </div>
+                        }
+
+                        @if (_evaluation.SuggestedKeywords.Count > 0)
+                        {
+                            <p class="text-muted small mb-2">
+                                These skills appear in the job description but not in your resume.
+                                Check the ones you are comfortable adding to your Skills section.
+                            </p>
+                            var kwIdx = 0;
+                            foreach (var group in _evaluation.SuggestedKeywords.GroupBy(k => k.Category))
+                            {
+                                <p class="fw-semibold mb-1 mt-2 small">@group.Key</p>
+                                foreach (var kw in group)
+                                {
+                                    var idx = kwIdx++;
+                                    var kwCopy = kw;
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="kw-@idx"
+                                               checked="@_confirmedKeywords.Any(c => string.Equals(c.Keyword, kwCopy.Keyword, StringComparison.OrdinalIgnoreCase))"
+                                               @onchange="e => ToggleKeyword(kwCopy, (bool)e.Value!)" />
+                                        <label class="form-check-label small" for="kw-@idx">@kw.Keyword</label>
+                                    </div>
+                                }
+                            }
+                        }
+                        else
+                        {
+                            <p class="text-muted small mb-0">No additional keywords suggested for this job description.</p>
+                        }
+
+                        <div class="mt-3">
+                            <label class="form-label small">
+                                Add keywords manually
+                                <span class="text-muted">(one per line, optionally prefixed with <code>Category: </code>; or comma-separated)</span>
+                            </label>
+                            <textarea class="form-control form-control-sm" rows="2"
+                                      placeholder="@("Developer Tools: Terraform\nGraphQL, REST")"
+                                      @bind="_customKeywords"></textarea>
+                        </div>
+
+                        @if (GetAdditionalKeywords().Count > 0)
+                        {
+                            <button class="btn btn-outline-secondary btn-sm w-100 mt-3"
+                                    disabled="@(_reevaluating || _generating)"
+                                    @onclick="ReEvaluateAsync">
+                                @if (_reevaluating)
+                                {
+                                    <span class="spinner-border spinner-border-sm me-2" role="status"></span>
+                                    <span>Re-evaluating…</span>
+                                }
+                                else
+                                {
+                                    <span>Re-evaluate with Selected Keywords</span>
+                                }
+                            </button>
+                        }
+                    </div>
+                </div>
+
                 <button class="btn btn-success w-100 mb-3 py-2"
-                        disabled="@_generating"
+                        disabled="@(_generating || _reevaluating)"
                         @onclick="GenerateAsync">
                     @if (_generating)
                     {
@@ -151,6 +241,24 @@
                         <span>Generate</span>
                     }
                 </button>
+            }
+            else if (usedKeywords.Count > 0)
+            {
+                <div class="card mb-3">
+                    <div class="card-header">Additional Keywords Used</div>
+                    <div class="card-body">
+                        @foreach (var group in usedKeywords.GroupBy(k => string.IsNullOrEmpty(k.Category) ? "Other" : k.Category))
+                        {
+                            <p class="fw-semibold small mb-1 mt-2">@group.Key</p>
+                            <div class="d-flex flex-wrap gap-2 mb-1">
+                                @foreach (var kw in group)
+                                {
+                                    <span class="badge text-bg-secondary">@kw.Keyword</span>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
             }
 
             @if (_materials is not null)
@@ -241,6 +349,7 @@
     string? _selectedFileId;
 
     bool _evaluating;
+    bool _reevaluating;
     bool _generating;
     bool _inputsLocked;
     string? _loadingStep;
@@ -257,11 +366,15 @@
     string? _inputFileId;
     string? _sessionId;
 
+    // Keyword selection — keywords the user has explicitly confirmed
+    readonly List<SuggestedKeyword> _confirmedKeywords = new();
+    string _customKeywords = "";
+
     bool _showFilePicker;
     List<StoredFileMeta> _fileMeta = new();
     AppSettings _settings = new();
 
-    bool CanEvaluate => !_evaluating && !_generating && !_inputsLocked && _hasApiKey &&
+    bool CanEvaluate => !_evaluating && !_reevaluating && !_generating && !_inputsLocked && _hasApiKey &&
                         !string.IsNullOrWhiteSpace(_companyName) &&
                         !string.IsNullOrWhiteSpace(_jobTitle) &&
                         !string.IsNullOrWhiteSpace(_jobDetails) &&
@@ -309,6 +422,12 @@
         _showFilePicker = false;
     }
 
+    async Task OpenFilePickerAsync()
+    {
+        _fileMeta = await Db.GetAllFileMetaAsync();
+        _showFilePicker = true;
+    }
+
     void ClearResume()
     {
         _resumeBytes = null;
@@ -331,6 +450,8 @@
         _resumeMarkdown = null;
         _inputFileId = null;
         _sessionId = null;
+        _confirmedKeywords.Clear();
+        _customKeywords = "";
         _inputsLocked = false;
         _error = null;
     }
@@ -344,6 +465,8 @@
         _coverLetterFileId = null;
         _resumeMarkdown = null;
         _inputFileId = null;
+        _confirmedKeywords.Clear();
+        _customKeywords = "";
         _inputsLocked = true;
         _evaluating = true;
 
@@ -367,7 +490,7 @@
                 JobTitle = _jobTitle,
                 JobDetails = _jobDetails,
             };
-            _evaluation = await provider.EvaluateMatchAsync(job, _resumeMarkdown, modelId, apiKey);
+            _evaluation = await provider.EvaluateMatchAsync(job, _resumeMarkdown, modelId, apiKey, null);
 
             // Store resume in file library (needed for session record).
             _inputFileId = _selectedFileId;
@@ -435,7 +558,8 @@
 
             _loadingStep = "Generating materials…";
             StateHasChanged();
-            _materials = await provider.GenerateMaterialsAsync(job, _resumeMarkdown, _evaluation, modelId, apiKey);
+            _materials = await provider.GenerateMaterialsAsync(job, _resumeMarkdown, _evaluation, modelId, apiKey,
+                GetAdditionalKeywords());
 
             var resumeDocxBytes = Docx.GenerateResumeDocx(_resumeBytes!, _materials.ResumeMarkdown);
             var resumeFileId = Guid.NewGuid().ToString();
@@ -475,6 +599,108 @@
         }
     }
 
+    async Task ReEvaluateAsync()
+    {
+        if (_resumeMarkdown is null) return;
+
+        _error = null;
+        _materials = null;
+        _tailoredResumeFileId = null;
+        _coverLetterFileId = null;
+        _reevaluating = true;
+
+        try
+        {
+            _settings = await Db.GetSettingsAsync();
+            var apiKey   = _settings.ProviderApiKeys.GetValueOrDefault(_settings.AiProvider) ?? "";
+            var modelId  = _settings.ProviderModels.GetValueOrDefault(_settings.AiProvider)
+                           ?? Providers.Get(_settings.AiProvider).DefaultModelId;
+            var provider = Providers.Get(_settings.AiProvider);
+
+            var job = new JobDescription
+            {
+                CompanyName = _companyName,
+                JobTitle    = _jobTitle,
+                JobDetails  = _jobDetails,
+            };
+
+            _evaluation = await provider.EvaluateMatchAsync(job, _resumeMarkdown, modelId, apiKey,
+                GetAdditionalKeywords());
+
+            await SaveSessionAsync();
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _reevaluating = false;
+        }
+    }
+
+    // Returns deduplicated union of confirmed + parsed custom keywords as SuggestedKeyword list.
+    // Used for session saving and for passing to the AI.
+    List<SuggestedKeyword> GetAllKeywordsForSession()
+    {
+        var seen   = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var result = new List<SuggestedKeyword>();
+        foreach (var kw in _confirmedKeywords)
+            if (seen.Add(kw.Keyword)) result.Add(kw);
+        foreach (var kw in ParseCustomKeywords())
+            if (seen.Add(kw.Keyword)) result.Add(kw);
+        return result;
+    }
+
+    // Returns strings formatted as "Category: Keyword" (or just "Keyword") for the AI prompt.
+    IReadOnlyList<string> GetAdditionalKeywords() =>
+        GetAllKeywordsForSession()
+            .Select(kw => string.IsNullOrEmpty(kw.Category) ? kw.Keyword : $"{kw.Category}: {kw.Keyword}")
+            .ToList();
+
+    // Parses the free-form textarea. Each line: "Category: Keyword" or plain "Keyword".
+    // Comma-separated entries are supported on lines that contain no colon.
+    List<SuggestedKeyword> ParseCustomKeywords()
+    {
+        var result = new List<SuggestedKeyword>();
+        foreach (var line in _customKeywords.Split(new[] { '\n', '\r' },
+                     StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            var colonIdx = line.IndexOf(':');
+            if (colonIdx > 0)
+            {
+                var cat = line[..colonIdx].Trim();
+                var kw  = line[(colonIdx + 1)..].Trim();
+                if (!string.IsNullOrWhiteSpace(kw))
+                    result.Add(new SuggestedKeyword { Category = cat, Keyword = kw });
+            }
+            else
+            {
+                foreach (var part in line.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+                    if (!string.IsNullOrWhiteSpace(part))
+                        result.Add(new SuggestedKeyword { Category = "", Keyword = part });
+            }
+        }
+        return result;
+    }
+
+    void ToggleKeyword(SuggestedKeyword kw, bool isChecked)
+    {
+        if (isChecked)
+        {
+            if (!_confirmedKeywords.Any(c => string.Equals(c.Keyword, kw.Keyword, StringComparison.OrdinalIgnoreCase)))
+                _confirmedKeywords.Add(kw);
+        }
+        else
+        {
+            _confirmedKeywords.RemoveAll(c => string.Equals(c.Keyword, kw.Keyword, StringComparison.OrdinalIgnoreCase));
+        }
+    }
+
+    void RemoveConfirmedKeyword(string keyword) =>
+        _confirmedKeywords.RemoveAll(c => string.Equals(c.Keyword, keyword, StringComparison.OrdinalIgnoreCase));
+
     async Task SaveSessionAsync()
     {
         // _sessionId is pinned when Evaluate succeeds; Generate reuses the same ID
@@ -491,6 +717,7 @@
             MatchScore = _evaluation?.Score ?? "",
             MatchGaps = _evaluation?.Gaps ?? new(),
             MatchStrengths = _evaluation?.Strengths ?? new(),
+            AdditionalKeywords = GetAllKeywordsForSession(),
             CoverLetterText = _materials?.CoverLetterText ?? "",
             WhyApplyText = _materials?.WhyApplyText ?? "",
             TailoredResumeFileId = _tailoredResumeFileId,
@@ -502,7 +729,7 @@
     async Task DownloadCoverLetter()
     {
         if (_coverLetterFileId is null) return;
-        await DownloadFileAsync(_coverLetterFileId, $"Cover Letter - {_jobTitle}.docx");
+        await DownloadFileAsync(_coverLetterFileId, $"Cover Letter - {_companyName} - {_jobTitle}.docx");
     }
 
     async Task DownloadTailoredResume()

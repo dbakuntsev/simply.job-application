@@ -11,6 +11,7 @@ public class SessionRecord
     public string MatchScore { get; set; } = "";
     public List<string> MatchGaps { get; set; } = new();
     public List<string> MatchStrengths { get; set; } = new();
+    public List<SuggestedKeyword> AdditionalKeywords { get; set; } = new();
     public string CoverLetterText { get; set; } = "";
     public string WhyApplyText { get; set; } = "";
     public string? TailoredResumeFileId { get; set; }

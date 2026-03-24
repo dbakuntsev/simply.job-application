@@ -13,14 +13,16 @@ public interface IAiProvider
         JobDescription job,
         string resumeMarkdown,
         string modelId,
-        string apiKey);
+        string apiKey,
+        IReadOnlyList<string>? additionalKeywords = null);
 
     Task<GeneratedMaterials> GenerateMaterialsAsync(
         JobDescription job,
         string resumeMarkdown,
         MatchEvaluation evaluation,
         string modelId,
-        string apiKey);
+        string apiKey,
+        IReadOnlyList<string>? additionalKeywords = null);
 }
 
 public record AiModel(string Id, string DisplayName);

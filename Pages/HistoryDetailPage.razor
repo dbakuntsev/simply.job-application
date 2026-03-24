@@ -90,6 +90,25 @@ else
                 </div>
             </div>
 
+            @if (_session.AdditionalKeywords.Count > 0)
+            {
+                <div class="card mb-3">
+                    <div class="card-header">Additional Keywords Used</div>
+                    <div class="card-body">
+                        @foreach (var group in _session.AdditionalKeywords.GroupBy(k => string.IsNullOrEmpty(k.Category) ? "Other" : k.Category))
+                        {
+                            <p class="fw-semibold small mb-1 mt-2">@group.Key</p>
+                            <div class="d-flex flex-wrap gap-2 mb-1">
+                                @foreach (var kw in group)
+                                {
+                                    <span class="badge text-bg-secondary">@kw.Keyword</span>
+                                }
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
             @if (!string.IsNullOrEmpty(_session.WhyApplyText))
             {
                 <div class="card mb-3">
