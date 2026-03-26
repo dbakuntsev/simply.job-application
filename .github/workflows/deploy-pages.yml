@@ -1,0 +1,71 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Allow only one Pages deployment at a time
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    runs-on: windows-latest   # PowerShell required by the MSBuild cache-buster target
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET 8
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Publish
+        run: dotnet publish -c Release -o ./publish
+
+      # GitHub Pages serves project repos under /<repo>/, so the base href must
+      # match.  We patch the published index.html after dotnet publish so the
+      # cache-buster hashes are already in place before we touch the file.
+      - name: Fix base href
+        shell: pwsh
+        run: |
+          $repo  = "${{ github.repository }}".Split('/')[1]
+          $file  = "./publish/wwwroot/index.html"
+          $html  = Get-Content $file -Raw -Encoding UTF8
+          $html  = $html -replace '<base href="/" />', "<base href=`"/$repo/`" />"
+          [IO.File]::WriteAllText($file, $html, [Text.Encoding]::UTF8)
+
+      # Jekyll (the default Pages processor) silently drops folders whose names
+      # start with an underscore — which includes _framework where the Blazor
+      # runtime lives.  An empty .nojekyll file disables Jekyll entirely.
+      - name: Add .nojekyll
+        shell: pwsh
+        run: New-Item -ItemType File -Path ./publish/wwwroot/.nojekyll -Force | Out-Null
+
+      # GitHub Pages returns a 404 for any URL that does not map to a real file
+      # (e.g. /evaluate, /history).  Serving index.html as 404.html lets the
+      # Blazor router handle those navigations on the client side.
+      - name: Create 404.html for SPA routing
+        shell: pwsh
+        run: Copy-Item ./publish/wwwroot/index.html ./publish/wwwroot/404.html
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./publish/wwwroot
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
