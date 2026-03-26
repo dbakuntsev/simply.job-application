@@ -134,11 +134,6 @@ pre.text-wrap {
     100% { background-position: -200% 0; }
 }
 
-/* ── Welcome page ─────────────────────────────────────────────────────────── */
-
-.welcome-hero {
-    border-bottom: 1px solid #dee2e6;
-}
 
 /* ── API key alert: no gap before progress bar ────────────────────────────── */
 .sja-api-alert {

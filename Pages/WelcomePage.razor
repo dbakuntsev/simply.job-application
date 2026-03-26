@@ -1,185 +1,472 @@
 @page "/"
+@layout Layout.WelcomeLayout
 
 <PageTitle>Welcome — Simply Job Application</PageTitle>
 
-<div class="welcome-hero py-5 text-center mb-5">
-    <h1 class="display-5 fw-bold mb-2">Simply Job Application</h1>
-    <p class="lead text-muted mx-auto" style="max-width:560px">
-        AI-powered resume tailoring and cover letter generation — entirely in your browser,
-        with no data sent to any server except the AI model of your choice.
-    </p>
-    <div class="d-flex justify-content-center gap-3 mt-4">
-        <a href="/evaluate" class="btn btn-primary btn-lg px-4">Get Started</a>
-        <a href="/settings" class="btn btn-outline-secondary btn-lg px-4">Configure API Key</a>
+<!-- ══ HERO ═══════════════════════════════════════════════════════════════════ -->
+<section class="wlc-hero">
+    <div class="container text-center py-5 px-4">
+        <span class="badge rounded-pill text-bg-primary wlc-badge mb-4">
+            FREE / FOSS &nbsp;·&nbsp; AI-Powered &nbsp;·&nbsp; 100% Browser-Side
+        </span>
+        <h1 class="display-4 fw-bold mb-3 lh-sm">
+            Land the role.<br>
+            <span class="wlc-accent">Faster.</span>
+        </h1>
+        <p class="lead text-muted mx-auto mb-5" style="max-width:560px">
+            AI-powered resume tailoring and cover letter generation — entirely in your browser,
+            with no data sent to any server except the AI model of your choice.
+        </p>
+        <div class="d-flex justify-content-center gap-3 flex-wrap">
+            <a href="/evaluate" class="btn btn-primary btn-lg px-5">Get Started</a>
+            <a href="/settings" class="btn btn-outline-secondary btn-lg px-4">Configure API Key</a>
+        </div>
     </div>
-</div>
+</section>
 
-<div class="row g-4 mb-5">
-    <div class="col-12">
-        <h5 class="text-uppercase text-muted fw-semibold small mb-3 letter-spacing-1">What it does</h5>
-    </div>
+<!-- ══ HOW IT WORKS ════════════════════════════════════════════════════════════ -->
+<section class="py-5">
+    <div class="container">
+        <div class="text-center mb-5">
+            <p class="wlc-section-eyebrow">How it works</p>
+            <h2 class="fw-bold mb-0">Three steps to a stronger application</h2>
+        </div>
 
-    <div class="col-12 col-md-4">
-        <div class="card h-100 border-0 shadow-sm">
-            <div class="card-body">
-                <div class="welcome-step-num mb-3">1</div>
-                <h6 class="fw-bold mb-2">Evaluate the Match</h6>
-                <p class="text-muted small mb-0">
-                    Paste a job description and upload your resume. The AI scores how well you
-                    match the role, identifies your strongest qualifications, and flags any gaps
-                    against the stated requirements.
-                </p>
+        <div class="row g-4">
+            <div class="col-12 col-md-4">
+                <div class="card border-0 shadow-sm h-100 text-center">
+                    <div class="card-body p-4 p-lg-5">
+                        <div class="wlc-icon-circle wlc-icon-primary mx-auto mb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24"
+                                 fill="none" stroke="currentColor" stroke-width="2"
+                                 stroke-linecap="round" stroke-linejoin="round">
+                                <circle cx="11" cy="11" r="8"/>
+                                <path d="m21 21-4.35-4.35"/>
+                            </svg>
+                        </div>
+                        <span class="wlc-step-pill mb-3 d-inline-block">Step 1</span>
+                        <h5 class="fw-bold mb-2">Evaluate the Match</h5>
+                        <p class="text-muted small mb-0">
+                            Paste a job description and select your resume. The AI scores how well you
+                            match the role, identifies your strongest qualifications, and flags gaps.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-md-4">
+                <div class="card border-0 shadow-sm h-100 text-center">
+                    <div class="card-body p-4 p-lg-5">
+                        <div class="wlc-icon-circle wlc-icon-success mx-auto mb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24"
+                                 fill="none" stroke="currentColor" stroke-width="2"
+                                 stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+                                <circle cx="7" cy="7" r="1" fill="currentColor"/>
+                            </svg>
+                        </div>
+                        <span class="wlc-step-pill mb-3 d-inline-block">Step 2</span>
+                        <h5 class="fw-bold mb-2">Add Missing Keywords</h5>
+                        <p class="text-muted small mb-0">
+                            Review AI-suggested ATS keywords. Check the ones you genuinely have,
+                            type your own, and optionally re-run the evaluation to see the new score.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-md-4">
+                <div class="card border-0 shadow-sm h-100 text-center">
+                    <div class="card-body p-4 p-lg-5">
+                        <div class="wlc-icon-circle wlc-icon-warning mx-auto mb-4">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24"
+                                 fill="none" stroke="currentColor" stroke-width="2"
+                                 stroke-linecap="round" stroke-linejoin="round">
+                                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+                            </svg>
+                        </div>
+                        <span class="wlc-step-pill mb-3 d-inline-block">Step 3</span>
+                        <h5 class="fw-bold mb-2">Generate Tailored Materials</h5>
+                        <p class="text-muted small mb-0">
+                            Get a tailored resume DOCX, a two-paragraph cover letter, and a concise
+                            "why apply" summary — all optimised for ATS and ready to download.
+                        </p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
+</section>
 
-    <div class="col-12 col-md-4">
-        <div class="card h-100 border-0 shadow-sm">
-            <div class="card-body">
-                <div class="welcome-step-num mb-3">2</div>
-                <h6 class="fw-bold mb-2">Add Missing Keywords</h6>
-                <p class="text-muted small mb-0">
-                    Review AI-suggested keywords that appear in the job description but not in
-                    your resume. Check the ones you genuinely have experience with, or type your
-                    own. Re-run the evaluation to see how the score changes.
-                </p>
+<!-- ══ WHAT YOU GET ════════════════════════════════════════════════════════════ -->
+<section class="wlc-alt-bg py-5">
+    <div class="container">
+        <div class="text-center mb-5">
+            <p class="wlc-section-eyebrow">What you get</p>
+            <h2 class="fw-bold mb-0">Everything you need, in one session</h2>
+        </div>
+
+        <div class="row g-4">
+            <div class="col-12 col-sm-6 col-lg-3">
+                <div class="card border-0 h-100">
+                    <div class="card-body p-4">
+                        <div class="wlc-feature-icon text-primary mb-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"
+                                 fill="none" stroke="currentColor" stroke-width="2"
+                                 stroke-linecap="round" stroke-linejoin="round">
+                                <line x1="18" y1="20" x2="18" y2="10"/>
+                                <line x1="12" y1="20" x2="12" y2="4"/>
+                                <line x1="6"  y1="20" x2="6"  y2="14"/>
+                            </svg>
+                        </div>
+                        <h6 class="fw-bold mb-1">Match Score</h6>
+                        <p class="text-muted small mb-0">
+                            A 0–100 score with clear strengths and gaps so you know where you stand
+                            before you apply.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-sm-6 col-lg-3">
+                <div class="card border-0 h-100">
+                    <div class="card-body p-4">
+                        <div class="wlc-feature-icon text-success mb-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"
+                                 fill="none" stroke="currentColor" stroke-width="2"
+                                 stroke-linecap="round" stroke-linejoin="round">
+                                <polygon points="12 2 2 7 12 12 22 7 12 2"/>
+                                <polyline points="2 17 12 22 22 17"/>
+                                <polyline points="2 12 12 17 22 12"/>
+                            </svg>
+                        </div>
+                        <h6 class="fw-bold mb-1">Keyword Suggestions</h6>
+                        <p class="text-muted small mb-0">
+                            Grouped ATS keywords derived from the job description that you can
+                            confirm and feed into generation.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-sm-6 col-lg-3">
+                <div class="card border-0 h-100">
+                    <div class="card-body p-4">
+                        <div class="wlc-feature-icon text-primary mb-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"
+                                 fill="none" stroke="currentColor" stroke-width="2"
+                                 stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                                <polyline points="14 2 14 8 20 8"/>
+                                <line x1="16" y1="13" x2="8" y2="13"/>
+                                <line x1="16" y1="17" x2="8" y2="17"/>
+                            </svg>
+                        </div>
+                        <h6 class="fw-bold mb-1">Tailored Resume</h6>
+                        <p class="text-muted small mb-0">
+                            Your resume rewritten to match the role — hyperlinks, formatting, and
+                            structure preserved — exported as DOCX.
+                        </p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-sm-6 col-lg-3">
+                <div class="card border-0 h-100">
+                    <div class="card-body p-4">
+                        <div class="wlc-feature-icon text-success mb-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"
+                                 fill="none" stroke="currentColor" stroke-width="2"
+                                 stroke-linecap="round" stroke-linejoin="round">
+                                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                                <polyline points="22,6 12,13 2,6"/>
+                            </svg>
+                        </div>
+                        <h6 class="fw-bold mb-1">Cover Letter &amp; Why Apply</h6>
+                        <p class="text-muted small mb-0">
+                            A two-paragraph cover letter plus a concise summary of why you are a
+                            strong candidate for this specific role.
+                        </p>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
+</section>
 
-    <div class="col-12 col-md-4">
-        <div class="card h-100 border-0 shadow-sm">
-            <div class="card-body">
-                <div class="welcome-step-num mb-3">3</div>
-                <h6 class="fw-bold mb-2">Generate Tailored Materials</h6>
-                <p class="text-muted small mb-0">
-                    With one click, get a tailored resume DOCX, a two-paragraph cover letter,
-                    and a concise "why apply" summary — all optimised for ATS and ready to
-                    download.
+<!-- ══ WHO IT'S FOR ════════════════════════════════════════════════════════════ -->
+<section class="py-5">
+    <div class="container">
+        <div class="row align-items-center g-5">
+            <div class="col-12 col-lg-4">
+                <p class="wlc-section-eyebrow">Who it's for</p>
+                <h2 class="fw-bold mb-3">Built for active job seekers</h2>
+                <p class="text-muted mb-4">
+                    Whether you are actively searching, returning after a break, or just exploring
+                    opportunities, Simply Job Application gives you a measurable edge at every stage.
                 </p>
+                <a href="/evaluate" class="btn btn-primary px-4">Get Started</a>
+            </div>
+
+            <div class="col-12 col-lg-8">
+                <div class="row g-3">
+                    <div class="col-12 col-sm-6">
+                        <div class="wlc-check-item">
+                            <span class="wlc-check-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                     fill="none" stroke="currentColor" stroke-width="3"
+                                     stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="20 6 9 17 4 12"/>
+                                </svg>
+                            </span>
+                            <span class="small text-muted">Job seekers applying to multiple roles who need
+                                position-specific resumes without rewriting from scratch.</span>
+                        </div>
+                    </div>
+                    <div class="col-12 col-sm-6">
+                        <div class="wlc-check-item">
+                            <span class="wlc-check-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                     fill="none" stroke="currentColor" stroke-width="3"
+                                     stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="20 6 9 17 4 12"/>
+                                </svg>
+                            </span>
+                            <span class="small text-muted">Professionals returning to the market who want to
+                                gauge how their experience aligns with modern postings.</span>
+                        </div>
+                    </div>
+                    <div class="col-12 col-sm-6">
+                        <div class="wlc-check-item">
+                            <span class="wlc-check-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                     fill="none" stroke="currentColor" stroke-width="3"
+                                     stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="20 6 9 17 4 12"/>
+                                </svg>
+                            </span>
+                            <span class="small text-muted">Anyone who wants to maximise ATS pass-through
+                                without guessing which keywords matter for a specific role.</span>
+                        </div>
+                    </div>
+                    <div class="col-12 col-sm-6">
+                        <div class="wlc-check-item">
+                            <span class="wlc-check-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                     fill="none" stroke="currentColor" stroke-width="3"
+                                     stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="20 6 9 17 4 12"/>
+                                </svg>
+                            </span>
+                            <span class="small text-muted">Works across professions — the AI adapts its
+                                evaluation criteria and terminology to whatever role you are targeting.</span>
+                        </div>
+                    </div>
+                    <div class="col-12 col-sm-6">
+                        <div class="wlc-check-item">
+                            <span class="wlc-check-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                     fill="none" stroke="currentColor" stroke-width="3"
+                                     stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="20 6 9 17 4 12"/>
+                                </svg>
+                            </span>
+                            <span class="small text-muted">Privacy-conscious users who want AI assistance
+                                without uploading their resume to a third-party service.</span>
+                        </div>
+                    </div>
+                    <div class="col-12 col-sm-6">
+                        <div class="wlc-check-item">
+                            <span class="wlc-check-icon">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                     fill="none" stroke="currentColor" stroke-width="3"
+                                     stroke-linecap="round" stroke-linejoin="round">
+                                    <polyline points="20 6 9 17 4 12"/>
+                                </svg>
+                            </span>
+                            <span class="small text-muted">Users who maintain a library of resumes and want to
+                                quickly pick the right base document for each application.</span>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
-</div>
+</section>
 
-<div class="row g-4 mb-5">
-    <div class="col-12">
-        <h5 class="text-uppercase text-muted fw-semibold small mb-3">Who it's for</h5>
-    </div>
-    <div class="col-12 col-md-6">
-        <ul class="list-unstyled d-flex flex-column gap-2 mb-0">
-            <li class="d-flex gap-2">
-                <span class="text-success fw-bold">✓</span>
-                <span class="text-muted small">Job seekers who apply to multiple roles and need
-                    position-specific resumes without rewriting from scratch each time.</span>
-            </li>
-            <li class="d-flex gap-2">
-                <span class="text-success fw-bold">✓</span>
-                <span class="text-muted small">Professionals returning to the market who want
-                    to quickly gauge how well their experience aligns with modern job postings.</span>
-            </li>
-            <li class="d-flex gap-2">
-                <span class="text-success fw-bold">✓</span>
-                <span class="text-muted small">Anyone who wants to maximise ATS pass-through
-                    without guessing which keywords matter for a specific role.</span>
-            </li>
-        </ul>
-    </div>
-    <div class="col-12 col-md-6">
-        <ul class="list-unstyled d-flex flex-column gap-2 mb-0">
-            <li class="d-flex gap-2">
-                <span class="text-success fw-bold">✓</span>
-                <span class="text-muted small">Works across professions — the AI adapts its
-                    evaluation criteria and terminology to whatever role you are applying for.</span>
-            </li>
-            <li class="d-flex gap-2">
-                <span class="text-success fw-bold">✓</span>
-                <span class="text-muted small">Privacy-conscious users who want AI assistance
-                    without uploading their resume to a third-party service.</span>
-            </li>
-            <li class="d-flex gap-2">
-                <span class="text-success fw-bold">✓</span>
-                <span class="text-muted small">Users who maintain a files library of resumes
-                    and want to quickly pick the right base document for each application.</span>
-            </li>
-        </ul>
-    </div>
-</div>
+<!-- ══ HOW TO GET STARTED ══════════════════════════════════════════════════════ -->
+<section class="wlc-alt-bg py-5">
+    <div class="container">
+        <div class="text-center mb-5">
+            <p class="wlc-section-eyebrow">Get up and running</p>
+            <h2 class="fw-bold mb-0">Start in under five minutes</h2>
+        </div>
 
-<div class="row g-4 mb-5">
-    <div class="col-12">
-        <h5 class="text-uppercase text-muted fw-semibold small mb-3">How to get started</h5>
+        <div class="row justify-content-center">
+            <div class="col-12 col-lg-8">
+                <div class="d-flex flex-column gap-4">
+                    <div class="d-flex gap-4 align-items-start">
+                        <div class="wlc-num-circle flex-shrink-0">1</div>
+                        <div>
+                            <h6 class="fw-bold mb-1">Get an OpenAI API key</h6>
+                            <p class="text-muted small mb-0">
+                                Create a key at <strong>platform.openai.com</strong> and paste it into
+                                <a href="/settings">Settings</a>. Your key is stored only in your
+                                browser's local storage — never on any server.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-4 align-items-start">
+                        <div class="wlc-num-circle flex-shrink-0">2</div>
+                        <div>
+                            <h6 class="fw-bold mb-1">Upload your resume</h6>
+                            <p class="text-muted small mb-0">
+                                On the <a href="/evaluate">Evaluate &amp; Generate</a> screen, upload a DOCX
+                                file. The document is parsed locally — hyperlinks and formatting are preserved
+                                for the round-trip back to DOCX.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-4 align-items-start">
+                        <div class="wlc-num-circle flex-shrink-0">3</div>
+                        <div>
+                            <h6 class="fw-bold mb-1">Paste the job description and evaluate</h6>
+                            <p class="text-muted small mb-0">
+                                Click <strong>Evaluate</strong>. Review the match score, strengths, gaps, and
+                                suggested keywords. Select any keywords you are comfortable claiming and
+                                optionally re-evaluate to see the updated score.
+                            </p>
+                        </div>
+                    </div>
+                    <div class="d-flex gap-4 align-items-start">
+                        <div class="wlc-num-circle flex-shrink-0">4</div>
+                        <div>
+                            <h6 class="fw-bold mb-1">Generate and download</h6>
+                            <p class="text-muted small mb-0">
+                                Click <strong>Generate</strong> to produce your tailored resume, cover letter,
+                                and why-apply summary. Download the DOCX files and submit your application.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
-    <div class="col-12 col-md-8 col-lg-6">
-        <ol class="d-flex flex-column gap-3 ps-0" style="list-style:none;counter-reset:steps">
-            <li class="d-flex gap-3 align-items-start welcome-how-step">
-                <span class="welcome-step-num flex-shrink-0">1</span>
-                <span class="text-muted small">
-                    <strong class="text-body">Get an API key.</strong>
-                    Simply Job Application uses the OpenAI API.
-                    Create a key at <strong>platform.openai.com</strong> and paste it into
-                    <a href="/settings">Settings</a>.
-                    Your key is stored only in your browser's local storage.
-                </span>
-            </li>
-            <li class="d-flex gap-3 align-items-start welcome-how-step">
-                <span class="welcome-step-num flex-shrink-0">2</span>
-                <span class="text-muted small">
-                    <strong class="text-body">Upload your resume.</strong>
-                    On the <a href="/evaluate">Evaluate &amp; Generate</a> screen, upload a DOCX
-                    file. The document is parsed locally — hyperlinks and formatting are
-                    preserved for the round-trip back to DOCX.
-                </span>
-            </li>
-            <li class="d-flex gap-3 align-items-start welcome-how-step">
-                <span class="welcome-step-num flex-shrink-0">3</span>
-                <span class="text-muted small">
-                    <strong class="text-body">Paste the job description</strong> and click
-                    <strong>Evaluate</strong>. Review the match score, strengths, gaps, and
-                    suggested keywords. Select any keywords you are comfortable claiming and
-                    optionally re-evaluate.
-                </span>
-            </li>
-            <li class="d-flex gap-3 align-items-start welcome-how-step">
-                <span class="welcome-step-num flex-shrink-0">4</span>
-                <span class="text-muted small">
-                    <strong class="text-body">Click Generate</strong> to produce your tailored
-                    resume, cover letter, and why-apply summary. Download the DOCX files and
-                    submit your application.
-                </span>
-            </li>
-        </ol>
-    </div>
-</div>
+</section>
 
-<div class="card border-0 bg-light mb-5">
-    <div class="card-body py-4">
-        <h6 class="fw-bold mb-2">🔒 Your data stays in your browser</h6>
-        <p class="text-muted small mb-0">
+<!-- ══ PRIVACY TRUST BLOCK ════════════════════════════════════════════════════ -->
+<section class="wlc-dark-bg py-5">
+    <div class="container text-center">
+        <div class="wlc-icon-circle wlc-icon-light mx-auto mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24"
+                 fill="none" stroke="currentColor" stroke-width="2"
+                 stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+            </svg>
+        </div>
+        <h3 class="fw-bold text-white mb-3">Your data stays in your browser</h3>
+        <p class="mb-5 mx-auto" style="max-width:560px;color:rgba(255,255,255,.75)">
             Resumes, job descriptions, evaluation results, and generated materials are stored
             exclusively in your browser's IndexedDB. Nothing is sent to any server operated by
             this application. The only external calls are to the OpenAI API using your own key,
             subject to OpenAI's data handling policies.
         </p>
+        <a href="/evaluate" class="btn btn-light btn-lg px-5 fw-semibold">Get Started</a>
     </div>
-</div>
-
-<div class="text-center py-3 mb-2">
-    <a href="/evaluate" class="btn btn-primary btn-lg px-5">Start Matching</a>
-</div>
+</section>
 
 <style>
-    .welcome-step-num {
+    /* ── Hero ─────────────────────────────────────────────────────────────────── */
+    .wlc-hero {
+        border-bottom: 1px solid #dee2e6;
+    }
+
+    /* ── Section backgrounds ──────────────────────────────────────────────────── */
+    .wlc-alt-bg  { background: #f8f9fa; }
+    .wlc-dark-bg { background: #2c3e50; }
+
+    /* ── Focus ring suppression (Blazor FocusOnNavigate programmatic focus) ─────── */
+    h1:focus { outline: none; }
+
+    /* ── Badge / eyebrow ──────────────────────────────────────────────────────── */
+    .wlc-badge {
+        font-size: 1rem;
+        letter-spacing: .07em;
+    }
+
+    .wlc-accent { color: var(--bs-primary); }
+
+    .wlc-section-eyebrow {
+        font-size: .75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: .1em;
+        color: var(--bs-primary);
+        margin-bottom: .25rem;
+    }
+
+    /* ── Step pill ─────────────────────────────────────────────────────────────── */
+    .wlc-step-pill {
+        font-size: .95rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: .1em;
+        color: #6c757d;
+        border: 1px solid #dee2e6;
+        border-radius: 100px;
+        padding: .2rem .7rem;
+    }
+
+    /* ── Icon circles ─────────────────────────────────────────────────────────── */
+    .wlc-icon-circle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 64px;
+        height: 64px;
+        border-radius: 50%;
+    }
+
+    .wlc-icon-primary { background: rgba(var(--bs-primary-rgb), .12); color: var(--bs-primary); }
+    .wlc-icon-success { background: rgba(var(--bs-success-rgb), .12); color: var(--bs-success); }
+    .wlc-icon-warning { background: rgba(var(--bs-warning-rgb), .15); color: var(--bs-warning); }
+    .wlc-icon-light   { background: rgba(255, 255, 255, .15);         color: #fff; }
+
+    /* ── Feature icons ────────────────────────────────────────────────────────── */
+    .wlc-feature-icon { line-height: 1; }
+
+    /* ── Check items ──────────────────────────────────────────────────────────── */
+    .wlc-check-item {
+        display: flex;
+        align-items: flex-start;
+        gap: .75rem;
+    }
+
+    .wlc-check-icon {
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        width: 2rem;
-        height: 2rem;
+        width: 1.5rem;
+        height: 1.5rem;
+        min-width: 1.5rem;
         border-radius: 50%;
-        background: #0d6efd;
+        background: rgba(var(--bs-success-rgb), .12);
+        color: var(--bs-success);
+        margin-top: .05rem;
+    }
+
+    /* ── Numbered circles ─────────────────────────────────────────────────────── */
+    .wlc-num-circle {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.5rem;
+        height: 2.5rem;
+        min-width: 2.5rem;
+        border-radius: 50%;
+        background: var(--bs-primary);
         color: #fff;
-        font-size: 0.8rem;
+        font-size: .85rem;
         font-weight: 700;
-        flex-shrink: 0;
     }
 </style>
