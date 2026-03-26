@@ -68,7 +68,7 @@
                         </div>
                         <div>
                             <label class="form-label">Job Details</label>
-                            <textarea class="form-control" rows="8" @bind="_jobDetails"
+                            <textarea class="form-control" rows="8" @bind="_jobDetails" @bind:event="oninput"
                                       placeholder="Paste the full job description here…"
                                       readonly="@_inputsLocked"></textarea>
                         </div>
