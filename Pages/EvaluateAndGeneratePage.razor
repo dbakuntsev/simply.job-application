@@ -55,13 +55,15 @@
                         <div class="row g-2 mb-3">
                             <div class="col-6">
                                 <label class="form-label">Company Name</label>
-                                <input class="form-control" @bind="_companyName" placeholder="Acme Corp"
-                                       readonly="@_inputsLocked" />
+                                <input class="form-control" value="@_companyName"
+                                       @onchange="@(e => _companyName = ((string?)e.Value ?? "").Trim())"
+                                       placeholder="Acme Corp" readonly="@_inputsLocked" />
                             </div>
                             <div class="col-6">
                                 <label class="form-label">Job Title</label>
-                                <input class="form-control" @bind="_jobTitle" placeholder="Software Engineer"
-                                       readonly="@_inputsLocked" />
+                                <input class="form-control" value="@_jobTitle"
+                                       @onchange="@(e => _jobTitle = ((string?)e.Value ?? "").Trim())"
+                                       placeholder="Software Engineer" readonly="@_inputsLocked" />
                             </div>
                         </div>
                         <div>
