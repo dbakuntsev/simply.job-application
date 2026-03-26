@@ -22,7 +22,9 @@ public interface IAiProvider
         MatchEvaluation evaluation,
         string modelId,
         string apiKey,
-        IReadOnlyList<string>? additionalKeywords = null);
+        IReadOnlyList<string>? additionalKeywords = null,
+        int sourcePageCount = 2,
+        int targetPageCount = 2);
 }
 
 public record AiModel(string Id, string DisplayName);

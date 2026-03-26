@@ -280,9 +280,9 @@ public class OpenAiProvider : IAiProvider
 
     public async Task<GeneratedMaterials> GenerateMaterialsAsync(
         JobDescription job, string resumeMarkdown, MatchEvaluation evaluation, string modelId, string apiKey,
-        IReadOnlyList<string>? additionalKeywords = null)
+        IReadOnlyList<string>? additionalKeywords = null, int sourcePageCount = 2, int targetPageCount = 2)
     {
-        const string instructions = """
+        var instructions = $$"""
             You are an expert resume writer and career coach.
 
             Generate tailored job application materials based on the candidate's resume and the job description.
@@ -458,6 +458,11 @@ public class OpenAiProvider : IAiProvider
             - unsupported or inferred skills
             - redundant variations
 
+            
+            ## Length Control
+
+            {{BuildLengthControlSection(sourcePageCount, targetPageCount)}}
+
             ## Cover Letter
             
             The cover letter is comprised of 2 paragraphs:
@@ -506,9 +511,11 @@ public class OpenAiProvider : IAiProvider
             ### resumeMarkdown
 
             - full tailored resume in Markdown as described above
-            - max 2 printed pages
             - preserve structure and factual integrity
-
+            - Ensure the resume adheres to the selected Length Control Mode
+            - Ensure proportionality or constraints are respected
+            - Revise if necessary to comply with all rules above
+            
             ### coverLetterText
 
             - must have exactly 2 paragraphs separated by a blank line (\n\n).
@@ -591,6 +598,69 @@ public class OpenAiProvider : IAiProvider
 
         result.ResumeMarkdown = result.ResumeMarkdown.Trim();
         return result;
+    }
+
+    // ── Instruction builders ───────────────────────────────────────────────────
+
+    private static string BuildLengthControlSection(int sourcePageCount, int targetPageCount)
+    {
+        if (targetPageCount > sourcePageCount)
+            return "No length constraints are applied. You may expand content as needed " +
+                   "while maintaining relevance, clarity, and factual accuracy. Avoid unnecessary verbosity.";
+
+        if (targetPageCount == 1)
+            return """
+                ### Length Control Mode: Single-Page Resume (Canonical Form)
+
+                This is a strict constraint.
+
+                - Include only the most relevant and recent experience (typically last 8–10 years)
+                - Limit Experience to 3–5 roles
+                - Limit each role to 2–3 achievement lines
+                - Skills: concise and highly relevant (~10–12 entries)
+                - Summary: 2–3 sentences
+
+                Pruning rules:
+                - Remove older or less relevant roles entirely
+                - Remove low-impact or redundant achievements
+                - Merge related achievements where appropriate
+
+                If needed, remove content rather than exceed limits.
+                """;
+
+        if (targetPageCount == sourcePageCount)
+            return """
+                ### Length Control Mode: Fixed-Length (Zero Growth)
+
+                - Do NOT increase content volume, roles, bullets, or Skills size
+
+                Substitution rules:
+                - Any added keyword must replace or compress existing content
+                - Replace weaker terms instead of appending
+                - Adding a skill requires removing or merging another
+                - Expanding a bullet requires shortening/removing another
+
+                Focus on higher keyword density and reduced redundancy.
+                """;
+
+        // targetPageCount < sourcePageCount (and not 1)
+        int ratioPercent = (int)Math.Round((double)targetPageCount / sourcePageCount * 100);
+        return $"""
+            ### Length Control Mode: Ratio-Based Scaling
+
+            Target ratio: ~{ratioPercent}%
+
+            - Scale roles, bullets, and Skills proportionally
+            - Remove lowest-relevance content first
+            - Preserve structure and balance
+
+            Prioritize:
+            1. Required skills
+            2. Relevant recent experience
+            3. Impact
+
+            Prefer removing low-value content over weakening clarity.
+            """;
     }
 
     // ── Responses API ─────────────────────────────────────────────────────────

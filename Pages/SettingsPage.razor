@@ -53,6 +53,39 @@
             </div>
         </div>
 
+        <div class="card mt-3">
+            <div class="card-header">Resume Generation</div>
+            <div class="card-body">
+                <div class="mb-0">
+                    <label class="form-label d-flex align-items-center gap-2">
+                        Output resume pages
+                        <button type="button"
+                                class="btn btn-link p-0 lh-1 text-muted"
+                                style="font-size:.85rem"
+                                data-bs-toggle="popover"
+                                data-bs-trigger="click"
+                                data-bs-placement="right"
+                                data-bs-title="Output resume pages"
+                                data-bs-content="The number of pages is passed to the AI as a guideline, not a hard constraint — the model targets it, but will not be effective at hard pruning (for example, 2 pages compressed to 1 page). The most reliable result comes from keeping the output the same length as the original resume, which is the default when this field is left empty."
+                                aria-label="More information about output resume pages">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"
+                                 fill="none" stroke="currentColor" stroke-width="2"
+                                 stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                                <circle cx="12" cy="12" r="10"/>
+                                <line x1="12" y1="8" x2="12" y2="12"/>
+                                <line x1="12" y1="16" x2="12.01" y2="16"/>
+                            </svg>
+                        </button>
+                    </label>
+                    <input type="number" class="form-control" @bind="_outputResumePages" min="1" max="10"
+                           placeholder="Same as input" />
+                    <div class="form-text">
+                        Leave empty to match the page count of the uploaded resume.
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div class="d-flex gap-2 mt-3">
             <button class="btn btn-primary" @onclick="SaveAsync">Save</button>
             <button class="btn btn-outline-danger ms-auto" @onclick="() => _confirmClear = true">
@@ -93,12 +126,15 @@
     </div>
 }
 
+@inject IJSRuntime JS
+
 @code {
     string _selectedProvider = "openai";
     string _apiKey = "";
     string _selectedModel = "";
     int _historyLimit = 20;
     int _filesLimit = 41;
+    int? _outputResumePages;
 
     bool _saved;
     bool _confirmClear;
@@ -107,12 +143,21 @@
     IReadOnlyList<AiModel> _models = Array.Empty<AiModel>();
     AppSettings _settings = new();
 
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+            await JS.InvokeVoidAsync("eval",
+                "document.querySelectorAll('[data-bs-toggle=\"popover\"]')" +
+                ".forEach(el => bootstrap.Popover.getOrCreateInstance(el))");
+    }
+
     protected override async Task OnInitializedAsync()
     {
         _settings = await Db.GetSettingsAsync();
         _selectedProvider = _settings.AiProvider;
         _historyLimit = _settings.HistoryLimit;
         _filesLimit = _settings.FilesLimit;
+        _outputResumePages = _settings.OutputResumePages;
         LoadProviderFields();
     }
 
@@ -142,6 +187,7 @@
             _settings.ProviderModels[_selectedProvider] = _selectedModel;
             _settings.HistoryLimit = _historyLimit;
             _settings.FilesLimit = _filesLimit;
+            _settings.OutputResumePages = _outputResumePages;
             await Db.SaveSettingsAsync(_settings);
             _saved = true;
         }

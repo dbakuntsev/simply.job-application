@@ -722,10 +722,13 @@
                 JobDetails  = _jobDetails,
             };
 
+            var sourcePageCount = Docx.GetPageCount(_resumeBytes!);
+            var targetPageCount = _settings.OutputResumePages ?? sourcePageCount;
+
             _loadingStep = "Generating materials…";
             StateHasChanged();
             _materials = await provider.GenerateMaterialsAsync(
-                job, _resumeMarkdown, _evaluation, modelId, apiKey, GetAdditionalKeywords());
+                job, _resumeMarkdown, _evaluation, modelId, apiKey, GetAdditionalKeywords(), sourcePageCount ?? 2, targetPageCount ?? 2);
 
             var resumeDocxBytes = Docx.GenerateResumeDocx(_resumeBytes!, _materials.ResumeMarkdown);
             var resumeFileId = Guid.NewGuid().ToString();

@@ -26,6 +26,19 @@ public class DocxService
     //   Emphasis character style      → **...**
     //   Hyperlink r:id lookup         → [display](url)
 
+    // Returns the page count stored in docProps/app.xml, or null if unavailable.
+    // Word and LibreOffice update this value on every save; third-party converters may omit it.
+    public int? GetPageCount(byte[] docxBytes)
+    {
+        using var zip = new ZipArchive(new MemoryStream(docxBytes), ZipArchiveMode.Read);
+        var entry = zip.GetEntry("docProps/app.xml");
+        if (entry is null) return null;
+        using var stream = entry.Open();
+        XNamespace ep = "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties";
+        var pages = XDocument.Load(stream).Root?.Element(ep + "Pages");
+        return pages is not null && int.TryParse(pages.Value, out var n) && n > 0 ? n : null;
+    }
+
     public string ExtractMarkdown(byte[] docxBytes)
     {
         using var zip = new ZipArchive(new MemoryStream(docxBytes), ZipArchiveMode.Read);

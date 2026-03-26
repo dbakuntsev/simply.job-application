@@ -7,4 +7,6 @@ public class AppSettings
     public Dictionary<string, string> ProviderModels { get; set; } = new();
     public int HistoryLimit { get; set; } = 20;
     public int FilesLimit { get; set; } = 41;
+    // null = match the page count of the input resume
+    public int? OutputResumePages { get; set; } = null;
 }
