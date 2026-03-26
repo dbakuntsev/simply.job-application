@@ -49,7 +49,7 @@ else
         _loading = false;
     }
 
-    void GoToSession(string id) => Nav.NavigateTo("/history/" + id);
+    void GoToSession(string id) => Nav.NavigateTo("history/" + id);
 
     static string ScoreBadgeClass(string score) => score switch
     {

@@ -46,7 +46,7 @@ else
                                         @foreach (var s in sessions)
                                         {
                                             <div class="small">
-                                                <a href="/history/@s.Id">@s.CompanyName — @s.JobTitle</a>
+                                                <a href="history/@s.Id">@s.CompanyName — @s.JobTitle</a>
                                                 <span class="text-muted ms-1">(@s.CreatedAt.ToLocalTime().ToString("d"))</span>
                                             </div>
                                         }
@@ -126,6 +126,6 @@ else
     {
         AppState.PendingResumeFileId = fileId;
         AppState.PendingResumeFileName = fileName;
-        Nav.NavigateTo("/evaluate");
+        Nav.NavigateTo("evaluate");
     }
 }

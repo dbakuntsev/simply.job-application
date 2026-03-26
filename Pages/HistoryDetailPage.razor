@@ -12,7 +12,7 @@
 else if (_session is null)
 {
     <div class="alert alert-warning">Session not found.</div>
-    <a href="/history" class="btn btn-secondary">Back to History</a>
+    <a href="history" class="btn btn-secondary">Back to History</a>
 }
 else
 {
@@ -40,7 +40,7 @@ else
         <div class="d-flex align-items-center gap-2 ms-auto flex-shrink-0">
             <span class="badge @ScoreBadgeClass(_session.MatchScore)">@_session.MatchScore</span>
             <small class="text-muted d-none d-sm-inline">@_session.CreatedAt.ToLocalTime().ToString("g")</small>
-            <a href="/history" class="btn btn-outline-secondary btn-sm">← Back</a>
+            <a href="history" class="btn btn-outline-secondary btn-sm">← Back</a>
         </div>
     </div>
 
