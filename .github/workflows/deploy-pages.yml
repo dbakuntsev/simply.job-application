@@ -1,10 +1,9 @@
 name: Deploy to GitHub Pages
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'
-
+  release:
+    types: [published]
+    
 permissions:
   contents: read
   pages: write
