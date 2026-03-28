@@ -14,7 +14,8 @@ public interface IAiProvider
         string resumeMarkdown,
         string modelId,
         string apiKey,
-        IReadOnlyList<string>? additionalKeywords = null);
+        IReadOnlyList<string>? additionalKeywords = null,
+        Action<string>? onProgress = null);
 
     Task<GeneratedMaterials> GenerateMaterialsAsync(
         JobDescription job,
@@ -24,7 +25,8 @@ public interface IAiProvider
         string apiKey,
         IReadOnlyList<string>? additionalKeywords = null,
         int sourcePageCount = 2,
-        int targetPageCount = 2);
+        int targetPageCount = 2,
+        Action<string>? onProgress = null);
 }
 
 public record AiModel(string Id, string DisplayName);

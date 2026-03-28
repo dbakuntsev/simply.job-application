@@ -662,15 +662,14 @@
             StateHasChanged();
             _resumeMarkdown = Docx.ExtractMarkdown(_resumeBytes!);
 
-            _loadingStep = "Evaluating match…";
-            StateHasChanged();
             var job = new JobDescription
             {
                 CompanyName = _companyName,
                 JobTitle    = _jobTitle,
                 JobDetails  = _jobDetails,
             };
-            _evaluation = await provider.EvaluateMatchAsync(job, _resumeMarkdown, modelId, apiKey, null);
+            _evaluation = await provider.EvaluateMatchAsync(job, _resumeMarkdown, modelId, apiKey, null,
+                onProgress: msg => { _loadingStep = msg; StateHasChanged(); });
 
             // Store resume in file library (needed for session record).
             _inputFileId = _selectedFileId;
@@ -739,10 +738,11 @@
             var sourcePageCount = Docx.GetPageCount(_resumeBytes!);
             var targetPageCount = _settings.OutputResumePages ?? sourcePageCount;
 
-            _loadingStep = "Generating materials…";
-            StateHasChanged();
             _materials = await provider.GenerateMaterialsAsync(
-                job, _resumeMarkdown, _evaluation, modelId, apiKey, GetAdditionalKeywords(), sourcePageCount ?? 2, targetPageCount ?? 2);
+                job, _resumeMarkdown, _evaluation, modelId, apiKey, GetAdditionalKeywords(),
+                sourcePageCount: sourcePageCount ?? 2,
+                targetPageCount: targetPageCount ?? 2,
+                onProgress: msg => { _loadingStep = msg; StateHasChanged(); });
 
             var resumeDocxBytes = Docx.GenerateResumeDocx(_resumeBytes!, _materials.ResumeMarkdown);
             var resumeFileId = Guid.NewGuid().ToString();
@@ -809,7 +809,8 @@
             };
 
             _evaluation = await provider.EvaluateMatchAsync(
-                job, _resumeMarkdown, modelId, apiKey, GetAdditionalKeywords());
+                job, _resumeMarkdown, modelId, apiKey, GetAdditionalKeywords(),
+                onProgress: msg => { _loadingStep = msg; StateHasChanged(); });
 
             await SaveSessionAsync();
         }

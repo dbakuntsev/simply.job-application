@@ -30,11 +30,65 @@ public class OpenAiProvider : IAiProvider
 
     public OpenAiProvider(HttpClient http) => _http = http;
 
+    // ── Retry infrastructure ───────────────────────────────────────────────────
+
+    private const int MaxRetryAttempts = 3;
+    private static readonly int[] RetryableHttpCodes = { 408, 429, 500, 502, 503, 524 };
+
+    // Thrown for HTTP status codes that warrant a retry.
+    private sealed class RetryableApiException(int statusCode, string message, TimeSpan? retryAfter = null)
+        : Exception(message)
+    {
+        public int      StatusCode { get; } = statusCode;
+        public TimeSpan? RetryAfter { get; } = retryAfter;
+    }
+
+    // Thrown when the SSE stream closes before a response.completed event arrives.
+    private sealed class TruncatedStreamException()
+        : Exception("Responses API stream ended without a response.completed event");
+
+    private static bool IsRetryable(Exception ex)
+        => ex is RetryableApiException or TruncatedStreamException or HttpRequestException;
+
+    // Exponential backoff (1 s, 2 s, 4 s … capped at 10 s) with ±20 % jitter.
+    // Respects the Retry-After value from 429 responses when provided.
+    private static TimeSpan ComputeBackoff(int attempt, TimeSpan? retryAfter)
+    {
+        if (retryAfter is { } ra && ra > TimeSpan.Zero)
+            return ra;
+        var baseSeconds = Math.Min(Math.Pow(2, attempt - 1), 10.0);
+        var jitter      = baseSeconds * 0.2 * (Random.Shared.NextDouble() * 2 - 1);
+        return TimeSpan.FromSeconds(Math.Max(0.5, baseSeconds + jitter));
+    }
+
+    // Retries `operation` up to MaxRetryAttempts times on transient failures.
+    // Reports progress via `onProgress` before each attempt so the UI can show
+    // "… · retry N of M" messages.
+    private static async Task<T> ExecuteWithRetryAsync<T>(
+        Func<Task<T>> operation, string stepLabel, Action<string>? onProgress)
+    {
+        for (var attempt = 1; ; attempt++)
+        {
+            onProgress?.Invoke(attempt == 1
+                ? stepLabel
+                : $"{stepLabel} · retry {attempt} of {MaxRetryAttempts}");
+            try
+            {
+                return await operation();
+            }
+            catch (Exception ex) when (IsRetryable(ex) && attempt < MaxRetryAttempts)
+            {
+                await Task.Delay(ComputeBackoff(attempt, (ex as RetryableApiException)?.RetryAfter));
+            }
+        }
+    }
+
     // ── Public interface ──────────────────────────────────────────────────────
 
     public async Task<MatchEvaluation> EvaluateMatchAsync(
         JobDescription job, string resumeMarkdown, string modelId, string apiKey,
-        IReadOnlyList<string>? additionalKeywords = null)
+        IReadOnlyList<string>? additionalKeywords = null,
+        Action<string>? onProgress = null)
     {
         const string instructions = """
             You are an expert resume analyst.
@@ -261,7 +315,9 @@ public class OpenAiProvider : IAiProvider
             Respond in JSON.
             """;
 
-        var (responseId, raw) = await CreateResponseWithTextAsync(modelId, apiKey, instructions, userText);
+        var (responseId, raw) = await ExecuteWithRetryAsync(
+            () => CreateResponseWithTextAsync(modelId, apiKey, instructions, userText),
+            "Evaluating match…", onProgress);
 
         MatchEvaluation evaluation;
         try
@@ -280,7 +336,8 @@ public class OpenAiProvider : IAiProvider
 
     public async Task<GeneratedMaterials> GenerateMaterialsAsync(
         JobDescription job, string resumeMarkdown, MatchEvaluation evaluation, string modelId, string apiKey,
-        IReadOnlyList<string>? additionalKeywords = null, int sourcePageCount = 2, int targetPageCount = 2)
+        IReadOnlyList<string>? additionalKeywords = null, int sourcePageCount = 2, int targetPageCount = 2,
+        Action<string>? onProgress = null)
     {
         var instructions = $$"""
             You are an expert resume writer and career coach.
@@ -554,8 +611,9 @@ public class OpenAiProvider : IAiProvider
             // Turn 1 already supplied the Markdown resume and job description.
             // Append additional keywords if the user selected any.
             var continuationText = "Generate the tailored job application materials. Respond in JSON." + additionalSection;
-            (_, raw) = await ContinueResponseAsync(
-                modelId, apiKey, instructions, evaluation.AiResponseId, continuationText);
+            (_, raw) = await ExecuteWithRetryAsync(
+                () => ContinueResponseAsync(modelId, apiKey, instructions, evaluation.AiResponseId, continuationText),
+                "Generating materials…", onProgress);
         }
         else
         {
@@ -582,7 +640,9 @@ public class OpenAiProvider : IAiProvider
                 Respond in JSON.
                 """;
 
-            (_, raw) = await CreateResponseWithTextAsync(modelId, apiKey, instructions, userText);
+            (_, raw) = await ExecuteWithRetryAsync(
+                () => CreateResponseWithTextAsync(modelId, apiKey, instructions, userText),
+                "Generating materials…", onProgress);
         }
 
         GeneratedMaterials result;
@@ -723,11 +783,27 @@ public class OpenAiProvider : IAiProvider
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
         request.Content = new StringContent(payload.ToJsonString(), Encoding.UTF8, "application/json");
 
+        // HttpRequestException from SendAsync is inherently retryable — let it propagate.
         using var response = await _http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead);
+
         if (!response.IsSuccessStatusCode)
         {
-            var err = await response.Content.ReadAsStringAsync();
-            throw new InvalidOperationException($"OpenAI API error {(int)response.StatusCode}: {err}");
+            var status  = (int)response.StatusCode;
+            var errBody = await response.Content.ReadAsStringAsync();
+
+            if (RetryableHttpCodes.Contains(status))
+            {
+                // Respect Retry-After header (sent by OpenAI on 429).
+                TimeSpan? retryAfter = null;
+                if (response.Headers.RetryAfter?.Delta is { } delta)
+                    retryAfter = delta;
+                else if (response.Headers.RetryAfter?.Date is { } date && date > DateTimeOffset.UtcNow)
+                    retryAfter = date - DateTimeOffset.UtcNow;
+
+                throw new RetryableApiException(status, $"OpenAI API error {status}: {errBody}", retryAfter);
+            }
+
+            throw new InvalidOperationException($"OpenAI API error {status}: {errBody}");
         }
 
         using var stream = await response.Content.ReadAsStreamAsync();
@@ -749,8 +825,8 @@ public class OpenAiProvider : IAiProvider
                                ?? throw new InvalidOperationException("Missing response object in response.completed event");
                     var responseId = resp["id"]?.GetValue<string>()
                                      ?? throw new InvalidOperationException("Missing response id");
-                    var output = resp["output"]?.AsArray();
-                    var msg    = output?.FirstOrDefault(n => n?["type"]?.GetValue<string>() == "message");
+                    var output  = resp["output"]?.AsArray();
+                    var msg     = output?.FirstOrDefault(n => n?["type"]?.GetValue<string>() == "message");
                     var content = msg?["content"]?[0]?["text"]?.GetValue<string>()
                                   ?? throw new InvalidOperationException("Unexpected Responses API response shape");
                     return (responseId, content);
@@ -761,6 +837,7 @@ public class OpenAiProvider : IAiProvider
             }
         }
 
-        throw new InvalidOperationException("Responses API stream ended without a response.completed event");
+        // Stream closed without response.completed — transient; eligible for retry.
+        throw new TruncatedStreamException();
     }
 }
