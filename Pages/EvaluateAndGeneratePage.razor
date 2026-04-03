@@ -611,7 +611,7 @@
         _selectedFileId = null;
     }
 
-    void NewSession()
+    async Task NewSession()
     {
         _companyName = "";
         _jobTitle = "";
@@ -632,6 +632,7 @@
         _inputError = null;
         _evalError = null;
         _generateError = null;
+        await ScrollToAsync("lane-input");
     }
 
     // ── AI turns ──────────────────────────────────────────────────────────────
