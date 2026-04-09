@@ -2,6 +2,7 @@
 @inject IndexedDbService Db
 @inject NavigationManager Nav
 @inject AppStateService AppState
+@inject IJSRuntime JS
 
 <PageTitle>Files Library — Simply Job Application</PageTitle>
 
@@ -32,43 +33,84 @@ else
                 {
                     <tr>
                         <td>@f.Name</td>
+
                         <td>
                             @if (f.SessionCount > 0)
                             {
-                                <span class="badge bg-info" style="cursor:pointer"
-                                      @onclick="() => ToggleSessionList(f.Id)"
-                                      title="Click to view sessions">
+                                <span class="badge bg-info"
+                                      style="cursor:pointer"
+                                      tabindex="0"
+                                      data-bs-toggle="popover"
+                                      data-bs-trigger="click"
+                                      data-bs-html="true"
+                                      data-bs-placement="right"
+                                      data-bs-custom-class="sja-files-popover"
+                                      data-bs-title="Sessions using this file"
+                                      data-bs-content="@BuildSessionsHtml(f.Id)">
                                     @f.SessionCount session@(f.SessionCount == 1 ? "" : "s")
                                 </span>
-                                @if (_expandedFileId == f.Id && _sessionsByFile.TryGetValue(f.Id, out var sessions))
-                                {
-                                    <div class="mt-1 ms-1">
-                                        @foreach (var s in sessions)
-                                        {
-                                            <div class="small">
-                                                <a href="history/@s.Id">@s.CompanyName — @s.JobTitle</a>
-                                                <span class="text-muted ms-1">(@s.CreatedAt.ToLocalTime().ToString("d"))</span>
-                                            </div>
-                                        }
-                                    </div>
-                                }
                             }
                             else
                             {
                                 <span class="text-muted small">—</span>
                             }
                         </td>
+
                         <td class="text-muted small">@f.LastUsedAt.ToLocalTime().ToString("g")</td>
+
                         <td class="text-end">
-                            <button class="btn btn-sm btn-outline-primary me-1"
-                                    @onclick="() => DownloadAsync(f.Id, f.Name)">
-                                Download
-                            </button>
-                            <button class="btn btn-sm btn-outline-secondary"
-                                    @onclick="() => UseAsResume(f.Id, f.Name)"
-                                    title="Use as resume on Evaluate &amp; Generate screen">
-                                Use as Resume
-                            </button>
+                            <div class="d-inline-flex gap-1">
+                                <!-- Download -->
+                                <button class="btn btn-sm btn-outline-primary"
+                                        data-bs-toggle="tooltip"
+                                        data-bs-placement="top"
+                                        title="Download"
+                                        aria-label="Download @f.Name"
+                                        @onclick="() => DownloadAsync(f.Id, f.Name)">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15"
+                                         viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                         aria-hidden="true">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                        <polyline points="7 10 12 15 17 10"/>
+                                        <line x1="12" y1="15" x2="12" y2="3"/>
+                                    </svg>
+                                </button>
+
+                                <!-- Use as Resume -->
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        data-bs-toggle="tooltip"
+                                        data-bs-placement="top"
+                                        title="Use as Resume on Evaluate & Generate"
+                                        aria-label="Use @f.Name as resume on Evaluate and Generate"
+                                        @onclick="() => UseAsResume(f.Id, f.Name)">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15"
+                                         viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                         aria-hidden="true">
+                                        <polyline points="9 18 15 12 9 6"/>
+                                    </svg>
+                                </button>
+
+                                <!-- Delete -->
+                                <button class="btn btn-sm btn-outline-danger"
+                                        data-bs-toggle="tooltip"
+                                        data-bs-placement="top"
+                                        title="Delete"
+                                        aria-label="Delete @f.Name"
+                                        @onclick="() => { _confirmDeleteId = f.Id; _confirmDeleteName = f.Name; }">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15"
+                                         viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                         aria-hidden="true">
+                                        <polyline points="3 6 5 6 21 6"/>
+                                        <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                                        <path d="M10 11v6"/>
+                                        <path d="M14 11v6"/>
+                                        <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                                    </svg>
+                                </button>
+                            </div>
                         </td>
                     </tr>
                 }
@@ -82,20 +124,48 @@ else
     <div class="alert alert-danger mt-3">@_error</div>
 }
 
+<!-- Delete confirmation modal -->
+@if (_confirmDeleteId is not null)
+{
+    <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4)"
+         role="dialog" aria-modal="true" aria-labelledby="deleteModalTitle">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="deleteModalTitle">Delete File</h5>
+                    <button class="btn-close" aria-label="Close"
+                            @onclick="() => { _confirmDeleteId = null; _confirmDeleteName = null; }"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-1">Permanently delete <strong>@_confirmDeleteName</strong>?</p>
+                    <p class="text-muted small mb-0">This cannot be undone. Sessions that referenced this file will still appear in History.</p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary"
+                            @onclick="() => { _confirmDeleteId = null; _confirmDeleteName = null; }">
+                        Cancel
+                    </button>
+                    <button class="btn btn-danger" @onclick="ConfirmDeleteAsync">Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @code {
     List<StoredFileMeta> _files = new();
-    List<SessionRecord> _allSessions = new();
     Dictionary<string, List<SessionRecord>> _sessionsByFile = new();
-    string? _expandedFileId;
     bool _loading = true;
     string? _error;
+    string? _confirmDeleteId;
+    string? _confirmDeleteName;
 
     protected override async Task OnInitializedAsync()
     {
         _files = (await Db.GetAllFileMetaAsync()).OrderByDescending(f => f.LastUsedAt).ToList();
-        _allSessions = await Db.GetAllSessionsAsync();
+        var allSessions = await Db.GetAllSessionsAsync();
 
-        foreach (var s in _allSessions)
+        foreach (var s in allSessions)
         {
             foreach (var fileId in new[] { s.InputResumeFileId, s.TailoredResumeFileId, s.CoverLetterFileId }
                          .Where(id => id is not null).Cast<string>())
@@ -110,9 +180,41 @@ else
         _loading = false;
     }
 
-    void ToggleSessionList(string fileId)
+    protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        _expandedFileId = _expandedFileId == fileId ? null : fileId;
+        await JS.InvokeVoidAsync("eval",
+            "document.querySelectorAll('[data-bs-toggle=\"tooltip\"]').forEach(el => bootstrap.Tooltip.getOrCreateInstance(el));" +
+            "document.querySelectorAll('[data-bs-toggle=\"popover\"]').forEach(el => bootstrap.Popover.getOrCreateInstance(el));");
+    }
+
+    // Maximum characters shown for "Company — Title" before truncation.
+    private const int SessionLabelMaxLen = 45;
+
+    // Builds popover HTML using only Bootstrap-sanitiser-allowlisted elements
+    // (div, span, a + class/href/title attributes). Table elements are not in
+    // the default allowlist and would be silently stripped.
+    string BuildSessionsHtml(string fileId)
+    {
+        if (!_sessionsByFile.TryGetValue(fileId, out var sessions) || sessions.Count == 0)
+            return "<span class=\"text-muted small\">No linked sessions.</span>";
+
+        var sb = new System.Text.StringBuilder();
+        foreach (var s in sessions)
+        {
+            var fullLabel    = $"{s.CompanyName} — {s.JobTitle}";
+            var displayLabel = fullLabel.Length > SessionLabelMaxLen
+                               ? fullLabel[..SessionLabelMaxLen] + "…"
+                               : fullLabel;
+            var labelEncoded = System.Net.WebUtility.HtmlEncode(displayLabel);
+            var titleEncoded = System.Net.WebUtility.HtmlEncode(fullLabel);
+            var date         = s.CreatedAt.ToLocalTime().ToString("d");
+
+            sb.Append("<div class=\"d-flex justify-content-between gap-3\">");
+            sb.Append($"<a href=\"history/{s.Id}\" class=\"text-nowrap\" title=\"{titleEncoded}\">{labelEncoded}</a>");
+            sb.Append($"<span class=\"text-muted small text-nowrap\">{date}</span>");
+            sb.Append("</div>");
+        }
+        return sb.ToString();
     }
 
     async Task DownloadAsync(string fileId, string fileName)
@@ -124,8 +226,28 @@ else
 
     void UseAsResume(string fileId, string fileName)
     {
-        AppState.PendingResumeFileId = fileId;
+        AppState.PendingResumeFileId   = fileId;
         AppState.PendingResumeFileName = fileName;
         Nav.NavigateTo("evaluate");
+    }
+
+    async Task ConfirmDeleteAsync()
+    {
+        if (_confirmDeleteId is null) return;
+        try
+        {
+            await Db.DeleteFileAsync(_confirmDeleteId);
+            _files.RemoveAll(f => f.Id == _confirmDeleteId);
+            _sessionsByFile.Remove(_confirmDeleteId);
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _confirmDeleteId   = null;
+            _confirmDeleteName = null;
+        }
     }
 }

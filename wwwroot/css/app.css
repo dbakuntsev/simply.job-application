@@ -140,3 +140,8 @@ pre.text-wrap {
     margin-bottom: 0;
     border-radius: 0;
 }
+
+/* ── Files Library: wider popover for session list ────────────────────────── */
+.sja-files-popover {
+    max-width: 460px;
+}

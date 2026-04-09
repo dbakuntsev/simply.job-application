@@ -1,0 +1,23 @@
+@* Hides all open Bootstrap popovers whenever Blazor navigates to a new page. *@
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@implements IDisposable
+
+@code {
+    IDisposable? navRegistration;
+
+    protected override void OnInitialized()
+        => navRegistration = Nav.RegisterLocationChangingHandler(OnLocationChanging);
+
+    private async ValueTask OnLocationChanging(LocationChangingContext context)
+        => await JS.InvokeVoidAsync("sjaHideAllPopovers");
+
+    public void Dispose()
+    {
+        if (navRegistration is not null)
+        {
+            navRegistration.Dispose();
+            navRegistration = null;
+        }
+    }
+}
