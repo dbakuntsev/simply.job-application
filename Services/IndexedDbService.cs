@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using Microsoft.JSInterop;
 using Simply.JobApplication.Models;
 
@@ -15,11 +15,14 @@ public class IndexedDbService : IAsyncDisposable
         PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
     };
 
+    // Version token is replaced at build time by the InjectDependencyVersion MSBuild target.
+    private const string _moduleUrl = "./js/indexeddb.js?v=EB5ACC6E83ACA66F3E8BBCE366540776459F1A2E6CB198CE8D05D55840F0D5E0";
+
     public IndexedDbService(IJSRuntime js) => _js = js;
 
     private async Task<IJSObjectReference> ModuleAsync()
     {
-        _module ??= await _js.InvokeAsync<IJSObjectReference>("import", "./js/indexeddb.js");
+        _module ??= await _js.InvokeAsync<IJSObjectReference>("import", _moduleUrl);
         return _module;
     }
 
@@ -79,6 +82,14 @@ public class IndexedDbService : IAsyncDisposable
     }
 
     // ── Files ────────────────────────────────────────────────────────────────
+
+    public async Task<List<StoredFile>> GetAllFilesAsync()
+    {
+        var m = await ModuleAsync();
+        var raw = await m.InvokeAsync<string?>("getAllFiles");
+        if (string.IsNullOrEmpty(raw)) return new();
+        return JsonSerializer.Deserialize<List<StoredFile>>(raw, _jsonOpts) ?? new();
+    }
 
     public async Task<List<StoredFileMeta>> GetAllFileMetaAsync()
     {

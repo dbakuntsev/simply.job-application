@@ -50,6 +50,40 @@
                     <input type="number" class="form-control" @bind="_filesLimit" min="1" max="500" />
                     <div class="form-text">Least recently used files are removed first.</div>
                 </div>
+
+                <hr class="my-3" />
+
+                <div class="mb-1">
+                    <label class="form-label mb-1">Storage usage</label>
+                    @if (!_storageLoaded)
+                    {
+                        <div class="text-muted small">Calculating…</div>
+                    }
+                    else
+                    {
+                        @if (_storageQuota > 0)
+                        {
+                            var pct = Math.Min(100.0, _storageUsage * 100.0 / _storageQuota);
+                            <div class="d-flex justify-content-between small text-muted mb-1">
+                                <span>@pct.ToString("F1")% of @FormatBytes(_storageQuota)</span>
+                                <span>@FormatBytes(_storageUsage) used</span>
+                            </div>
+                            <div class="progress mb-3" style="height:8px">
+                                <div class="progress-bar" role="progressbar"
+                                     style="width:@pct.ToString("F1", System.Globalization.CultureInfo.InvariantCulture)%"
+                                     aria-valuenow="@((int)pct)" aria-valuemin="0" aria-valuemax="100"></div>
+                            </div>
+                        }
+                        <div class="d-flex justify-content-between small">
+                            <span class="text-muted">Files</span>
+                            <span>@FormatBytes(_filesBytes)</span>
+                        </div>
+                        <div class="d-flex justify-content-between small mt-1">
+                            <span class="text-muted">Sessions</span>
+                            <span>@FormatBytes(_sessionsBytes)</span>
+                        </div>
+                    }
+                </div>
             </div>
         </div>
 
@@ -136,6 +170,12 @@
     int _filesLimit = 41;
     int? _outputResumePages;
 
+    long _filesBytes;
+    long _sessionsBytes;
+    long _storageQuota;
+    long _storageUsage;
+    bool _storageLoaded;
+
     bool _saved;
     bool _confirmClear;
     string? _error;
@@ -159,6 +199,39 @@
         _filesLimit = _settings.FilesLimit;
         _outputResumePages = _settings.OutputResumePages;
         LoadProviderFields();
+
+        await LoadStorageUsageAsync();
+    }
+
+    static readonly System.Text.Json.JsonSerializerOptions _jsonOpts = new()
+    {
+        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
+    };
+
+    async Task LoadStorageUsageAsync()
+    {
+        var files = await Db.GetAllFilesAsync();
+        _filesBytes = files.Sum(f => (long)System.Text.Json.JsonSerializer.Serialize(f, _jsonOpts).Length);
+
+        var sessions = await Db.GetAllSessionsAsync();
+        _sessionsBytes = sessions.Sum(s => (long)System.Text.Json.JsonSerializer.Serialize(s, _jsonOpts).Length);
+
+        var estimate = await JS.InvokeAsync<double[]?>("sjaGetStorageEstimate");
+        if (estimate is { Length: >= 2 })
+        {
+            _storageQuota = (long)estimate[0];
+            _storageUsage = (long)estimate[1];
+        }
+
+        _storageLoaded = true;
+    }
+
+    static string FormatBytes(long bytes)
+    {
+        if (bytes >= 1_073_741_824) return $"{bytes / 1_073_741_824.0:F1} GB";
+        if (bytes >= 1_048_576)     return $"{bytes / 1_048_576.0:F1} MB";
+        if (bytes >= 1_024)         return $"{bytes / 1_024.0:F1} KB";
+        return $"{bytes} B";
     }
 
     void LoadProviderFields()

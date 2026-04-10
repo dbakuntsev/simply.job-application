@@ -1,3 +1,9 @@
+window.sjaGetStorageEstimate = async function () {
+    if (!navigator.storage || !navigator.storage.estimate) return null;
+    var est = await navigator.storage.estimate();
+    return [est.quota ?? 0, est.usage ?? 0];
+};
+
 window.sjaScrollTo = function (id) {
     var el = document.getElementById(id);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });

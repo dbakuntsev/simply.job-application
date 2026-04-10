@@ -23,7 +23,9 @@
       <_AppCssPath>$(MSBuildProjectDirectory)\wwwroot\css\app.css</_AppCssPath>
       <_AppJsPath>$(MSBuildProjectDirectory)\wwwroot\js\app.js</_AppJsPath>
       <_BootstrapCssPath>$(MSBuildProjectDirectory)\wwwroot\css\bootstrap.min.css</_BootstrapCssPath>
+      <_IndexedDbJsPath>$(MSBuildProjectDirectory)\wwwroot\js\indexeddb.js</_IndexedDbJsPath>
       <_IndexHtmlPath>$(MSBuildProjectDirectory)\wwwroot\index.html</_IndexHtmlPath>
+      <_IndexedDbServicePath>$(MSBuildProjectDirectory)\Services\IndexedDbService.cs</_IndexedDbServicePath>
     </PropertyGroup>
     <GetFileHash Files="$(_AppCssPath)" Algorithm="SHA256">
       <Output TaskParameter="Hash" PropertyName="_AppCssHash" />
@@ -34,7 +36,10 @@
     <GetFileHash Files="$(_BootstrapCssPath)" Algorithm="SHA256">
       <Output TaskParameter="Hash" PropertyName="_BootstrapCssHash" />
     </GetFileHash>
-    <Exec Command="powershell -NoProfile -Command &quot;$p='$(_IndexHtmlPath)'; $h1='$(_AppCssHash)'; $h2='$(_AppJsHash)'; $h3='$(_BootstrapCssHash)'; $c=[IO.File]::ReadAllText($p,[Text.Encoding]::UTF8); $r1='app.css?v='+$h1; $c=$c -replace 'app\.css\?v=[^\x22]*',$r1; $r2='app.js?v='+$h2; $c=$c -replace 'app\.js\?v=[^\x22]*',$r2; $r3='bootstrap.min.css?v='+$h3; $c=$c -replace 'bootstrap\.min\.css\?v=[^\x22]*',$r3; [IO.File]::WriteAllText($p,$c,[Text.Encoding]::UTF8)&quot;" />
+    <GetFileHash Files="$(_IndexedDbJsPath)" Algorithm="SHA256">
+      <Output TaskParameter="Hash" PropertyName="_IndexedDbJsHash" />
+    </GetFileHash>
+    <Exec Command="powershell -NoProfile -Command &quot;$p='$(_IndexHtmlPath)'; $p2='$(_IndexedDbServicePath)'; $h1='$(_AppCssHash)'; $h2='$(_AppJsHash)'; $h3='$(_BootstrapCssHash)'; $h4='$(_IndexedDbJsHash)'; $c=[IO.File]::ReadAllText($p,[Text.Encoding]::UTF8); $r1='app.css?v='+$h1; $c=$c -replace 'app\.css\?v=[^\x22]*',$r1; $r2='app.js?v='+$h2; $c=$c -replace 'app\.js\?v=[^\x22]*',$r2; $r3='bootstrap.min.css?v='+$h3; $c=$c -replace 'bootstrap\.min\.css\?v=[^\x22]*',$r3; [IO.File]::WriteAllText($p,$c,[Text.Encoding]::UTF8); $cs=[IO.File]::ReadAllText($p2,[Text.Encoding]::UTF8); $cs=$cs -replace 'indexeddb\.js\?v=[^\x22]*',('indexeddb.js?v='+$h4); [IO.File]::WriteAllText($p2,$cs,[Text.Encoding]::UTF8)&quot;" />
   </Target>
 
 </Project>

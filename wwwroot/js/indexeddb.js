@@ -66,6 +66,11 @@ export async function clearSessions() {
     return tx('sessions', 'readwrite', s => s.clear());
 }
 
+export async function getAllFiles() {
+    const v = await tx('files', 'readonly', s => s.getAll());
+    return JSON.stringify(v ?? []);
+}
+
 export async function getAllFileMeta() {
     const files = await tx('files', 'readonly', s => s.getAll());
     const meta = (files ?? []).map(f => ({ id: f.id, name: f.name, lastUsedAt: f.lastUsedAt, sessionCount: f.sessionCount }));
