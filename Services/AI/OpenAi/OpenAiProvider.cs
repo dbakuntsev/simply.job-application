@@ -699,6 +699,294 @@ public class OpenAiProvider : IAiProvider
               * End with a forward-looking statement
             Avoid repeating resume bullet points
 
+            ### Cover Letter Structure Enforcement
+
+            The cover letter must contain exactly two paragraphs.
+
+            #### Paragraph 1 (Intent + Role Alignment)
+
+            Must include:
+            - Clear expression of interest in the role and organization
+            - Explicit reference to at least one key responsibility or requirement from the job description
+            - Mention of 1–2 relevant capability areas aligned to the job description
+            - Limit to one primary concept and at most one supporting concept
+            - Do NOT list three or more parallel areas
+
+            Must NOT include:
+            - Career history summaries
+            - Multiple detailed experience examples
+            - Bullet-like enumeration of skills
+            
+            The first sentence must clearly emphasize a single dominant alignment.
+
+            #### Paragraph 2 (Evidence + Gap + Forward Close)
+
+            Must follow this strict structure:
+            1. Opening sentences (Experience Evidence)
+              - Present 2–3 relevant experiences or accomplishments
+              - Each must be explicitly tied to a job requirement
+            2. Gap Sentence (if applicable)
+              - Clearly identify any missing or indirect capability
+              - Must be ONE sentence only
+              - Must not imply direct experience where none exists
+            3. Closing Sentence
+              - Forward-looking statement describing expected contribution or impact
+              - Must NOT introduce new skills or new claims
+              - Must NOT restate prior experience
+
+            #### Gap Sentence Brevity Rule
+
+            The gap statement must:
+            - be direct and concise
+            - avoid qualifiers such as:
+            - “in the exact structure described”
+            - “as outlined in the role”
+
+            Prefer clean, neutral phrasing.
+
+            ### Voice Constraint
+
+            The cover letter must be written strictly in **first-person singular**.
+
+            #### Requirements:
+
+            - Use “I” and “my” only
+            - Do NOT use third-person references to the candidate
+            - Do NOT use resume-style narrative phrasing (e.g., “X brings”, “Y has”)
+            - Do NOT refer to the candidate by name
+
+            #### Objective:
+
+            Ensure the output reads as a direct personal application rather than a profile summary.
+
+            ### Abstract Language Constraint
+
+            Avoid stacking multiple abstract qualities in a single phrase (e.g., “scalability, reliability, efficiency”).
+
+            Instead:
+            - use at most two
+            - or replace with one abstract concept + one concrete indicator
+
+            Prefer:
+            - concrete outcomes, scale, or system behavior
+
+            ### Seniority Tone Rule
+
+            For senior roles:
+            - prefer assertive, declarative statements
+            - minimize justification or persuasion language
+
+            The tone should reflect:
+            - ownership
+            - authority
+            - prior success in similar problem spaces
+
+            ### Job-Relevance Anchoring Requirement
+
+            The cover letter must explicitly reference at least two distinct categories of job responsibilities, which may include:
+            - technical systems or platforms
+            - process ownership (e.g., planning, roadmap, execution)
+            - metrics, KPIs, or outcome tracking
+            - leadership or team enablement responsibilities
+            - large-scale or high-traffic systems
+            - shared or cross-team systems and frameworks
+            
+            #### Constraint:
+
+            These must be clearly identifiable in the text and not implied vaguely.
+
+            ### Experience Relevance Threshold
+
+            Only include experiences that:
+            - strongly map to core responsibilities, OR
+            - demonstrate comparable scale, complexity, or ownership
+
+            Do NOT include weaker or indirect examples solely to reach 2–3 items.
+
+            It is acceptable to include only 2 experiences if they are stronger.
+
+            ### Anti-Resume Drift Rule
+
+            The cover letter must NOT:
+            - Read like a condensed version of a resume or summary section
+            - Present lists of technologies or achievements without narrative context
+            - Describe the candidate externally (third-person framing)
+            
+            #### Required framing:
+
+            Every sentence should follow:
+
+            > “I did X, which relates to Y requirement in the role.”
+
+            ### Skill Gap Handling Rule
+
+            When required capabilities are not explicitly present in the input resume:
+            - Do NOT fabricate experience
+            - Do NOT imply direct proficiency
+
+            Instead:
+            - Explicitly frame as indirect exposure or transferable capability
+            - Immediately connect to a closely related, verifiable experience
+            - Keep the gap discussion concise (one sentence only)
+
+            #### Skill Gap Granularity Constraint
+
+            The gap statement must:
+            - remain at the capability level, not specific internal processes
+            - avoid overly narrow or administrative details
+
+            Prefer:
+            - “direct people management ownership”
+
+            Avoid:
+            - “formal annual reviews or compensation decisions”
+
+            ### Closing Sentence Constraint
+
+            The final sentence of the second paragraph must:
+            - Be forward-looking
+            - Describe expected contribution or impact
+            - Relate directly to role responsibilities
+            - Avoid introducing new skills or repeating prior examples
+
+            ### Closing Impact Precision Rule
+
+            The final sentence must:
+            - reference one concrete mechanism of impact, such as:
+              * shared frameworks
+              * cross-team enablement
+              * system consistency
+              * development velocity
+            AND
+            - describe how that impact occurs
+
+            Prefer:
+            - “enable X by doing Y”
+
+            Avoid:
+            - general improvement statements without mechanism
+            
+            #### Constraint:
+
+            Generic descriptors (e.g., “high-impact systems”, “large-scale platforms”) are insufficient unless grounded in specific context.
+
+            ### Structural Clarity Requirement
+
+            Ensure:
+            - Paragraph 1 = intent + alignment
+            - Paragraph 2 = evidence + gap + forward-looking close
+
+            Do NOT merge these functions into a single blended narrative.
+
+            ### Narrative Consistency Rule
+
+            Maintain consistent first-person perspective and avoid shifts into:
+            - resume summary voice
+            - organizational description voice
+            - external evaluator tone
+
+            All statements must remain grounded in personal action and contribution.
+
+            ### Anti-Generic Alignment Rule
+
+            Do NOT use vague alignment phrases such as:
+            - “aligned with my experience”
+            - “closely aligned with my background”
+            - “throughout my career”
+
+            Instead:
+            - explicitly name 1–2 concrete areas of experience or responsibility
+
+            ### Sentence Complexity Constraint
+
+            Each sentence must express one primary idea.
+
+            Avoid:
+            - multiple “which…” or “that…” clauses in a single sentence
+            - combining multiple experience-to-requirement mappings in one sentence
+
+            Prefer:
+            - shorter, declarative sentences with clear focus
+
+            ### Mapping Language Elimination Rule (Strict)
+
+            Do NOT use transitional justification phrases such as:
+            - “which reflects”
+            - “which demonstrates”
+            - “which highlights”
+
+            Experience should be stated directly and confidently, without explanation.
+
+            ### Experience Ordering Rule
+
+            In Paragraph 2:
+            - Present experiences in order of relevance to the job description, not chronology
+            - The first experience must reflect the most critical responsibility of the role
+
+            Deprioritize:
+            - less relevant or indirect examples
+
+            ### Experience Focus Consistency Rule
+
+            Each experience sentence must focus on one type of signal:
+
+            - leadership / influence
+            OR
+            - system design / architecture
+            OR
+            - scale / performance
+
+            Avoid mixing multiple signal types in one sentence unless tightly integrated.
+
+            ### Closing Sentence Simplicity Rule
+
+            The final sentence must:
+            - focus on one primary contribution theme
+            - avoid listing multiple abstract qualities
+
+            Prefer:
+            - a single clear impact statement tied to the role
+
+            Avoid:
+            - stacking multiple traits (e.g., “judgment, execution, thinking”)
+
+            ### Natural Language Constraint
+
+            The cover letter must read as natural professional writing, not a structured mapping exercise.
+
+            Avoid:
+            - repetitive sentence patterns
+            - explicit “requirement mapping” phrasing in every sentence
+
+            Not every sentence must explicitly reference the job description, as long as alignment is clear overall.
+
+            ### Primary Alignment Constraint (Paragraph 1)
+
+            Paragraph 1 must emphasize one dominant responsibility or capability from the job description.
+            - Secondary concepts may be mentioned, but must be subordinate
+            - Avoid listing more than two parallel concepts
+
+            The reader should clearly understand the primary focus of alignment after the first sentence.
+
+            ### Assertion Over Explanation Rule
+
+            Do NOT explain how experience relates to the role using phrases like:
+            - “this relates to”
+            - “this speaks to”
+            - “this supports”
+
+            Instead:
+            - state experience and its context directly
+            - allow relevance to be self-evident
+
+            ### Semantic Redundancy Constraint
+
+            Avoid repeating the same core concept (e.g., platform, architecture, frameworks) across multiple sentences unless:
+            - each instance introduces new information
+
+            Prefer:
+            - introducing a new dimension (scale, impact, domain, outcome)
+
             ## Output Format (Markdown Resume)
 
             Output the resume in Markdown:
