@@ -437,16 +437,181 @@ public class OpenAiProvider : IAiProvider
             - Place it immediately after contact/location lines
             - Keep it 2–4 concise sentences
 
-            The summary should:
-            - highlight 2–3 key skills or capabilities aligned with the job description
-            - reflect relevant responsibilities or domain context
-            - prioritize clarity and keyword relevance
+            The summary should function as a high-impact positioning statement, not a general introduction.
+
+            It must:
+            - be written in a concise, declarative tone (no first-person pronouns)
+            - clearly communicate seniority level (based on years of experience, scope, or leadership responsibility)
+            - reflect the candidate’s primary area of specialization aligned to the role
+            - include 1–2 concrete indicators of scope, scale, or complexity when available (e.g., size of projects, clients, operations, or outcomes)
+            - incorporate 2–4 high-priority job-relevant keywords naturally
+            - emphasize outcomes, ownership, or organizational impact where applicable
+
+            Structure guidelines. Each sentence must serve a distinct purpose:
+            - Sentence 1: identity and scope (no specialization details)
+            - Sentence 2: primary specialization (no scale or metrics)
+            - Sentence 3: scale, impact, or outcomes (must include concrete indicators if available)
+            - Sentence 4 (optional): leadership or execution style
+            
+            Do not combine these roles within a single sentence.
+            
+            Sentence 3 must:
+            - include concrete scale or measurable scope
+            - optionally include one clear impact or outcome
+            Avoid:
+            - listing multiple generic quality attributes (e.g., reliability, scalability, security)
+            - combining too many dimensions into one sentence
+            
+            Avoid generic performance phrases such as:
+            - "proven record"
+            - "strong record"
+            - "consistent history"
+            Replace with concrete evidence (e.g., scale, outcomes, scope).
+            
+            Strictly avoid:
+            - first-person language ("I", "my")
+            - expressions of interest or intent ("seeking", "interested in", "looking for")
+            - references to the employer ("your", company name)
+            - generic soft skills unless explicitly required
+            - listing multiple generic quality attributes (e.g., reliability, scalability, security) unless directly differentiated
+
+            The summary must be tailored to reflect the most important responsibility, function, or capability described in the job description.
 
             Do not remove the summary unless it is clearly redundant.
             
             If a professional summary exists, place it immediately after the contact/location lines and before the first # section heading. 
 
             If content must be shortened, prioritize trimming older experience before removing the summary.
+
+            ## Tense Consistency
+
+            Use consistent tense throughout the summary:
+
+            - Prefer present tense for role identity and ongoing capabilities
+            - Use past tense only for clearly completed achievements
+
+            Avoid mixing tenses across sentences unless necessary for clarity.
+
+            ## Seniority-Specific Professional Summary Adjustment
+
+            Adjust emphasis based on the seniority implied by the role:
+
+            For senior or leadership roles:
+            - Emphasize ownership of functions, programs, or areas of responsibility rather than individual tasks
+            - Highlight influence across teams, departments, or stakeholders
+            - Focus on strategic contributions, decision-making, and oversight
+            - Include indicators of scope (e.g., size of initiatives, teams, portfolios, or impact)
+            - The final sentence should emphasize: influence, decision-making, enabling others
+
+            For mid-level roles:
+            - Balance independent execution with some ownership of projects or processes
+            - Highlight specialized skills and contributions to outcomes
+
+            For early-career roles:
+            - Emphasize hands-on skills, foundational knowledge, and direct contributions
+
+            The final sentence should describe leadership in terms of impact and influence, not activities.
+
+            Prefer:
+            - "driving direction and standards"
+            - "guiding teams and shaping execution"
+            - "enabling delivery across teams or functions"
+
+            Avoid:
+            - listing multiple activities (e.g., "code review, mentoring, planning")
+            - process-heavy or operational enumeration
+
+            Prefer concise descriptions of leadership impact over activity lists.
+            
+            ## Professional Summary Alignment Anchor
+
+            Identify the single most important function, responsibility, or capability described in the job description.
+
+            The summary must explicitly and clearly state this concept in Sentence 2 as the primary specialization using direct or closely aligned terminology.
+
+            This concept should be immediately identifiable when scanning the summary.            
+
+            ## Professional Summary Keyword Rule
+
+            Within the summary:
+            - Prioritize high-impact, role-defining keywords over broad coverage
+            - Include no more than 3 core concepts total, with one clearly dominant specialization.
+            - If more are present in the source resume, select the most relevant and omit the rest
+            - Prefer phrases that imply responsibility, specialization, or outcomes over simple lists of tools or skills
+
+            ## Redundant Domain Elimination
+
+            Do not include broad or implied domains that are already conveyed by the candidate’s title or seniority level.
+
+            Examples:
+            - Avoid repeating "software architecture" for architect-level roles
+            - Avoid generic fields that do not differentiate the candidate
+
+            Instead:
+            - prioritize more specific, distinguishing areas of expertise aligned with the job description
+            
+            ## Professional Summary Anti-Patterns
+
+            Avoid the following:
+            - Generic summaries that could apply to multiple roles or industries
+            - Rewriting experience bullets into paragraph form
+            - Listing tools, skills, or areas of knowledge without context
+            - Overly broad descriptors (e.g., "results-driven", "detail-oriented") unless clearly supported
+            - Narrative or cover letter-style language
+            
+            ## Summary Conciseness Constraint
+
+            Avoid comma-separated lists of more than two items within a sentence.
+
+            If multiple capabilities are present:
+            - consolidate them into a single cohesive phrase
+            - or prioritize the most relevant and omit the rest
+
+            Do not enumerate multiple domains, systems, or practices in parallel.
+            
+            ## Dominant Specialization Requirement
+
+            The professional summary must present one clearly dominant area of specialization.
+
+            - This specialization must appear explicitly in Sentence 2
+            - It must unify the candidate’s capabilities into a single theme
+            - Supporting capabilities may be included, but must be subordinate to this primary focus
+
+            If multiple domains are present in the resume:
+            - Select the one most aligned with the job description
+            - De-emphasize or omit others
+
+            The reader should be able to answer in one phrase:
+            "What is this person primarily specialized in?"
+
+            ## Specialization Clarity Requirement
+
+            Sentence 2 must contain a single, clearly identifiable specialization.
+
+            - The specialization must be understandable as one unified concept
+            - It must be immediately clear upon scanning
+            - It must not be expressed as a list of multiple parallel areas
+
+            The reader should be able to answer in one phrase:
+            "What is this person primarily specialized in?"
+            
+            ## Specialization Framing Rule
+
+            Sentence 2 must express the primary specialization as a single, cohesive phrase.
+
+            This phrase must:
+            - combine domain + function (what + why)
+            - reflect how the candidate applies their expertise
+            - align directly with the job description’s core responsibility
+
+            Prefer:
+            - "design of shared systems enabling consistency across applications"
+            - "development of scalable client-facing platforms"
+            - "management of complex, high-volume operational workflows"
+
+            Avoid:
+            - listing multiple independent domains (e.g., "X, Y, and Z")
+            - disconnected technical or subject-matter areas without a unifying purpose
 
             ## Experience Section Optimization
             
@@ -586,7 +751,7 @@ public class OpenAiProvider : IAiProvider
               * one concrete detail from the job description
             - keep concise and natural
             - avoid generic phrases like "I am excited to apply" or "This role aligns with my career goals"
-            - emphasise skills and experience most relevant to the job description.
+            - emphasize skills and experience most relevant to the job description.
 
             ## Integrity Constraints
 
