@@ -1,5 +1,5 @@
 @page "/files"
-@inject IndexedDbService Db
+@inject IIndexedDbService Db
 @inject NavigationManager Nav
 @inject AppStateService AppState
 @inject IJSRuntime JS
@@ -167,7 +167,7 @@ else
 
         foreach (var s in allSessions)
         {
-            foreach (var fileId in new[] { s.InputResumeFileId, s.TailoredResumeFileId, s.CoverLetterFileId }
+            foreach (var fileId in new[] { s.BaseResumeVersionId, s.TailoredResumeFileId, s.CoverLetterFileId }
                          .Where(id => id is not null).Cast<string>())
             {
                 if (!_sessionsByFile.ContainsKey(fileId))
@@ -201,7 +201,7 @@ else
         var sb = new System.Text.StringBuilder();
         foreach (var s in sessions)
         {
-            var fullLabel    = $"{s.CompanyName} — {s.JobTitle}";
+            var fullLabel    = $"{s.OrganizationNameSnapshot} — {s.Role}";
             var displayLabel = fullLabel.Length > SessionLabelMaxLen
                                ? fullLabel[..SessionLabelMaxLen] + "…"
                                : fullLabel;

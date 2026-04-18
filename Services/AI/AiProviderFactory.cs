@@ -2,7 +2,7 @@ using Simply.JobApplication.Services.AI.OpenAi;
 
 namespace Simply.JobApplication.Services.AI;
 
-public class AiProviderFactory
+public class AiProviderFactory : IAiProviderFactory
 {
     private readonly Dictionary<string, IAiProvider> _providers;
 

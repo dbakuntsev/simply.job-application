@@ -1,5 +1,5 @@
 @page "/history/{Id}"
-@inject IndexedDbService Db
+@inject IIndexedDbService Db
 @inject NavigationManager Nav
 @inject IJSRuntime JS
 
@@ -45,7 +45,7 @@ else
     </div>
 
     <!-- ── Page title ────────────────────────────────────────────────────────── -->
-    <h4 class="mb-3 mt-3">@_session.CompanyName — @_session.JobTitle</h4>
+    <h4 class="mb-3 mt-3">@_session.OrganizationNameSnapshot — @_session.Role</h4>
 
     <!-- ══ Swimlane 1: Input ════════════════════════════════════════════════ -->
     <section id="hist-lane-input" class="sja-swimlane sja-lane-input" aria-label="Job and Resume Input">
@@ -60,17 +60,17 @@ else
                         <div class="card-body">
                             <div class="row g-2 mb-3">
                                 <div class="col-6">
-                                    <label class="form-label">Company Name</label>
-                                    <input class="form-control" value="@_session.CompanyName" readonly />
+                                    <label class="form-label">Organization</label>
+                                    <input class="form-control" value="@_session.OrganizationNameSnapshot" readonly />
                                 </div>
                                 <div class="col-6">
-                                    <label class="form-label">Job Title</label>
-                                    <input class="form-control" value="@_session.JobTitle" readonly />
+                                    <label class="form-label">Role</label>
+                                    <input class="form-control" value="@_session.Role" readonly />
                                 </div>
                             </div>
                             <div>
-                                <label class="form-label">Job Details</label>
-                                <textarea class="form-control" rows="8" readonly>@_session.JobDetails</textarea>
+                                <label class="form-label">Role Description</label>
+                                <textarea class="form-control" rows="8" readonly>@_session.RoleDescription</textarea>
                             </div>
                         </div>
                     </div>
@@ -84,7 +84,7 @@ else
                                 <div class="alert alert-success py-2 d-flex justify-content-between align-items-center mb-3">
                                     <span>📄 @_resumeMeta.Name</span>
                                     <button class="btn btn-sm btn-outline-primary"
-                                            @onclick="() => DownloadFileAsync(_session.InputResumeFileId, _resumeMeta.Name)">
+                                            @onclick="() => DownloadFileAsync(_session.BaseResumeVersionId, _resumeMeta.Name)">
                                         Download
                                     </button>
                                 </div>
@@ -252,15 +252,13 @@ else
         var allMeta = await Db.GetAllFileMetaAsync();
         var metaMap = allMeta.ToDictionary(f => f.Id);
 
-        metaMap.TryGetValue(_session.InputResumeFileId, out _resumeMeta);
+        metaMap.TryGetValue(_session.BaseResumeVersionId, out _resumeMeta);
         if (_session.TailoredResumeFileId is not null)
             metaMap.TryGetValue(_session.TailoredResumeFileId, out _resumeFileMeta);
         if (_session.CoverLetterFileId is not null)
             metaMap.TryGetValue(_session.CoverLetterFileId, out _clMeta);
 
-        _hasGenerated = !string.IsNullOrEmpty(_session.WhyApplyText) ||
-                        !string.IsNullOrEmpty(_session.CoverLetterText) ||
-                        _session.TailoredResumeFileId is not null;
+        _hasGenerated = _session.ArtifactsGenerated;
 
         _loading = false;
     }

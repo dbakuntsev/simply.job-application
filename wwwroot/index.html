@@ -7,6 +7,7 @@
     <base href="/" />
     <link rel="stylesheet" href="css/bootstrap.min.css" />
     <link rel="stylesheet" href="css/app.css?v=586EA11BDB4CEE7C6F8A54266DE53A60170D791EBA1478857B0AD317F78B3025" />
+    <link rel="stylesheet" href="_content/Radzen.Blazor/css/default.css" />
     <script>
         // GitHub Pages SPA redirect: rewrite ?/path back to /path
         (function (l) {
@@ -37,6 +38,14 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
     <script src="js/app.js?v=DB428316587325E49514E23273505DEF025F02C820476447EE43FD855A39DACF"></script>
+    <!-- Radzen Blazor JS (required for Radzen component interop) -->
+    <script src="_content/Radzen.Blazor/Radzen.Blazor.js"></script>
+    <!-- Monaco Editor loader — assets served from CDN.
+         WARNING: Do NOT enable Blazor enhanced navigation on pages hosting
+         StandaloneCodeEditor or MonacoDiffEditor (not applicable in pure WASM). -->
+    <script>var require = { paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.0/min/vs' } };</script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.0/min/vs/loader.min.js"></script>
+    <script src="_content/BlazorMonaco/jsInterop.js"></script>
     <script src="_framework/blazor.webassembly.js"></script>
 </body>
 </html>

@@ -1,7 +1,7 @@
 @page "/evaluate"
-@inject IndexedDbService Db
-@inject DocxService Docx
-@inject AiProviderFactory Providers
+@inject IIndexedDbService Db
+@inject IDocxService Docx
+@inject IAiProviderFactory Providers
 @inject AppStateService AppState
 @inject NavigationManager Nav
 @inject IJSRuntime JS
@@ -897,20 +897,22 @@
         var existing = _sessionId is not null ? await Db.GetSessionAsync(_sessionId) : null;
         var session  = new SessionRecord
         {
-            Id                = _sessionId ?? Guid.NewGuid().ToString(),
-            CreatedAt         = existing?.CreatedAt ?? DateTime.UtcNow,
-            CompanyName       = _companyName,
-            JobTitle          = _jobTitle,
-            JobDetails        = _jobDetails,
-            InputResumeFileId = _inputFileId ?? "",
-            MatchScore        = _evaluation?.Score ?? "",
-            MatchGaps         = _evaluation?.Gaps ?? new(),
-            MatchStrengths    = _evaluation?.Strengths ?? new(),
-            AdditionalKeywords = GetAllKeywordsForSession(),
-            CoverLetterText   = _materials?.CoverLetterText ?? "",
-            WhyApplyText      = _materials?.WhyApplyText ?? "",
-            TailoredResumeFileId = _tailoredResumeFileId,
-            CoverLetterFileId    = _coverLetterFileId,
+            Id                          = _sessionId ?? Guid.NewGuid().ToString(),
+            CreatedAt                   = existing?.CreatedAt ?? DateTime.UtcNow,
+            OrganizationNameSnapshot    = _companyName,
+            OpportunityRoleSnapshot     = _jobTitle,
+            Role                        = _jobTitle,
+            RoleDescription             = _jobDetails,
+            BaseResumeVersionId         = _inputFileId ?? "",
+            MatchScore                  = _evaluation?.Score ?? "",
+            MatchGaps                   = _evaluation?.Gaps ?? new(),
+            MatchStrengths              = _evaluation?.Strengths ?? new(),
+            AdditionalKeywords          = GetAllKeywordsForSession(),
+            CoverLetterText             = _materials?.CoverLetterText ?? "",
+            WhyApplyText                = _materials?.WhyApplyText ?? "",
+            TailoredResumeFileId        = _tailoredResumeFileId,
+            CoverLetterFileId           = _coverLetterFileId,
+            ArtifactsGenerated          = _materials is not null,
         };
         await Db.SaveSessionAsync(session);
     }

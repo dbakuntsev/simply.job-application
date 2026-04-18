@@ -5,7 +5,7 @@ using System.Xml.Linq;
 
 namespace Simply.JobApplication.Services;
 
-public class DocxService
+public class DocxService : IDocxService
 {
     private static readonly XNamespace W    = "http://schemas.openxmlformats.org/wordprocessingml/2006/main";
     private static readonly XNamespace R    = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
@@ -37,6 +37,54 @@ public class DocxService
         XNamespace ep = "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties";
         var pages = XDocument.Load(stream).Root?.Element(ep + "Pages");
         return pages is not null && int.TryParse(pages.Value, out var n) && n > 0 ? n : null;
+    }
+
+    // Extracts document text as plain Markdown (headings, bold, lists) without
+    // the resume-specific title/subtitle heuristics used by ExtractMarkdown.
+    public string ExtractTextAsMarkdown(byte[] docxBytes)
+    {
+        using var zip = new ZipArchive(new MemoryStream(docxBytes), ZipArchiveMode.Read);
+        var hyperlinkUrls = new Dictionary<string, string>();
+        var relsEntry = zip.GetEntry("word/_rels/document.xml.rels");
+        if (relsEntry != null)
+        {
+            using var rs = relsEntry.Open();
+            foreach (var rel in XDocument.Load(rs).Descendants(Rels + "Relationship"))
+            {
+                if ((rel.Attribute("Type")?.Value ?? "").EndsWith("/hyperlink"))
+                {
+                    var id  = rel.Attribute("Id")?.Value     ?? "";
+                    var url = rel.Attribute("Target")?.Value ?? "";
+                    if (!string.IsNullOrEmpty(id)) hyperlinkUrls[id] = url;
+                }
+            }
+        }
+
+        var docEntry = zip.GetEntry("word/document.xml")
+                       ?? throw new InvalidOperationException("Not a valid DOCX file.");
+        using var stream = docEntry.Open();
+        var body = XDocument.Load(stream).Descendants(W + "body").FirstOrDefault()
+                   ?? throw new InvalidOperationException("word/document.xml has no <w:body>.");
+
+        var sb = new StringBuilder();
+        bool first = true;
+        foreach (var para in body.Elements(W + "p"))
+        {
+            var pStyle = para.Element(W + "pPr")?.Element(W + "pStyle")?.Attribute(W + "val")?.Value ?? "";
+            string prefix = pStyle switch
+            {
+                "Heading1"              => "# ",
+                "Heading2"              => "## ",
+                "Heading3" or "Heading4" => "### ",
+                _                       => ""
+            };
+            var inline = BuildInlineMarkdown(para, hyperlinkUrls);
+            if (string.IsNullOrWhiteSpace(inline)) { if (!first) sb.AppendLine(); continue; }
+            if (!first) sb.AppendLine();
+            sb.Append(prefix + inline);
+            first = false;
+        }
+        return sb.ToString().Trim();
     }
 
     public string ExtractMarkdown(byte[] docxBytes)

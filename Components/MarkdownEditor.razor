@@ -1,0 +1,54 @@
+@using BlazorMonaco.Editor
+@using BlazorMonaco
+
+<StandaloneCodeEditor @ref="_editor"
+                      Id="@Id"
+                      ConstructionOptions="GetOptions"
+                      OnDidChangeModelContent="OnContentChanged"
+                      CssClass="@CssClass"
+                      style="@EditorStyle" />
+
+@code {
+    [Parameter] public string Id { get; set; } = $"md-editor-{Guid.NewGuid():N}";
+    [Parameter] public string Value { get; set; } = "";
+    [Parameter] public EventCallback<string> ValueChanged { get; set; }
+    [Parameter] public string Height { get; set; } = "300px";
+    [Parameter] public string CssClass { get; set; } = "";
+
+    private StandaloneCodeEditor? _editor;
+    private bool _suppressChange;
+
+    private string EditorStyle =>
+        $"height:{Height};border:1px solid #ced4da;border-radius:.375rem";
+
+    private StandaloneEditorConstructionOptions GetOptions(StandaloneCodeEditor _) => new()
+    {
+        Language = "markdown",
+        Theme = "vs",
+        AutomaticLayout = true,
+        Minimap = new EditorMinimapOptions { Enabled = false },
+        WordWrap = "on",
+        LineNumbers = "off",
+        ScrollBeyondLastLine = false,
+        Value = Value,
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_editor is null) return;
+        var current = await _editor.GetValue();
+        if (current != Value)
+        {
+            _suppressChange = true;
+            await _editor.SetValue(Value);
+            _suppressChange = false;
+        }
+    }
+
+    private async Task OnContentChanged(ModelContentChangedEvent _)
+    {
+        if (_suppressChange || _editor is null) return;
+        var newValue = await _editor.GetValue();
+        await ValueChanged.InvokeAsync(newValue);
+    }
+}
