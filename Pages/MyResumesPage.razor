@@ -1,6 +1,6 @@
 @page "/resumes"
 @inherits NavigationGuardBase
-@implements IDisposable
+@implements IAsyncDisposable
 @inject IIndexedDbService Db
 @inject IDocxService Docx
 @inject IDataSyncService DataSync
@@ -8,8 +8,7 @@
 
 <PageTitle>My Resumes — Simply Job Application</PageTitle>
 
-<NavigationLock OnBeforeInternalNavigation="HandleLocationChanging"
-                ConfirmExternalNavigations="IsDirty" />
+<NavigationLock OnBeforeInternalNavigation="HandleLocationChanging" />
 <NavigationGuardModal Show="_showGuardModal" StayLabel="@StayLabel" LeaveLabel="@LeaveLabel"
                       OnStay="() => OnGuardStay()" OnLeave="() => OnGuardLeave()" />
 
@@ -52,8 +51,7 @@ else if (_resumes.Count == 0)
 }
 else
 {
-    <div class="table-responsive">
-        <table class="table table-hover align-middle mb-0">
+    <table class="table table-hover align-middle mb-0">
             <thead>
                 <tr>
                     <th style="width:1%"></th>
@@ -286,7 +284,6 @@ else
                 }
             </tbody>
         </table>
-    </div>
 }
 
 <!-- ═══════════════════════════════════ Upload Resume — Step 1 (name review) ═════════════════════════ -->
@@ -569,15 +566,17 @@ else
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        await base.OnAfterRenderAsync(firstRender);   // syncs beforeunload with IsDirty
         await JS.InvokeVoidAsync("eval",
             "document.querySelectorAll('[data-bs-toggle=\"popover\"]')" +
             ".forEach(el => bootstrap.Popover.getOrCreateInstance(el));");
     }
 
-    public void Dispose()
+    public override async ValueTask DisposeAsync()
     {
         DataSync.OnBaseResumeChanged        -= OnBaseResumeChanged;
         DataSync.OnBaseResumeVersionChanged -= OnBaseResumeVersionChanged;
+        await base.DisposeAsync();
     }
 
     // ── Data loading ──────────────────────────────────────────────────────────

@@ -37,15 +37,22 @@
     </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <script src="js/app.js?v=DB428316587325E49514E23273505DEF025F02C820476447EE43FD855A39DACF"></script>
+    <script src="js/app.js?v=D93786F053EE9A74A08813F8A53E3F65E5269E022368D6790D35C541F917FA30"></script>
     <!-- Radzen Blazor JS (required for Radzen component interop) -->
     <script src="_content/Radzen.Blazor/Radzen.Blazor.js"></script>
-    <!-- Monaco Editor loader — assets served from CDN.
-         WARNING: Do NOT enable Blazor enhanced navigation on pages hosting
-         StandaloneCodeEditor or MonacoDiffEditor (not applicable in pure WASM). -->
-    <script>var require = { paths: { vs: 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.0/min/vs' } };</script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.0/min/vs/loader.min.js"></script>
+    <!-- Monaco Editor — follow the documented BlazorMonaco load order:
+         1. jsInterop.js  (installs window.require as a plain config object + blazorMonaco API)
+         2. Override the vs path from the default local _content/… to the CDN URL
+         3. loader.min.js  (reads window.require config object, sets up AMD)
+         4. editor.main.js as a direct <script> tag — this defines window.monaco synchronously.
+            AMD require(['vs/editor/editor.main']) is NOT equivalent; it races with component
+            creation. A direct <script> tag resolves before Blazor WASM starts.
+         WARNING: Do NOT enable Blazor enhanced navigation on pages hosting Monaco editors
+                  (not applicable in pure WASM). -->
     <script src="_content/BlazorMonaco/jsInterop.js"></script>
+    <script>require.paths.vs = 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.0/min/vs';</script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.0/min/vs/loader.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.0/min/vs/editor/editor.main.js"></script>
     <script src="_framework/blazor.webassembly.js"></script>
 </body>
 </html>

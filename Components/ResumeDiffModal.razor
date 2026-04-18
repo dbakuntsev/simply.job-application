@@ -1,4 +1,5 @@
 @using BlazorMonaco.Editor
+@inject IJSRuntime JS
 
 @if (Show)
 {
@@ -10,10 +11,15 @@
                     <h5 class="modal-title">Compare Versions</h5>
                     <button type="button" class="btn-close" @onclick="OnClose" aria-label="Close"></button>
                 </div>
-                <div class="modal-body p-0" style="overflow:hidden;flex:1">
+                @* position:relative turns this into the containing block for the absolute editor. *@
+                <div class="modal-body p-0" style="position:relative;overflow:hidden;flex:1;min-height:0">
+                    @* CssClass makes Monaco's own container div absolute-fill the body so it
+                       always has a definite pixel size regardless of the flex chain above it. *@
                     <StandaloneDiffEditor @ref="_editor"
+                                          Id="resume-diff-editor"
                                           ConstructionOptions="GetOptions"
-                                          style="height:100%;width:100%" />
+                                          OnDidInit="OnEditorInitAsync"
+                                          CssClass="position-absolute top-0 start-0 end-0 bottom-0" />
                 </div>
                 <div class="modal-footer py-2">
                     <span class="text-muted small me-auto">Left: selected version &nbsp;|&nbsp; Right: latest version</span>
@@ -31,7 +37,6 @@
     [Parameter] public EventCallback OnClose { get; set; }
 
     private StandaloneDiffEditor? _editor;
-    private bool _pendingModelSet;
 
     private StandaloneDiffEditorConstructionOptions GetOptions(StandaloneDiffEditor _) => new()
     {
@@ -42,17 +47,31 @@
         Theme = "vs",
     };
 
-    protected override void OnParametersSet()
+    // Fires after createDiffEditor JS interop completes — the only safe place to set content.
+    private async Task OnEditorInitAsync()
     {
-        if (Show) _pendingModelSet = true;
-        else      _pendingModelSet = false;
+        if (_editor is null) return;
+
+        var orig = await GetOrUpdateModel("resume-diff-original", OriginalText);
+        var mod  = await GetOrUpdateModel("resume-diff-modified", ModifiedText);
+        await _editor.SetModel(new DiffEditorModel { Original = orig, Modified = mod });
+
+        // Force Monaco to measure the container's real pixel size.
+        // AutomaticLayout uses ResizeObserver but does not fire on first open when the
+        // container dimensions haven't changed since Monaco initialized (possible in a modal).
+        await JS.InvokeVoidAsync("blazorMonaco.editor.layout", "resume-diff-editor");
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    // Monaco models are global singletons keyed by URI. Get and update if already present;
+    // create on first open. This avoids "Already a model with this URI" errors on re-open.
+    private async Task<TextModel> GetOrUpdateModel(string uri, string text)
     {
-        if (!_pendingModelSet || _editor is null) return;
-        _pendingModelSet = false;
-        await _editor.OriginalEditor.SetValue(OriginalText);
-        await _editor.ModifiedEditor.SetValue(ModifiedText);
+        var model = await Global.GetModel(JS, uri);
+        if (model is not null)
+        {
+            await model.SetValue(text);
+            return model;
+        }
+        return await Global.CreateModel(JS, text, "markdown", uri);
     }
 }
