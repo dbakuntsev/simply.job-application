@@ -23,6 +23,11 @@
                 </div>
                 <div class="modal-footer py-2">
                     <span class="text-muted small me-auto">Left: selected version &nbsp;|&nbsp; Right: latest version</span>
+                    <div class="form-check form-switch align-self-center me-3 mb-0">
+                        <input class="form-check-input" type="checkbox" id="diff-wrap-toggle"
+                               @bind="_wordWrap" @bind:after="ApplyWordWrapAsync" />
+                        <label class="form-check-label small" for="diff-wrap-toggle">Wrap lines</label>
+                    </div>
                     <button class="btn btn-secondary" @onclick="OnClose">Close</button>
                 </div>
             </div>
@@ -37,6 +42,7 @@
     [Parameter] public EventCallback OnClose { get; set; }
 
     private StandaloneDiffEditor? _editor;
+    private bool _wordWrap;   // persists across open/close cycles on this component instance
 
     private StandaloneDiffEditorConstructionOptions GetOptions(StandaloneDiffEditor _) => new()
     {
@@ -56,10 +62,20 @@
         var mod  = await GetOrUpdateModel("resume-diff-modified", ModifiedText);
         await _editor.SetModel(new DiffEditorModel { Original = orig, Modified = mod });
 
+        // Re-apply word-wrap if the user had it on before closing and reopening.
+        if (_wordWrap) await ApplyWordWrapAsync();
+
         // Force Monaco to measure the container's real pixel size.
         // AutomaticLayout uses ResizeObserver but does not fire on first open when the
         // container dimensions haven't changed since Monaco initialized (possible in a modal).
         await JS.InvokeVoidAsync("blazorMonaco.editor.layout", "resume-diff-editor");
+    }
+
+    // Called by @bind:after whenever the checkbox changes.
+    private async Task ApplyWordWrapAsync()
+    {
+        await JS.InvokeVoidAsync("blazorMonaco.editor.updateOptions", "resume-diff-editor",
+            new { wordWrap = _wordWrap ? "on" : "off" });
     }
 
     // Monaco models are global singletons keyed by URI. Get and update if already present;
