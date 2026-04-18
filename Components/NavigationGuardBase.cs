@@ -21,7 +21,7 @@ public abstract class NavigationGuardBase : ComponentBase
 
     // Wire to NavigationLock.OnBeforeInternalNavigation.
     // Awaiting holds the navigation until the user decides.
-    protected async ValueTask HandleLocationChanging(LocationChangingContext context)
+    protected async Task HandleLocationChanging(LocationChangingContext context)
     {
         if (!IsDirty) return;
 

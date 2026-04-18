@@ -1,0 +1,58 @@
+@using BlazorMonaco.Editor
+
+@if (Show)
+{
+    <div class="modal d-block" tabindex="-1" role="dialog" aria-modal="true"
+         style="background:rgba(0,0,0,.45)">
+        <div class="modal-dialog modal-xl modal-dialog-centered" style="max-width:95vw">
+            <div class="modal-content" style="height:80vh">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title">Compare Versions</h5>
+                    <button type="button" class="btn-close" @onclick="OnClose" aria-label="Close"></button>
+                </div>
+                <div class="modal-body p-0" style="overflow:hidden;flex:1">
+                    <StandaloneDiffEditor @ref="_editor"
+                                          ConstructionOptions="GetOptions"
+                                          style="height:100%;width:100%" />
+                </div>
+                <div class="modal-footer py-2">
+                    <span class="text-muted small me-auto">Left: selected version &nbsp;|&nbsp; Right: latest version</span>
+                    <button class="btn btn-secondary" @onclick="OnClose">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Show { get; set; }
+    [Parameter] public string OriginalText { get; set; } = "";
+    [Parameter] public string ModifiedText { get; set; } = "";
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private StandaloneDiffEditor? _editor;
+    private bool _pendingModelSet;
+
+    private StandaloneDiffEditorConstructionOptions GetOptions(StandaloneDiffEditor _) => new()
+    {
+        OriginalEditable = false,
+        RenderSideBySide = true,
+        ReadOnly = true,
+        AutomaticLayout = true,
+        Theme = "vs",
+    };
+
+    protected override void OnParametersSet()
+    {
+        if (Show) _pendingModelSet = true;
+        else      _pendingModelSet = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_pendingModelSet || _editor is null) return;
+        _pendingModelSet = false;
+        await _editor.OriginalEditor.SetValue(OriginalText);
+        await _editor.ModifiedEditor.SetValue(ModifiedText);
+    }
+}

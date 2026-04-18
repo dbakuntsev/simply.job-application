@@ -1,0 +1,928 @@
+@page "/resumes"
+@inherits NavigationGuardBase
+@implements IDisposable
+@inject IIndexedDbService Db
+@inject IDocxService Docx
+@inject IDataSyncService DataSync
+@inject IJSRuntime JS
+
+<PageTitle>My Resumes — Simply Job Application</PageTitle>
+
+<NavigationLock OnBeforeInternalNavigation="HandleLocationChanging"
+                ConfirmExternalNavigations="IsDirty" />
+<NavigationGuardModal Show="_showGuardModal" StayLabel="@StayLabel" LeaveLabel="@LeaveLabel"
+                      OnStay="() => OnGuardStay()" OnLeave="() => OnGuardLeave()" />
+
+<!-- Hidden file input for Upload Resume flow -->
+<InputFile id="upload-resume-input" OnChange="HandleUploadFileSelected"
+           accept=".docx" style="display:none" />
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0">My Resumes</h4>
+    <button class="btn btn-primary" @onclick="TriggerUploadResumeInput">
+        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
+             fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+             stroke-linejoin="round" class="me-1" aria-hidden="true">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="17 8 12 3 7 8"/>
+            <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        Upload Resume
+    </button>
+</div>
+
+@if (_error is not null)
+{
+    <div class="alert alert-danger alert-dismissible">
+        @_error
+        <button type="button" class="btn-close" @onclick="() => _error = null" aria-label="Close"></button>
+    </div>
+}
+
+@if (_loading)
+{
+    <div class="text-center py-5"><div class="spinner-border" role="status"></div></div>
+}
+else if (_resumes.Count == 0)
+{
+    <div class="alert alert-info d-flex align-items-center gap-3">
+        <span>No resumes yet — upload your first resume to get started.</span>
+        <button class="btn btn-primary btn-sm" @onclick="TriggerUploadResumeInput">Upload Resume</button>
+    </div>
+}
+else
+{
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead>
+                <tr>
+                    <th style="width:1%"></th>
+                    <th>Name</th>
+                    <th style="width:160px">Latest Upload</th>
+                    <th>Notes</th>
+                    <th style="width:1%" class="text-end"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var resume in _resumes)
+                {
+                    var isExpanded = _expandedResumeId == resume.Id;
+                    var latest     = LatestVersion(resume.Id);
+
+                    <tr style="cursor:pointer" @onclick="() => ToggleExpand(resume.Id)">
+                        <!-- Chevron -->
+                        <td class="ps-3 pe-0">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12"
+                                 viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"
+                                 stroke-linecap="round" stroke-linejoin="round"
+                                 style="transition:transform .2s;transform:rotate(@(isExpanded ? "90deg" : "0deg"))"
+                                 aria-hidden="true">
+                                <polyline points="9 18 15 12 9 6"/>
+                            </svg>
+                        </td>
+
+                        <!-- Name -->
+                        <td class="fw-semibold">@resume.Name</td>
+
+                        <!-- Latest upload date -->
+                        <td class="text-muted small">
+                            @(latest is not null ? latest.UploadedAt.ToLocalTime().ToString("g") : "—")
+                        </td>
+
+                        <!-- Notes (clipped, popover for full text) -->
+                        <td @onclick:stopPropagation>
+                            @if (!string.IsNullOrWhiteSpace(latest?.Notes))
+                            {
+                                <span class="d-inline-block text-truncate"
+                                      style="max-width:250px;cursor:pointer;vertical-align:middle"
+                                      tabindex="0"
+                                      data-bs-toggle="popover"
+                                      data-bs-trigger="focus"
+                                      data-bs-placement="top"
+                                      data-bs-content="@System.Net.WebUtility.HtmlEncode(latest.Notes)">
+                                    @latest.Notes
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="text-muted small">—</span>
+                            }
+                        </td>
+
+                        <!-- Actions: Upload New Version + kebab -->
+                        <td class="text-end pe-3" @onclick:stopPropagation>
+                            <div class="d-inline-flex gap-1 align-items-center">
+                                <button class="btn btn-sm btn-outline-secondary"
+                                        title="Upload New Version"
+                                        aria-label="Upload new version of @resume.Name"
+                                        @onclick="() => StartVersionUpload(resume)">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"
+                                         viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                         aria-hidden="true">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                        <polyline points="17 8 12 3 7 8"/>
+                                        <line x1="12" y1="3" x2="12" y2="15"/>
+                                    </svg>
+                                </button>
+                                <div class="dropdown">
+                                    <button class="btn btn-sm btn-outline-secondary"
+                                            type="button" data-bs-toggle="dropdown"
+                                            aria-expanded="false" aria-label="More actions for @resume.Name">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"
+                                             viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                                            <circle cx="12" cy="5"  r="1.5"/>
+                                            <circle cx="12" cy="12" r="1.5"/>
+                                            <circle cx="12" cy="19" r="1.5"/>
+                                        </svg>
+                                    </button>
+                                    <ul class="dropdown-menu dropdown-menu-end">
+                                        <li>
+                                            <button class="dropdown-item"
+                                                    @onclick="() => DownloadLatestAsync(resume)">
+                                                Download
+                                            </button>
+                                        </li>
+                                        <li>
+                                            <button class="dropdown-item"
+                                                    @onclick="() => StartRename(resume)">
+                                                Rename
+                                            </button>
+                                        </li>
+                                        <li><hr class="dropdown-divider"></li>
+                                        <li>
+                                            <button class="dropdown-item text-danger"
+                                                    @onclick="() => _deleteTarget = resume">
+                                                Delete
+                                            </button>
+                                        </li>
+                                    </ul>
+                                </div>
+                            </div>
+                        </td>
+                    </tr>
+
+                    @if (isExpanded)
+                    {
+                        var versions   = Versions(resume.Id);
+                        var priorVers  = versions.Skip(1).ToList();
+
+                        <tr class="table-light">
+                            <td colspan="5" class="p-0">
+                                <div class="px-4 py-3">
+
+                                    <!-- Latest version section -->
+                                    <div class="mb-3">
+                                        <div class="d-flex justify-content-between align-items-center mb-2">
+                                            <h6 class="mb-0 text-secondary text-uppercase small fw-semibold"
+                                                style="letter-spacing:.05em">Latest Version</h6>
+                                            <button class="btn btn-sm btn-outline-secondary"
+                                                    @onclick="() => StartVersionUpload(resume)">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13"
+                                                     viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                                     class="me-1" aria-hidden="true">
+                                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                                    <polyline points="17 8 12 3 7 8"/>
+                                                    <line x1="12" y1="3" x2="12" y2="15"/>
+                                                </svg>
+                                                Upload New Version
+                                            </button>
+                                        </div>
+
+                                        @if (latest is not null)
+                                        {
+                                            <div class="bg-white border rounded p-3 d-flex gap-4 align-items-start">
+                                                <div class="flex-grow-1">
+                                                    <div class="fw-semibold">Version @latest.VersionNumber</div>
+                                                    <div class="text-muted small">@latest.UploadedAt.ToLocalTime().ToString("g") &nbsp;·&nbsp; @latest.FileName</div>
+                                                    @if (!string.IsNullOrWhiteSpace(latest.Notes))
+                                                    {
+                                                        <div class="text-muted small mt-1">@latest.Notes</div>
+                                                    }
+                                                </div>
+                                                <button class="btn btn-sm btn-outline-primary flex-shrink-0"
+                                                        @onclick="() => DownloadVersionAsync(latest)">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13"
+                                                         viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                         stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                                         aria-hidden="true">
+                                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                                        <polyline points="7 10 12 15 17 10"/>
+                                                        <line x1="12" y1="15" x2="12" y2="3"/>
+                                                    </svg>
+                                                </button>
+                                            </div>
+                                        }
+                                    </div>
+
+                                    <!-- Prior versions section -->
+                                    @if (priorVers.Count > 0)
+                                    {
+                                        <div>
+                                            <h6 class="mb-2 text-secondary text-uppercase small fw-semibold"
+                                                style="letter-spacing:.05em">Earlier Versions</h6>
+                                            <table class="table table-sm table-borderless mb-0 bg-white border rounded">
+                                                <tbody>
+                                                    @foreach (var ver in priorVers)
+                                                    {
+                                                        <tr class="align-middle">
+                                                            <td class="ps-3 fw-semibold" style="width:110px">Version @ver.VersionNumber</td>
+                                                            <td class="text-muted small" style="width:160px">@ver.UploadedAt.ToLocalTime().ToString("g")</td>
+                                                            <td class="text-muted small">
+                                                                @if (!string.IsNullOrWhiteSpace(ver.Notes))
+                                                                {
+                                                                    <span class="d-inline-block text-truncate"
+                                                                          style="max-width:220px;cursor:pointer;vertical-align:middle"
+                                                                          tabindex="0"
+                                                                          data-bs-toggle="popover"
+                                                                          data-bs-trigger="focus"
+                                                                          data-bs-placement="top"
+                                                                          data-bs-content="@System.Net.WebUtility.HtmlEncode(ver.Notes)">
+                                                                        @ver.Notes
+                                                                    </span>
+                                                                }
+                                                                else
+                                                                {
+                                                                    <span>—</span>
+                                                                }
+                                                            </td>
+                                                            <td class="text-end pe-3">
+                                                                <div class="d-inline-flex gap-1">
+                                                                    <button class="btn btn-sm btn-outline-primary"
+                                                                            title="Download version @ver.VersionNumber"
+                                                                            @onclick="() => DownloadVersionAsync(ver)">
+                                                                        <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13"
+                                                                             viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                                                             stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                                                             aria-hidden="true">
+                                                                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                                                                            <polyline points="7 10 12 15 17 10"/>
+                                                                            <line x1="12" y1="15" x2="12" y2="3"/>
+                                                                        </svg>
+                                                                    </button>
+                                                                    <button class="btn btn-sm btn-outline-secondary"
+                                                                            title="Restore version @ver.VersionNumber"
+                                                                            @onclick="() => StartRestore(resume, ver)">
+                                                                        Restore
+                                                                    </button>
+                                                                    <button class="btn btn-sm btn-outline-secondary"
+                                                                            title="Compare to latest"
+                                                                            @onclick="() => StartCompareAsync(resume, ver)">
+                                                                        Compare
+                                                                    </button>
+                                                                </div>
+                                                            </td>
+                                                        </tr>
+                                                    }
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    }
+                                </div>
+                            </td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+    </div>
+}
+
+<!-- ═══════════════════════════════════ Upload Resume — Step 1 (name review) ═════════════════════════ -->
+@if (_uploadStep == 1)
+{
+    <div class="modal d-block" tabindex="-1" role="dialog" aria-modal="true"
+         style="background:rgba(0,0,0,.45)">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Upload Resume</h5>
+                    <button type="button" class="btn-close" @onclick="CancelUpload" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">
+                        Selected file: <strong>@_uploadFileName</strong>
+                    </p>
+                    <label class="form-label fw-semibold">Resume name</label>
+                    <input class="form-control" @bind="_uploadName" @bind:event="oninput"
+                           placeholder="Resume name" maxlength="200" />
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CancelUpload">Cancel</button>
+                    <button class="btn btn-primary"
+                            disabled="@string.IsNullOrWhiteSpace(_uploadName)"
+                            @onclick="UploadStep1Next">
+                        Next
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- ═══════════════════════════════════ Upload Resume — Step 2 (conflict resolution) ═════════════════ -->
+@if (_uploadStep == 2)
+{
+    <div class="modal d-block" tabindex="-1" role="dialog" aria-modal="true"
+         style="background:rgba(0,0,0,.45)">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Resume Already Exists</h5>
+                    <button type="button" class="btn-close" @onclick="CancelUpload" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p>
+                        A resume named <strong>@_uploadConflict?.Name</strong> already exists.
+                        What would you like to do?
+                    </p>
+                    <div class="d-grid gap-2">
+                        <button class="btn btn-outline-primary text-start"
+                                @onclick="UploadStep2NewVersion">
+                            <div class="fw-semibold">Create new version of "@_uploadConflict?.Name"</div>
+                            <div class="text-muted small">The existing versions are kept.</div>
+                        </button>
+                        <button class="btn btn-outline-secondary text-start"
+                                @onclick="UploadStep2NewResume">
+                            <div class="fw-semibold">Upload as a new resume</div>
+                            <div class="text-muted small">Will be saved as "@SuggestDeduplicatedName(_uploadName.Trim())"</div>
+                        </button>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CancelUpload">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- ═══════════════════════════════════ Upload Resume — Step 3 (notes) ══════════════════════════════ -->
+@if (_uploadStep == 3)
+{
+    <div class="modal d-block" tabindex="-1" role="dialog" aria-modal="true"
+         style="background:rgba(0,0,0,.45)">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        @(_uploadMakeNewVersion
+                            ? $"New Version of \"{_uploadConflict?.Name}\""
+                            : $"Upload \"{_uploadName.Trim()}\"")
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CancelUpload" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label fw-semibold">Notes <span class="fw-normal text-muted">(optional)</span></label>
+                    <textarea class="form-control" rows="3" @bind="_uploadNotes"
+                              placeholder="e.g. Updated work experience section"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CancelUpload">Cancel</button>
+                    <button class="btn btn-primary" @onclick="UploadConfirmAsync">Upload</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- ═══════════════════════════════════ Upload New Version modal ═════════════════════════════════════ -->
+@if (_versionUploadFor is not null)
+{
+    <div class="modal d-block" tabindex="-1" role="dialog" aria-modal="true"
+         style="background:rgba(0,0,0,.45)">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Upload New Version — @_versionUploadFor.Name</h5>
+                    <button type="button" class="btn-close" @onclick="CancelVersionUpload" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">File</label>
+                        <div class="d-flex align-items-center gap-2">
+                            <InputFile id="upload-version-input" OnChange="HandleVersionFileSelected"
+                                       accept=".docx" style="display:none" />
+                            <button class="btn btn-outline-secondary" type="button"
+                                    @onclick="TriggerVersionFileInput">
+                                Select .docx file
+                            </button>
+                            @if (!string.IsNullOrEmpty(_versionUploadFileName))
+                            {
+                                <span class="text-muted small">@_versionUploadFileName</span>
+                            }
+                        </div>
+                    </div>
+                    <div>
+                        <label class="form-label fw-semibold">Notes <span class="fw-normal text-muted">(optional)</span></label>
+                        <textarea class="form-control" rows="3" @bind="_versionUploadNotes"
+                                  placeholder="e.g. Updated skills section"></textarea>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CancelVersionUpload">Cancel</button>
+                    <button class="btn btn-primary"
+                            disabled="@(_versionUploadBytes is null)"
+                            @onclick="ConfirmVersionUploadAsync">
+                        Upload Version
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- ═══════════════════════════════════ Rename modal ═════════════════════════════════════════════════ -->
+@if (_renameTarget is not null)
+{
+    var renameConflict = _resumes.Any(r =>
+        r.Id != _renameTarget.Id &&
+        r.Name.Equals(_renameName.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    <div class="modal d-block" tabindex="-1" role="dialog" aria-modal="true"
+         style="background:rgba(0,0,0,.45)">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Rename Resume</h5>
+                    <button type="button" class="btn-close" @onclick="CancelRename" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <label class="form-label fw-semibold">New name</label>
+                    <input class="form-control @(renameConflict ? "is-invalid" : "")"
+                           @bind="_renameName" @bind:event="oninput"
+                           maxlength="200" placeholder="Resume name" />
+                    @if (renameConflict)
+                    {
+                        <div class="invalid-feedback">A resume with this name already exists.</div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CancelRename">Cancel</button>
+                    <button class="btn btn-primary"
+                            disabled="@(string.IsNullOrWhiteSpace(_renameName) || renameConflict)"
+                            @onclick="ConfirmRenameAsync">
+                        Rename
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- ═══════════════════════════════════ Delete confirmation modal ════════════════════════════════════ -->
+<ConfirmDeleteModal Show="_deleteTarget is not null"
+                    Title="Delete Resume"
+                    Message="@($"Permanently delete \"{_deleteTarget?.Name}\" and all its versions? This cannot be undone. Sessions that referenced this resume will still appear in History.")"
+                    OnConfirm="ConfirmDeleteAsync"
+                    OnCancel="() => _deleteTarget = null" />
+
+<!-- ═══════════════════════════════════ Restore modal ════════════════════════════════════════════════ -->
+@if (_restoreVersion is not null)
+{
+    <div class="modal d-block" tabindex="-1" role="dialog" aria-modal="true"
+         style="background:rgba(0,0,0,.45)">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Restore Version @_restoreVersion.VersionNumber</h5>
+                    <button type="button" class="btn-close" @onclick="CancelRestore" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">
+                        This will create a new version with the content from Version @_restoreVersion.VersionNumber
+                        (@_restoreVersion.UploadedAt.ToLocalTime().ToString("g")).
+                        All existing versions are kept.
+                    </p>
+                    <label class="form-label fw-semibold">Notes <span class="fw-normal text-muted">(optional)</span></label>
+                    <textarea class="form-control" rows="2" @bind="_restoreNotes"></textarea>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CancelRestore">Cancel</button>
+                    <button class="btn btn-primary" @onclick="ConfirmRestoreAsync">Restore</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- ═══════════════════════════════════ Compare to Latest modal ══════════════════════════════════════ -->
+<ResumeDiffModal Show="_showCompare"
+                 OriginalText="@_compareOriginalText"
+                 ModifiedText="@_compareModifiedText"
+                 OnClose="() => _showCompare = false" />
+
+@code {
+    // ── Data ─────────────────────────────────────────────────────────────────
+    List<BaseResume> _resumes = new();
+    Dictionary<string, List<BaseResumeVersion>> _versionsByResume = new();
+    bool _loading = true;
+    string? _error;
+    string? _expandedResumeId;
+
+    // ── Upload Resume flow (M2-4) ─────────────────────────────────────────────
+    int    _uploadStep;           // 0=idle 1=name 2=conflict 3=notes
+    byte[]? _uploadBytes;
+    string  _uploadFileName = "";
+    string  _uploadName     = "";
+    BaseResume? _uploadConflict;
+    bool    _uploadMakeNewVersion;
+    string  _uploadNotes = "";
+
+    // ── Upload New Version (M2-5) ─────────────────────────────────────────────
+    BaseResume? _versionUploadFor;
+    byte[]?     _versionUploadBytes;
+    string      _versionUploadFileName = "";
+    string      _versionUploadNotes    = "";
+
+    // ── Rename (M2-6) ─────────────────────────────────────────────────────────
+    BaseResume? _renameTarget;
+    string      _renameName = "";
+
+    // ── Delete (M2-6) ─────────────────────────────────────────────────────────
+    BaseResume? _deleteTarget;
+
+    // ── Restore (M2-7) ────────────────────────────────────────────────────────
+    BaseResumeVersion? _restoreVersion;
+    BaseResume?        _restoreResume;
+    string             _restoreNotes = "";
+
+    // ── Compare (M2-7) ────────────────────────────────────────────────────────
+    bool   _showCompare;
+    string _compareOriginalText = "";
+    string _compareModifiedText = "";
+
+    // ── Navigation guard ─────────────────────────────────────────────────────
+    protected override bool IsDirty =>
+        _uploadStep > 0 || _versionUploadFor is not null ||
+        _renameTarget is not null || _restoreVersion is not null;
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+    protected override async Task OnInitializedAsync()
+    {
+        DataSync.OnBaseResumeChanged        += OnBaseResumeChanged;
+        DataSync.OnBaseResumeVersionChanged += OnBaseResumeVersionChanged;
+        await LoadAsync();
+        _loading = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        await JS.InvokeVoidAsync("eval",
+            "document.querySelectorAll('[data-bs-toggle=\"popover\"]')" +
+            ".forEach(el => bootstrap.Popover.getOrCreateInstance(el));");
+    }
+
+    public void Dispose()
+    {
+        DataSync.OnBaseResumeChanged        -= OnBaseResumeChanged;
+        DataSync.OnBaseResumeVersionChanged -= OnBaseResumeVersionChanged;
+    }
+
+    // ── Data loading ──────────────────────────────────────────────────────────
+    private async Task LoadAsync()
+    {
+        _resumes = (await Db.GetAllBaseResumesAsync())
+            .OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        _versionsByResume.Clear();
+        foreach (var r in _resumes)
+        {
+            _versionsByResume[r.Id] = (await Db.GetVersionsByResumeAsync(r.Id))
+                .OrderByDescending(v => v.VersionNumber)
+                .ToList();
+        }
+    }
+
+    private List<BaseResumeVersion> Versions(string resumeId)
+        => _versionsByResume.TryGetValue(resumeId, out var v) ? v : new();
+
+    private BaseResumeVersion? LatestVersion(string resumeId)
+        => Versions(resumeId).FirstOrDefault();
+
+    // ── Expand / collapse ─────────────────────────────────────────────────────
+    void ToggleExpand(string resumeId)
+        => _expandedResumeId = _expandedResumeId == resumeId ? null : resumeId;
+
+    // ── Upload Resume flow (M2-4) ─────────────────────────────────────────────
+    Task TriggerUploadResumeInput()
+        => JS.InvokeVoidAsync("eval",
+               "document.getElementById('upload-resume-input').click()").AsTask();
+
+    async Task HandleUploadFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (!file.Name.EndsWith(".docx", StringComparison.OrdinalIgnoreCase))
+        {
+            _error = "Please select a .docx file.";
+            return;
+        }
+        using var ms = new MemoryStream();
+        await file.OpenReadStream(10 * 1024 * 1024).CopyToAsync(ms);
+        _uploadBytes   = ms.ToArray();
+        _uploadFileName = file.Name;
+        _uploadName    = Path.GetFileNameWithoutExtension(file.Name);
+        _uploadStep    = 1;
+    }
+
+    void UploadStep1Next()
+    {
+        var conflict = _resumes.FirstOrDefault(r =>
+            r.Name.Equals(_uploadName.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        if (conflict is not null)
+        {
+            _uploadConflict = conflict;
+            _uploadStep     = 2;
+        }
+        else
+        {
+            _uploadMakeNewVersion = false;
+            _uploadConflict       = null;
+            _uploadStep           = 3;
+        }
+    }
+
+    void UploadStep2NewVersion()
+    {
+        _uploadMakeNewVersion = true;
+        _uploadStep           = 3;
+    }
+
+    void UploadStep2NewResume()
+    {
+        _uploadMakeNewVersion = false;
+        _uploadName           = SuggestDeduplicatedName(_uploadName.Trim());
+        _uploadConflict       = null;
+        _uploadStep           = 3;
+    }
+
+    string SuggestDeduplicatedName(string baseName)
+    {
+        int index = 2;
+        string candidate = $"{baseName} ({index})";
+        while (_resumes.Any(r => r.Name.Equals(candidate, StringComparison.OrdinalIgnoreCase)))
+            candidate = $"{baseName} ({++index})";
+        return candidate;
+    }
+
+    async Task UploadConfirmAsync()
+    {
+        if (_uploadBytes is null) return;
+        try
+        {
+            if (_uploadMakeNewVersion && _uploadConflict is not null)
+            {
+                var existing  = Versions(_uploadConflict.Id);
+                var nextNum   = existing.Count > 0 ? existing.Max(v => v.VersionNumber) + 1 : 1;
+                var newVersion = new BaseResumeVersion
+                {
+                    ResumeId       = _uploadConflict.Id,
+                    VersionNumber  = nextNum,
+                    FileDataBase64 = Convert.ToBase64String(_uploadBytes),
+                    FileName       = _uploadFileName,
+                    Notes          = NullIfEmpty(_uploadNotes),
+                    UploadedAt     = DateTime.UtcNow,
+                };
+                await Db.SaveBaseResumeVersionAsync(newVersion);
+                _uploadConflict.UpdatedAt = DateTime.UtcNow;
+                await Db.SaveBaseResumeAsync(_uploadConflict);
+                await DataSync.BroadcastAsync("baseResumeVersion", newVersion.Id, "created");
+                await DataSync.BroadcastAsync("baseResume", _uploadConflict.Id, "updated");
+            }
+            else
+            {
+                var newResume = new BaseResume { Name = _uploadName.Trim() };
+                var newVersion = new BaseResumeVersion
+                {
+                    ResumeId       = newResume.Id,
+                    VersionNumber  = 1,
+                    FileDataBase64 = Convert.ToBase64String(_uploadBytes),
+                    FileName       = _uploadFileName,
+                    Notes          = NullIfEmpty(_uploadNotes),
+                    UploadedAt     = DateTime.UtcNow,
+                };
+                await Db.SaveBaseResumeAsync(newResume);
+                await Db.SaveBaseResumeVersionAsync(newVersion);
+                await DataSync.BroadcastAsync("baseResume", newResume.Id, "created");
+                await DataSync.BroadcastAsync("baseResumeVersion", newVersion.Id, "created");
+            }
+            await LoadAsync();
+            CancelUpload();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+    }
+
+    void CancelUpload()
+    {
+        _uploadStep    = 0;
+        _uploadBytes   = null;
+        _uploadFileName = "";
+        _uploadName    = "";
+        _uploadConflict = null;
+        _uploadNotes   = "";
+    }
+
+    // ── Upload New Version (M2-5) ─────────────────────────────────────────────
+    void StartVersionUpload(BaseResume resume)
+    {
+        _versionUploadFor      = resume;
+        _versionUploadBytes    = null;
+        _versionUploadFileName = "";
+        _versionUploadNotes    = "";
+    }
+
+    Task TriggerVersionFileInput()
+        => JS.InvokeVoidAsync("eval",
+               "document.getElementById('upload-version-input').click()").AsTask();
+
+    async Task HandleVersionFileSelected(InputFileChangeEventArgs e)
+    {
+        var file = e.File;
+        if (!file.Name.EndsWith(".docx", StringComparison.OrdinalIgnoreCase)) return;
+        using var ms = new MemoryStream();
+        await file.OpenReadStream(10 * 1024 * 1024).CopyToAsync(ms);
+        _versionUploadBytes    = ms.ToArray();
+        _versionUploadFileName = file.Name;
+    }
+
+    async Task ConfirmVersionUploadAsync()
+    {
+        if (_versionUploadFor is null || _versionUploadBytes is null) return;
+        try
+        {
+            var existing = Versions(_versionUploadFor.Id);
+            var nextNum  = existing.Count > 0 ? existing.Max(v => v.VersionNumber) + 1 : 1;
+            var newVersion = new BaseResumeVersion
+            {
+                ResumeId       = _versionUploadFor.Id,
+                VersionNumber  = nextNum,
+                FileDataBase64 = Convert.ToBase64String(_versionUploadBytes),
+                FileName       = _versionUploadFileName,
+                Notes          = NullIfEmpty(_versionUploadNotes),
+                UploadedAt     = DateTime.UtcNow,
+            };
+            await Db.SaveBaseResumeVersionAsync(newVersion);
+            _versionUploadFor.UpdatedAt = DateTime.UtcNow;
+            await Db.SaveBaseResumeAsync(_versionUploadFor);
+            await DataSync.BroadcastAsync("baseResumeVersion", newVersion.Id, "created");
+            await DataSync.BroadcastAsync("baseResume", _versionUploadFor.Id, "updated");
+            await LoadAsync();
+            CancelVersionUpload();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+    }
+
+    void CancelVersionUpload()
+    {
+        _versionUploadFor      = null;
+        _versionUploadBytes    = null;
+        _versionUploadFileName = "";
+        _versionUploadNotes    = "";
+    }
+
+    // ── Download (M2-6, M2-7) ─────────────────────────────────────────────────
+    async Task DownloadLatestAsync(BaseResume resume)
+    {
+        var latest = LatestVersion(resume.Id);
+        if (latest is null) return;
+        await DownloadVersionAsync(latest);
+    }
+
+    async Task DownloadVersionAsync(BaseResumeVersion version)
+    {
+        try
+        {
+            await Db.DownloadFileAsync(version.FileName,
+                Convert.FromBase64String(version.FileDataBase64));
+        }
+        catch (Exception ex) { _error = ex.Message; }
+    }
+
+    // ── Rename (M2-6) ─────────────────────────────────────────────────────────
+    void StartRename(BaseResume resume)
+    {
+        _renameTarget = resume;
+        _renameName   = resume.Name;
+    }
+
+    async Task ConfirmRenameAsync()
+    {
+        if (_renameTarget is null || string.IsNullOrWhiteSpace(_renameName)) return;
+        var newName = _renameName.Trim();
+        var conflict = _resumes.Any(r =>
+            r.Id != _renameTarget.Id &&
+            r.Name.Equals(newName, StringComparison.OrdinalIgnoreCase));
+        if (conflict) return;
+
+        try
+        {
+            _renameTarget.Name      = newName;
+            _renameTarget.UpdatedAt = DateTime.UtcNow;
+            await Db.SaveBaseResumeAsync(_renameTarget);
+            await DataSync.BroadcastAsync("baseResume", _renameTarget.Id, "updated");
+            await LoadAsync();
+            CancelRename();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+    }
+
+    void CancelRename()
+    {
+        _renameTarget = null;
+        _renameName   = "";
+    }
+
+    // ── Delete (M2-6) ─────────────────────────────────────────────────────────
+    async Task ConfirmDeleteAsync()
+    {
+        if (_deleteTarget is null) return;
+        var id = _deleteTarget.Id;
+        try
+        {
+            await Db.DeleteVersionsByResumeAsync(id);
+            await Db.DeleteBaseResumeAsync(id);
+            await DataSync.BroadcastAsync("baseResume", id, "deleted");
+            if (_expandedResumeId == id) _expandedResumeId = null;
+            await LoadAsync();
+            _deleteTarget = null;
+        }
+        catch (Exception ex) { _error = ex.Message; }
+    }
+
+    // ── Restore (M2-7) ────────────────────────────────────────────────────────
+    void StartRestore(BaseResume resume, BaseResumeVersion version)
+    {
+        _restoreResume  = resume;
+        _restoreVersion = version;
+        _restoreNotes   = $"Restored from {version.UploadedAt.ToLocalTime():yyyy-MM-dd HH:mm}";
+    }
+
+    async Task ConfirmRestoreAsync()
+    {
+        if (_restoreResume is null || _restoreVersion is null) return;
+        try
+        {
+            var existing = Versions(_restoreResume.Id);
+            var nextNum  = existing.Count > 0 ? existing.Max(v => v.VersionNumber) + 1 : 1;
+            var newVersion = new BaseResumeVersion
+            {
+                ResumeId       = _restoreResume.Id,
+                VersionNumber  = nextNum,
+                FileDataBase64 = _restoreVersion.FileDataBase64,
+                FileName       = _restoreVersion.FileName,
+                Notes          = NullIfEmpty(_restoreNotes),
+                UploadedAt     = DateTime.UtcNow,
+            };
+            await Db.SaveBaseResumeVersionAsync(newVersion);
+            _restoreResume.UpdatedAt = DateTime.UtcNow;
+            await Db.SaveBaseResumeAsync(_restoreResume);
+            await DataSync.BroadcastAsync("baseResumeVersion", newVersion.Id, "created");
+            await DataSync.BroadcastAsync("baseResume", _restoreResume.Id, "updated");
+            await LoadAsync();
+            CancelRestore();
+        }
+        catch (Exception ex) { _error = ex.Message; }
+    }
+
+    void CancelRestore()
+    {
+        _restoreResume  = null;
+        _restoreVersion = null;
+        _restoreNotes   = "";
+    }
+
+    // ── Compare to Latest (M2-7) ──────────────────────────────────────────────
+    async Task StartCompareAsync(BaseResume resume, BaseResumeVersion priorVersion)
+    {
+        var latest = LatestVersion(resume.Id);
+        if (latest is null) return;
+        try
+        {
+            _compareOriginalText = Docx.ExtractTextAsMarkdown(
+                Convert.FromBase64String(priorVersion.FileDataBase64));
+            _compareModifiedText = Docx.ExtractTextAsMarkdown(
+                Convert.FromBase64String(latest.FileDataBase64));
+            _showCompare = true;
+        }
+        catch (Exception ex) { _error = ex.Message; }
+    }
+
+    // ── BroadcastChannel live updates (M2-8) ─────────────────────────────────
+    private async void OnBaseResumeChanged(string? id, string evt)
+    {
+        try { await InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); }); }
+        catch { }
+    }
+
+    private async void OnBaseResumeVersionChanged(string? id, string evt)
+    {
+        try { await InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); }); }
+        catch { }
+    }
+
+    // ── Utilities ─────────────────────────────────────────────────────────────
+    private static string? NullIfEmpty(string s)
+        => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
+}

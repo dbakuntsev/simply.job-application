@@ -39,26 +39,16 @@ public class DocxService : IDocxService
         return pages is not null && int.TryParse(pages.Value, out var n) && n > 0 ? n : null;
     }
 
-    // Extracts document text as plain Markdown (headings, bold, lists) without
-    // the resume-specific title/subtitle heuristics used by ExtractMarkdown.
+    // Extracts document text as plain Markdown (headings, bold, italic, lists, hyperlinks)
+    // without the resume-specific title/subtitle heuristics used by ExtractMarkdown.
     public string ExtractTextAsMarkdown(byte[] docxBytes)
     {
+        if (docxBytes is null || docxBytes.Length == 0)
+            throw new ArgumentException("DOCX bytes cannot be null or empty.", nameof(docxBytes));
+
         using var zip = new ZipArchive(new MemoryStream(docxBytes), ZipArchiveMode.Read);
-        var hyperlinkUrls = new Dictionary<string, string>();
-        var relsEntry = zip.GetEntry("word/_rels/document.xml.rels");
-        if (relsEntry != null)
-        {
-            using var rs = relsEntry.Open();
-            foreach (var rel in XDocument.Load(rs).Descendants(Rels + "Relationship"))
-            {
-                if ((rel.Attribute("Type")?.Value ?? "").EndsWith("/hyperlink"))
-                {
-                    var id  = rel.Attribute("Id")?.Value     ?? "";
-                    var url = rel.Attribute("Target")?.Value ?? "";
-                    if (!string.IsNullOrEmpty(id)) hyperlinkUrls[id] = url;
-                }
-            }
-        }
+        var hyperlinkUrls = LoadHyperlinkUrls(zip);
+        var numbering     = LoadNumbering(zip);
 
         var docEntry = zip.GetEntry("word/document.xml")
                        ?? throw new InvalidOperationException("Not a valid DOCX file.");
@@ -66,19 +56,35 @@ public class DocxService : IDocxService
         var body = XDocument.Load(stream).Descendants(W + "body").FirstOrDefault()
                    ?? throw new InvalidOperationException("word/document.xml has no <w:body>.");
 
-        var sb = new StringBuilder();
+        var sb    = new StringBuilder();
         bool first = true;
         foreach (var para in body.Elements(W + "p"))
         {
-            var pStyle = para.Element(W + "pPr")?.Element(W + "pStyle")?.Attribute(W + "val")?.Value ?? "";
-            string prefix = pStyle switch
+            var pPr    = para.Element(W + "pPr");
+            var pStyle = pPr?.Element(W + "pStyle")?.Attribute(W + "val")?.Value ?? "";
+            var numPr  = pPr?.Element(W + "numPr");
+
+            string prefix;
+            if (numPr != null)
             {
-                "Heading1"              => "# ",
-                "Heading2"              => "## ",
-                "Heading3" or "Heading4" => "### ",
-                _                       => ""
-            };
-            var inline = BuildInlineMarkdown(para, hyperlinkUrls);
+                var numId  = numPr.Element(W + "numId")?.Attribute(W + "val")?.Value ?? "";
+                var ilvl   = int.TryParse(numPr.Element(W + "ilvl")?.Attribute(W + "val")?.Value, out var il) ? il : 0;
+                var indent = new string(' ', ilvl * 2);
+                var isOrdered = numbering.TryGetValue((numId, ilvl), out var ord) && ord;
+                prefix = indent + (isOrdered ? "1. " : "- ");
+            }
+            else
+            {
+                prefix = pStyle switch
+                {
+                    "Heading1"               => "# ",
+                    "Heading2"               => "## ",
+                    "Heading3" or "Heading4" => "### ",
+                    _                        => ""
+                };
+            }
+
+            var inline = BuildInlineMarkdown(para, hyperlinkUrls, withItalic: true);
             if (string.IsNullOrWhiteSpace(inline)) { if (!first) sb.AppendLine(); continue; }
             if (!first) sb.AppendLine();
             sb.Append(prefix + inline);
@@ -155,7 +161,8 @@ public class DocxService : IDocxService
         return sb.ToString().Trim();
     }
 
-    private static string BuildInlineMarkdown(XElement para, Dictionary<string, string> hyperlinkUrls)
+    private static string BuildInlineMarkdown(XElement para, Dictionary<string, string> hyperlinkUrls,
+        bool withItalic = false)
     {
         var sb = new StringBuilder();
         foreach (var child in para.Elements())
@@ -164,12 +171,17 @@ public class DocxService : IDocxService
             {
                 var rPr    = child.Element(W + "rPr");
                 var rStyle = rPr?.Element(W + "rStyle")?.Attribute(W + "val")?.Value ?? "";
-                var isBold = rPr?.Element(W + "b") != null;
+                var isBold   = rPr?.Element(W + "b") != null;
+                var isItalic = withItalic && rPr?.Element(W + "i") != null;
                 var text   = string.Concat(child.Elements(W + "t").Select(t => t.Value));
                 if (string.IsNullOrEmpty(text)) continue;
 
-                if (rStyle == "Emphasis" || isBold)
+                if ((rStyle == "Emphasis" || isBold) && isItalic)
+                    sb.Append($"***{text}***");
+                else if (rStyle == "Emphasis" || isBold)
                     sb.Append($"**{text}**");
+                else if (isItalic)
+                    sb.Append($"*{text}*");
                 else
                     sb.Append(text);
             }
@@ -184,6 +196,59 @@ public class DocxService : IDocxService
             }
         }
         return sb.ToString();
+    }
+
+    private static Dictionary<string, string> LoadHyperlinkUrls(ZipArchive zip)
+    {
+        var result = new Dictionary<string, string>();
+        var entry = zip.GetEntry("word/_rels/document.xml.rels");
+        if (entry is null) return result;
+        using var rs = entry.Open();
+        foreach (var rel in XDocument.Load(rs).Descendants(Rels + "Relationship"))
+        {
+            if ((rel.Attribute("Type")?.Value ?? "").EndsWith("/hyperlink"))
+            {
+                var id  = rel.Attribute("Id")?.Value     ?? "";
+                var url = rel.Attribute("Target")?.Value ?? "";
+                if (!string.IsNullOrEmpty(id)) result[id] = url;
+            }
+        }
+        return result;
+    }
+
+    // Parses word/numbering.xml and returns a map of (numId, ilvl) → isOrdered.
+    // isOrdered=true for decimal/letter formats; false for bullet.
+    private static Dictionary<(string, int), bool> LoadNumbering(ZipArchive zip)
+    {
+        var result = new Dictionary<(string, int), bool>();
+        var entry = zip.GetEntry("word/numbering.xml");
+        if (entry is null) return result;
+        using var s = entry.Open();
+        var doc = XDocument.Load(s);
+
+        var abstractNums = new Dictionary<string, Dictionary<int, bool>>();
+        foreach (var an in doc.Descendants(W + "abstractNum"))
+        {
+            var anId = an.Attribute(W + "abstractNumId")?.Value ?? "";
+            var levels = new Dictionary<int, bool>();
+            foreach (var lvl in an.Elements(W + "lvl"))
+            {
+                if (!int.TryParse(lvl.Attribute(W + "ilvl")?.Value, out var il)) continue;
+                var fmt = lvl.Element(W + "numFmt")?.Attribute(W + "val")?.Value ?? "";
+                levels[il] = fmt != "bullet";
+            }
+            abstractNums[anId] = levels;
+        }
+
+        foreach (var num in doc.Descendants(W + "num"))
+        {
+            var numId    = num.Attribute(W + "numId")?.Value ?? "";
+            var abstractId = num.Element(W + "abstractNumId")?.Attribute(W + "val")?.Value ?? "";
+            if (!abstractNums.TryGetValue(abstractId, out var levels)) continue;
+            foreach (var (il, isOrdered) in levels)
+                result[(numId, il)] = isOrdered;
+        }
+        return result;
     }
 
     // ── Markdown → OOXML body fragment ────────────────────────────────────────
