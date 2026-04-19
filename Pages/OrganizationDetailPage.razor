@@ -1,0 +1,987 @@
+@page "/organizations/{Id}"
+@inherits NavigationGuardBase
+@inject IIndexedDbService Db
+@inject IDataSyncService DataSync
+@inject NavigationManager Nav
+@using System.Text
+
+<PageTitle>@(_org?.Name ?? "Organization") — Simply Job Application</PageTitle>
+
+<NavigationLock OnBeforeInternalNavigation="HandleLocationChanging" />
+<NavigationGuardModal Show="_showGuardModal" StayLabel="@StayLabel" LeaveLabel="@LeaveLabel"
+                      OnStay="() => OnGuardStay()" OnLeave="() => OnGuardLeave()" />
+
+
+<ConflictAlertModal Show="_showConflictAlert"
+                    Message="@_conflictMessage"
+                    OnDiscardAndReload="HandleConflictDiscardAndReload"
+                    OnKeepEditing="HandleConflictKeepEditing" />
+
+<DeletionAlertModal Show="_showDeletionAlert"
+                    Message="@_deletionMessage"
+                    OnDismiss="HandleDeletionDismiss" />
+
+@if (_loading)
+{
+    <div class="text-center py-5"><div class="spinner-border" role="status"></div></div>
+}
+else if (_org is null)
+{
+    <div class="alert alert-warning">Organization not found.</div>
+}
+else
+{
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/organizations">Organizations</a></li>
+            <li class="breadcrumb-item active">@_org.Name</li>
+        </ol>
+    </nav>
+
+    <h4 class="mb-4">@(_isEditing ? _editOrg.Name : _org.Name)</h4>
+
+    @* ── Details card ──────────────────────────────────────────────────────────── *@
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Details</h5>
+            @if (!_isEditing)
+            {
+                <button class="btn btn-sm btn-outline-secondary" @onclick="StartEdit">Edit</button>
+            }
+            else
+            {
+                <div class="d-flex gap-2">
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="CancelEdit">Cancel</button>
+                    <button class="btn btn-sm btn-primary" @onclick="SaveOrgAsync"
+                            disabled="@(!CanSaveOrg || _savingOrg)">
+                        @(_savingOrg ? "Saving…" : "Save")
+                    </button>
+                </div>
+            }
+        </div>
+        <div class="card-body">
+            @if (!_isEditing)
+            {
+                <dl class="row mb-0">
+                    <dt class="col-sm-3">Industry</dt>
+                    <dd class="col-sm-9">@(string.IsNullOrWhiteSpace(_org.Industry) ? "—" : _org.Industry)</dd>
+                    <dt class="col-sm-3">Size</dt>
+                    <dd class="col-sm-9">@(string.IsNullOrWhiteSpace(_org.Size) ? "—" : _org.Size)</dd>
+                    <dt class="col-sm-3">Website</dt>
+                    <dd class="col-sm-9">
+                        @if (!string.IsNullOrWhiteSpace(_org.Website))
+                        {
+                            <a href="@_org.Website" target="_blank" rel="noopener noreferrer">@_org.Website</a>
+                        }
+                        else { <span>—</span> }
+                    </dd>
+                    <dt class="col-sm-3">LinkedIn</dt>
+                    <dd class="col-sm-9">
+                        @if (!string.IsNullOrWhiteSpace(_org.LinkedIn))
+                        {
+                            <a href="@_org.LinkedIn" target="_blank" rel="noopener noreferrer">@_org.LinkedIn</a>
+                        }
+                        else { <span>—</span> }
+                    </dd>
+                    <dt class="col-sm-3">Description</dt>
+                    <dd class="col-sm-9">@(string.IsNullOrWhiteSpace(_org.Description) ? "—" : _org.Description)</dd>
+                    <dt class="col-sm-3 text-muted small">Created</dt>
+                    <dd class="col-sm-9 text-muted small">@_org.CreatedAt.ToLocalTime().ToString("g")</dd>
+                    <dt class="col-sm-3 text-muted small">Updated</dt>
+                    <dd class="col-sm-9 text-muted small">@_org.UpdatedAt.ToLocalTime().ToString("g")</dd>
+                </dl>
+            }
+            else
+            {
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Name <span class="text-danger">*</span></label>
+                        <input class="form-control @(_editNameError is not null ? "is-invalid" : "")"
+                               value="@_editOrg.Name"
+                               @oninput="HandleEditNameInput" />
+                        @if (_editNameError is not null)
+                        {
+                            <div class="invalid-feedback">@_editNameError</div>
+                        }
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Industry</label>
+                        <select class="form-select" @bind="_editOrg.Industry">
+                            <option value="">— Select industry —</option>
+                            @foreach (var ind in _industries)
+                            {
+                                <option value="@ind.Value">@ind.Value</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Size</label>
+                        <input class="form-control" @bind="_editOrg.Size" placeholder="e.g. 500–1000" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Website</label>
+                        <input class="form-control" @bind="_editOrg.Website" placeholder="https://" />
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">LinkedIn</label>
+                        <input class="form-control" @bind="_editOrg.LinkedIn"
+                               placeholder="https://linkedin.com/company/..." />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Description</label>
+                        <textarea class="form-control" rows="3" @bind="_editOrg.Description"></textarea>
+                    </div>
+                </div>
+                @if (_orgSaveError is not null)
+                {
+                    <div class="alert alert-danger mt-3 mb-0">@_orgSaveError</div>
+                }
+            }
+        </div>
+    </div>
+
+    @* ── Contacts card ─────────────────────────────────────────────────────────── *@
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Contacts</h5>
+            @if (!_isEditing)
+            {
+                <button class="btn btn-sm btn-outline-primary" @onclick="OpenAddContactModal">
+                    + Add Contact
+                </button>
+            }
+        </div>
+        <div class="card-body p-0">
+            @if (_contacts.Count == 0)
+            {
+                <div class="px-3 py-3 text-muted">No contacts yet — add one to get started.</div>
+            }
+            else
+            {
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="ps-3">Name</th>
+                            <th>Title</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th style="width:1%"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var contact in _contacts)
+                        {
+                            <tr style="@RowCursorStyle" @onclick="() => TryEditContact(contact)">
+                                <td class="ps-3 fw-semibold">@contact.FullName</td>
+                                <td class="text-muted small">
+                                    @(string.IsNullOrWhiteSpace(contact.Title) ? "—" : contact.Title)
+                                </td>
+                                <td class="text-muted small">
+                                    @(string.IsNullOrWhiteSpace(contact.Email) ? "—" : contact.Email)
+                                </td>
+                                <td class="text-muted small">
+                                    @(string.IsNullOrWhiteSpace(contact.Phone) ? "—" : contact.Phone)
+                                </td>
+                                <td class="pe-2" @onclick:stopPropagation>
+                                    @if (!_isEditing)
+                                    {
+                                        <button class="btn btn-sm btn-outline-danger"
+                                                title="Delete @contact.FullName"
+                                                @onclick="() => _deleteContactTarget = contact">
+                                            @TrashIcon
+                                        </button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+
+    @* ── Opportunities card ────────────────────────────────────────────────────── *@
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Opportunities</h5>
+            @if (!_isEditing)
+            {
+                <a href="/organizations/@Id/opportunities/new" class="btn btn-sm btn-outline-primary">
+                    + Add Opportunity
+                </a>
+            }
+        </div>
+        <div class="card-body p-0">
+            @if (_opportunities.Count == 0)
+            {
+                <div class="px-3 py-3 text-muted">No opportunities yet — add one to get started.</div>
+            }
+            else
+            {
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="ps-3">Role</th>
+                            <th>Stage</th>
+                            <th>Work Arrangement</th>
+                            <th>Compensation</th>
+                            <th style="width:120px">Created</th>
+                            <th style="width:1%"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var opp in _opportunities)
+                        {
+                            <tr style="@RowCursorStyle" @onclick="() => TryNavigateToOpp(opp.Id)">
+                                <td class="ps-3 fw-semibold">@opp.Role</td>
+                                <td><span class="badge bg-secondary">@opp.Stage</span></td>
+                                <td class="text-muted small">@(opp.WorkArrangement?.ToString() ?? "—")</td>
+                                <td class="text-muted small">
+                                    @(string.IsNullOrWhiteSpace(opp.CompensationRange) ? "—" : opp.CompensationRange)
+                                </td>
+                                <td class="text-muted small">@opp.CreatedAt.ToLocalTime().ToString("d")</td>
+                                <td class="pe-2" @onclick:stopPropagation>
+                                    @if (!_isEditing)
+                                    {
+                                        <button class="btn btn-sm btn-outline-danger"
+                                                title="Delete @opp.Role"
+                                                @onclick="() => _deleteOppTarget = opp">
+                                            @TrashIcon
+                                        </button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+
+    @* ── E&G Sessions card ─────────────────────────────────────────────────────── *@
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">E&amp;G Sessions</h5>
+        </div>
+        <div class="card-body p-0">
+            @if (_sessions.Count == 0)
+            {
+                <div class="px-3 py-3 text-muted">No E&amp;G sessions yet.</div>
+            }
+            else
+            {
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="ps-3">Date / Time</th>
+                            <th>Opportunity</th>
+                            <th>Resume</th>
+                            <th class="text-center" style="width:100px">Match Score</th>
+                            <th class="text-center" style="width:80px">Artifacts</th>
+                            <th class="text-center" style="width:90px">Field Match</th>
+                            <th style="width:1%"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var session in _sessions)
+                        {
+                            <tr style="@RowCursorStyle"
+                                @onclick="() => TryNavigateToSession(session.Id)">
+                                <td class="ps-3 small text-muted">
+                                    @session.CreatedAt.ToLocalTime().ToString("g")
+                                </td>
+                                <td>
+                                    @if (session.OpportunityId is not null)
+                                    {
+                                        var opp = _opportunities.FirstOrDefault(o => o.Id == session.OpportunityId);
+                                        var role = opp?.Role ?? session.OpportunityRoleSnapshot;
+                                        @if (!_isEditing)
+                                        {
+                                            <a href="/opportunities/@session.OpportunityId"
+                                               @onclick:stopPropagation>@role</a>
+                                        }
+                                        else
+                                        {
+                                            <span>@role</span>
+                                        }
+                                    }
+                                </td>
+                                <td class="small text-muted">@GetResumeDisplay(session)</td>
+                                <td class="text-center small">
+                                    @(string.IsNullOrWhiteSpace(session.MatchScore) ? "—" : session.MatchScore)
+                                </td>
+                                <td class="text-center">
+                                    @if (session.ArtifactsGenerated) { @CheckIcon }
+                                </td>
+                                <td class="text-center">
+                                    @if (GetFieldMatch(session)) { @CheckIcon }
+                                </td>
+                                <td class="pe-2" @onclick:stopPropagation>
+                                    @if (!_isEditing)
+                                    {
+                                        <button class="btn btn-sm btn-outline-danger"
+                                                title="Delete session"
+                                                @onclick="() => _deleteSessionTarget = session">
+                                            @TrashIcon
+                                        </button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+}
+
+@* ── Contact Add/Edit modal ──────────────────────────────────────────────────── *@
+@if (_showContactModal)
+{
+    <div class="modal d-block" tabindex="-1" role="dialog" aria-modal="true"
+         style="background:rgba(0,0,0,.45)">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        @(_editingContact is null ? "Add Contact" : "Edit Contact")
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="CloseContactModal"></button>
+                </div>
+                <div class="modal-body">
+                    @if (_org is not null)
+                    {
+                        <div class="mb-3">
+                            <div class="form-label fw-semibold">Organization</div>
+                            <div class="text-muted">@_org.Name</div>
+                        </div>
+                    }
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">
+                            Full Name <span class="text-danger">*</span>
+                        </label>
+                        <input class="form-control" @bind="_contactDraft.FullName" @bind:event="oninput" />
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Title</label>
+                        <input class="form-control" @bind="_contactDraft.Title" />
+                    </div>
+                    <div class="row g-2 mb-3">
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Email</label>
+                            <input class="form-control" type="email" @bind="_contactDraft.Email" />
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label fw-semibold">Phone</label>
+                            <input class="form-control" @bind="_contactDraft.Phone" />
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">LinkedIn</label>
+                        <input class="form-control" @bind="_contactDraft.LinkedIn"
+                               placeholder="https://linkedin.com/in/..." />
+                    </div>
+                    <div class="mb-0">
+                        <label class="form-label fw-semibold">Notes</label>
+                        <textarea class="form-control" rows="2" @bind="_contactDraft.Notes"></textarea>
+                    </div>
+                    @if (_contactDuplicateWarning)
+                    {
+                        <div class="alert alert-warning mt-3 mb-0 small">
+                            Another contact with this name already exists in this organization.
+                        </div>
+                    }
+                    @if (_contactSaveError is not null)
+                    {
+                        <div class="alert alert-danger mt-3 mb-0 small">@_contactSaveError</div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-secondary" @onclick="CloseContactModal">Cancel</button>
+                    <button class="btn btn-primary" @onclick="SaveContactAsync"
+                            disabled="@(_savingContact || string.IsNullOrWhiteSpace(_contactDraft.FullName))">
+                        @(_savingContact ? "Saving…" : "Save")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* ── Delete confirmations ────────────────────────────────────────────────────── *@
+<ConfirmDeleteModal Show="_deleteContactTarget is not null"
+                   Title="Delete Contact"
+                   Message=@DeleteContactMessage
+                   DeleteLabel="Delete"
+                   OnConfirm="ConfirmDeleteContactAsync"
+                   OnCancel="() => _deleteContactTarget = null" />
+
+<ConfirmDeleteModal Show="_deleteOppTarget is not null"
+                   Title="Delete Opportunity"
+                   Message=@DeleteOppMessage
+                   DeleteLabel="Delete"
+                   OnConfirm="ConfirmDeleteOppAsync"
+                   OnCancel="() => _deleteOppTarget = null" />
+
+<ConfirmDeleteModal Show="_deleteSessionTarget is not null"
+                   Title="Delete Session"
+                   Message="Delete this session? Its generated files will also be deleted. This action cannot be undone."
+                   DeleteLabel="Delete"
+                   OnConfirm="ConfirmDeleteSessionAsync"
+                   OnCancel="() => _deleteSessionTarget = null" />
+
+@code {
+    [Parameter] public string Id { get; set; } = "";
+
+    // ── State ─────────────────────────────────────────────────────────────────
+
+    private Organization? _org;
+    private Organization _editOrg = new();
+    private bool _isEditing;
+    private bool _savingOrg;
+    private string? _editNameError;
+    private string? _orgSaveError;
+
+    private List<Contact> _contacts = new();
+    private List<Opportunity> _opportunities = new();
+    private List<SessionRecord> _sessions = new();
+    private List<BaseResume> _baseResumes = new();
+    private Dictionary<string, BaseResume?> _versionToResume = new();
+    private List<LookupValue> _industries = new();
+    private List<Organization> _allOrgs = new();
+    private bool _loading = true;
+
+    // Contact modal
+    private bool _showContactModal;
+    private Contact? _editingContact;
+    private Contact _contactDraft = new();
+    private bool _contactDuplicateWarning;
+    private string? _contactSaveError;
+    private bool _savingContact;
+
+    // Delete targets
+    private Contact? _deleteContactTarget;
+    private Opportunity? _deleteOppTarget;
+    private SessionRecord? _deleteSessionTarget;
+
+    // Conflict / deletion alerts
+    private bool _showConflictAlert;
+    private string _conflictMessage = "";
+    private bool _showDeletionAlert;
+    private string _deletionMessage = "";
+    private string _pendingNavigation = "/organizations";
+
+    private string? _currentId;
+
+    // ── IsDirty ───────────────────────────────────────────────────────────────
+
+    private bool EditModeDirty => _isEditing && _org is not null && (
+        _editOrg.Name != _org.Name ||
+        _editOrg.Description != _org.Description ||
+        _editOrg.Industry != _org.Industry ||
+        _editOrg.Size != _org.Size ||
+        _editOrg.Website != _org.Website ||
+        _editOrg.LinkedIn != _org.LinkedIn);
+
+    private bool ContactModalDirty
+    {
+        get
+        {
+            if (!_showContactModal) return false;
+            if (_editingContact is null)
+                return !string.IsNullOrEmpty(_contactDraft.FullName) ||
+                       !string.IsNullOrEmpty(_contactDraft.Title) ||
+                       !string.IsNullOrEmpty(_contactDraft.Email) ||
+                       !string.IsNullOrEmpty(_contactDraft.Phone) ||
+                       !string.IsNullOrEmpty(_contactDraft.LinkedIn) ||
+                       !string.IsNullOrEmpty(_contactDraft.Notes);
+            return _contactDraft.FullName != _editingContact.FullName ||
+                   _contactDraft.Title != _editingContact.Title ||
+                   _contactDraft.Email != _editingContact.Email ||
+                   _contactDraft.Phone != _editingContact.Phone ||
+                   _contactDraft.LinkedIn != _editingContact.LinkedIn ||
+                   _contactDraft.Notes != _editingContact.Notes;
+        }
+    }
+
+    protected override bool IsDirty => EditModeDirty || ContactModalDirty;
+
+    private bool CanSaveOrg =>
+        !string.IsNullOrWhiteSpace(_editOrg.Name) && _editNameError is null;
+
+    // ── Computed helpers ──────────────────────────────────────────────────────
+
+    private string RowCursorStyle => _isEditing ? "" : "cursor:pointer";
+
+    private string DeleteContactMessage =>
+        $"Delete {_deleteContactTarget?.FullName}? They will be removed from all associated opportunities. This action cannot be undone.";
+
+    private string DeleteOppMessage =>
+        $"Delete '{_deleteOppTarget?.Role}'? This will permanently delete the opportunity, all its correspondence, and associated sessions. This action cannot be undone.";
+
+    private static readonly RenderFragment TrashIcon = builder =>
+    {
+        builder.OpenElement(0, "svg");
+        builder.AddAttribute(1, "xmlns", "http://www.w3.org/2000/svg");
+        builder.AddAttribute(2, "width", "13");
+        builder.AddAttribute(3, "height", "13");
+        builder.AddAttribute(4, "viewBox", "0 0 24 24");
+        builder.AddAttribute(5, "fill", "none");
+        builder.AddAttribute(6, "stroke", "currentColor");
+        builder.AddAttribute(7, "stroke-width", "2");
+        builder.AddAttribute(8, "stroke-linecap", "round");
+        builder.AddAttribute(9, "stroke-linejoin", "round");
+        builder.AddAttribute(10, "aria-hidden", "true");
+        builder.OpenElement(11, "polyline"); builder.AddAttribute(12, "points", "3 6 5 6 21 6"); builder.CloseElement();
+        builder.OpenElement(13, "path"); builder.AddAttribute(14, "d", "M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"); builder.CloseElement();
+        builder.OpenElement(15, "path"); builder.AddAttribute(16, "d", "M10 11v6M14 11v6"); builder.CloseElement();
+        builder.OpenElement(17, "path"); builder.AddAttribute(18, "d", "M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"); builder.CloseElement();
+        builder.CloseElement();
+    };
+
+    private static readonly RenderFragment CheckIcon = builder =>
+    {
+        builder.OpenElement(0, "svg");
+        builder.AddAttribute(1, "xmlns", "http://www.w3.org/2000/svg");
+        builder.AddAttribute(2, "width", "16");
+        builder.AddAttribute(3, "height", "16");
+        builder.AddAttribute(4, "viewBox", "0 0 24 24");
+        builder.AddAttribute(5, "fill", "none");
+        builder.AddAttribute(6, "stroke", "currentColor");
+        builder.AddAttribute(7, "stroke-width", "2.5");
+        builder.AddAttribute(8, "stroke-linecap", "round");
+        builder.AddAttribute(9, "stroke-linejoin", "round");
+        builder.AddAttribute(10, "class", "text-success");
+        builder.AddAttribute(11, "aria-label", "Yes");
+        builder.OpenElement(12, "polyline"); builder.AddAttribute(13, "points", "20 6 9 17 4 12"); builder.CloseElement();
+        builder.CloseElement();
+    };
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_currentId == Id) return;
+        _currentId = Id;
+        UnsubscribeEvents();
+        SubscribeEvents();
+        await LoadAsync();
+    }
+
+    public override async ValueTask DisposeAsync()
+    {
+        UnsubscribeEvents();
+        await base.DisposeAsync();
+    }
+
+    private void SubscribeEvents()
+    {
+        DataSync.OnOrganizationChanged += HandleOrgChangedRemote;
+        DataSync.OnContactChanged += HandleContactChanged;
+        DataSync.OnOpportunityChanged += HandleOpportunityChanged;
+        DataSync.OnSessionChanged += HandleSessionChanged;
+    }
+
+    private void UnsubscribeEvents()
+    {
+        DataSync.OnOrganizationChanged -= HandleOrgChangedRemote;
+        DataSync.OnContactChanged -= HandleContactChanged;
+        DataSync.OnOpportunityChanged -= HandleOpportunityChanged;
+        DataSync.OnSessionChanged -= HandleSessionChanged;
+    }
+
+    // ── Data loading ──────────────────────────────────────────────────────────
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        _org = await Db.GetOrganizationAsync(Id);
+        if (_org is null) { _loading = false; return; }
+
+        _contacts = (await Db.GetContactsByOrganizationAsync(Id))
+            .OrderBy(c => c.FullName, StringComparer.OrdinalIgnoreCase).ToList();
+        _opportunities = (await Db.GetOpportunitiesByOrganizationAsync(Id))
+            .OrderByDescending(o => o.CreatedAt).ToList();
+
+        var allSessions = await Db.GetAllSessionsAsync();
+        _sessions = allSessions
+            .Where(s => s.OrganizationId == Id)
+            .OrderByDescending(s => s.CreatedAt).ToList();
+
+        _baseResumes = await Db.GetAllBaseResumesAsync();
+        await BuildVersionToResumeMapAsync();
+
+        _industries = await Db.GetLookupValuesAsync("lookupIndustries");
+        _allOrgs = await Db.GetAllOrganizationsAsync();
+        _loading = false;
+    }
+
+    private async Task BuildVersionToResumeMapAsync()
+    {
+        _versionToResume = new();
+        var versionIds = _sessions
+            .Where(s => !string.IsNullOrEmpty(s.BaseResumeVersionId))
+            .Select(s => s.BaseResumeVersionId)
+            .Distinct();
+        foreach (var vid in versionIds)
+        {
+            var ver = await Db.GetBaseResumeVersionAsync(vid);
+            _versionToResume[vid] = ver is null
+                ? null
+                : _baseResumes.FirstOrDefault(r => r.Id == ver.ResumeId);
+        }
+    }
+
+    // ── Row click helpers (avoids lambdas with { } in markup) ─────────────────
+
+    private void TryEditContact(Contact c)
+    {
+        if (!_isEditing) OpenEditContactModal(c);
+    }
+
+    private void TryNavigateToOpp(string id)
+    {
+        if (!_isEditing) Nav.NavigateTo($"/opportunities/{id}");
+    }
+
+    private void TryNavigateToSession(string id)
+    {
+        if (!_isEditing) Nav.NavigateTo($"/history/{id}");
+    }
+
+    // ── Details card ──────────────────────────────────────────────────────────
+
+    private void StartEdit()
+    {
+        _editOrg = CloneOrg(_org!);
+        _editNameError = null;
+        _orgSaveError = null;
+        _isEditing = true;
+    }
+
+    private void CancelEdit()
+    {
+        _isEditing = false;
+        _editOrg = new();
+        _editNameError = null;
+        _orgSaveError = null;
+    }
+
+    private void HandleEditNameInput(ChangeEventArgs e)
+    {
+        _editOrg.Name = e.Value?.ToString() ?? "";
+        ValidateEditName();
+    }
+
+    private void ValidateEditName()
+    {
+        var name = _editOrg.Name.Trim();
+        if (string.IsNullOrEmpty(name)) { _editNameError = null; return; }
+        _editNameError = _allOrgs.Any(o =>
+            o.Id != Id && o.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+            ? "An organization with this name already exists."
+            : null;
+    }
+
+    private async Task SaveOrgAsync()
+    {
+        ValidateEditName();
+        if (!CanSaveOrg || _savingOrg) return;
+        _savingOrg = true;
+        _orgSaveError = null;
+        try
+        {
+            _editOrg.Name = _editOrg.Name.Trim();
+            _editOrg.UpdatedAt = DateTime.UtcNow;
+            var result = await Db.VersionedWriteAsync(
+                "organizations", _editOrg,
+                ["sja-organization", $"sja-organization-{Id}"]);
+
+            if (result == VersionedWriteResult.Success)
+            {
+                _editOrg.Version++;
+                _org = CloneOrg(_editOrg);
+                _isEditing = false;
+                await DataSync.BroadcastAsync("organization", Id, "updated");
+            }
+            else if (result == VersionedWriteResult.VersionMismatch)
+            {
+                _conflictMessage = "This record was changed in another tab. Your changes have not been saved.";
+                _showConflictAlert = true;
+            }
+            else
+            {
+                _orgSaveError = "Save failed. The organization may have been deleted.";
+            }
+        }
+        catch (Exception ex)
+        {
+            _orgSaveError = $"Failed to save: {ex.Message}";
+        }
+        finally
+        {
+            _savingOrg = false;
+        }
+    }
+
+    // ── Contact modal ─────────────────────────────────────────────────────────
+
+    private void OpenAddContactModal()
+    {
+        _editingContact = null;
+        _contactDraft = new Contact { OrganizationId = Id };
+        _contactDuplicateWarning = false;
+        _contactSaveError = null;
+        _showContactModal = true;
+    }
+
+    private void OpenEditContactModal(Contact contact)
+    {
+        _editingContact = contact;
+        _contactDraft = CloneContact(contact);
+        _contactDuplicateWarning = false;
+        _contactSaveError = null;
+        _showContactModal = true;
+    }
+
+    private void CloseContactModal()
+    {
+        _showContactModal = false;
+        _editingContact = null;
+        _contactDraft = new Contact { OrganizationId = Id };
+        _contactDuplicateWarning = false;
+        _contactSaveError = null;
+    }
+
+    private async Task SaveContactAsync()
+    {
+        _contactDraft.FullName = (_contactDraft.FullName ?? "").Trim();
+        if (string.IsNullOrEmpty(_contactDraft.FullName))
+        {
+            _contactSaveError = "Name is required.";
+            return;
+        }
+
+        _contactDuplicateWarning = _contacts.Any(c =>
+            c.Id != _contactDraft.Id &&
+            c.FullName.Equals(_contactDraft.FullName, StringComparison.OrdinalIgnoreCase));
+
+        _savingContact = true;
+        _contactSaveError = null;
+        try
+        {
+            if (_editingContact is null)
+            {
+                _contactDraft.CreatedAt = DateTime.UtcNow;
+                _contactDraft.UpdatedAt = DateTime.UtcNow;
+                await Db.SaveContactAsync(_contactDraft);
+                await DataSync.BroadcastAsync("contact", _contactDraft.Id, "created");
+            }
+            else
+            {
+                _contactDraft.UpdatedAt = DateTime.UtcNow;
+                var result = await Db.VersionedWriteAsync(
+                    "contacts", _contactDraft,
+                    [$"sja-organization-{Id}", $"sja-contact-{_contactDraft.Id}"]);
+
+                if (result == VersionedWriteResult.VersionMismatch)
+                {
+                    _contactSaveError = "This contact was changed in another tab. Close and reopen to see the latest version.";
+                    return;
+                }
+                if (result == VersionedWriteResult.NotFound)
+                {
+                    _contactSaveError = "This contact was deleted in another tab.";
+                    return;
+                }
+                _contactDraft.Version++;
+                await DataSync.BroadcastAsync("contact", _contactDraft.Id, "updated");
+            }
+
+            CloseContactModal();
+            _contacts = (await Db.GetContactsByOrganizationAsync(Id))
+                .OrderBy(c => c.FullName, StringComparer.OrdinalIgnoreCase).ToList();
+        }
+        catch (Exception ex)
+        {
+            _contactSaveError = $"Failed to save: {ex.Message}";
+        }
+        finally
+        {
+            _savingContact = false;
+        }
+    }
+
+    // ── Delete actions ────────────────────────────────────────────────────────
+
+    private async Task ConfirmDeleteContactAsync()
+    {
+        if (_deleteContactTarget is null) return;
+        var id = _deleteContactTarget.Id;
+        _deleteContactTarget = null;
+        await Db.DeleteContactCascadeAsync(id);
+        await DataSync.BroadcastAsync("contact", id, "deleted");
+        _contacts.RemoveAll(c => c.Id == id);
+    }
+
+    private async Task ConfirmDeleteOppAsync()
+    {
+        if (_deleteOppTarget is null) return;
+        var id = _deleteOppTarget.Id;
+        _deleteOppTarget = null;
+        await Db.DeleteOpportunityCascadeAsync(id);
+        await DataSync.BroadcastAsync("opportunity", id, "deleted");
+        _opportunities.RemoveAll(o => o.Id == id);
+        var allSessions = await Db.GetAllSessionsAsync();
+        _sessions = allSessions
+            .Where(s => s.OrganizationId == Id)
+            .OrderByDescending(s => s.CreatedAt).ToList();
+    }
+
+    private async Task ConfirmDeleteSessionAsync()
+    {
+        if (_deleteSessionTarget is null) return;
+        var session = _deleteSessionTarget;
+        _deleteSessionTarget = null;
+        if (!string.IsNullOrEmpty(session.TailoredResumeFileId))
+            await Db.DeleteFileAsync(session.TailoredResumeFileId);
+        if (!string.IsNullOrEmpty(session.CoverLetterFileId))
+            await Db.DeleteFileAsync(session.CoverLetterFileId);
+        await Db.DeleteSessionAsync(session.Id);
+        await DataSync.BroadcastAsync("session", session.Id, "deleted");
+        _sessions.Remove(session);
+    }
+
+    // ── Conflict / deletion alert handlers ───────────────────────────────────
+
+    private void HandleConflictKeepEditing() => _showConflictAlert = false;
+
+    private async Task HandleConflictDiscardAndReload()
+    {
+        _showConflictAlert = false;
+        var fresh = await Db.GetOrganizationAsync(Id);
+        if (fresh is not null)
+        {
+            _org = fresh;
+            _editOrg = CloneOrg(fresh);
+            _allOrgs = await Db.GetAllOrganizationsAsync();
+        }
+        StateHasChanged();
+    }
+
+    private void HandleDeletionDismiss()
+    {
+        _showDeletionAlert = false;
+        Nav.NavigateTo(_pendingNavigation);
+    }
+
+    // ── BroadcastChannel live-update handlers ─────────────────────────────────
+
+    private void HandleOrgChangedRemote(string? id, string @event)
+    {
+        if (id != Id) return;
+        InvokeAsync(async () =>
+        {
+            if (@event == "deleted")
+            {
+                _deletionMessage = $"Organization '{_org?.Name ?? "Unknown"}' was deleted in another tab.";
+                _pendingNavigation = "/organizations";
+                _showDeletionAlert = true;
+                StateHasChanged();
+            }
+            else if (@event == "updated")
+            {
+                if (_isEditing)
+                {
+                    _conflictMessage = "This record was changed in another tab. Your unsaved changes may conflict.";
+                    _showConflictAlert = true;
+                    StateHasChanged();
+                }
+                else
+                {
+                    var fresh = await Db.GetOrganizationAsync(Id);
+                    if (fresh is not null) { _org = fresh; StateHasChanged(); }
+                }
+            }
+        });
+    }
+
+    private void HandleContactChanged(string? id, string @event)
+    {
+        InvokeAsync(async () =>
+        {
+            _contacts = (await Db.GetContactsByOrganizationAsync(Id))
+                .OrderBy(c => c.FullName, StringComparer.OrdinalIgnoreCase).ToList();
+            StateHasChanged();
+        });
+    }
+
+    private void HandleOpportunityChanged(string? id, string @event)
+    {
+        InvokeAsync(async () =>
+        {
+            _opportunities = (await Db.GetOpportunitiesByOrganizationAsync(Id))
+                .OrderByDescending(o => o.CreatedAt).ToList();
+            StateHasChanged();
+        });
+    }
+
+    private void HandleSessionChanged(string? id, string @event)
+    {
+        InvokeAsync(async () =>
+        {
+            var allSessions = await Db.GetAllSessionsAsync();
+            _sessions = allSessions
+                .Where(s => s.OrganizationId == Id)
+                .OrderByDescending(s => s.CreatedAt).ToList();
+            await BuildVersionToResumeMapAsync();
+            StateHasChanged();
+        });
+    }
+
+    // ── Display helpers ───────────────────────────────────────────────────────
+
+    private string GetResumeDisplay(SessionRecord session)
+    {
+        var versionNum = session.BaseResumeVersionNumberSnapshot;
+        var snapshot = session.BaseResumeNameSnapshot;
+        if (string.IsNullOrEmpty(session.BaseResumeVersionId))
+            return string.IsNullOrEmpty(snapshot) ? "—" : $"{snapshot} (v{versionNum})";
+
+        if (!_versionToResume.TryGetValue(session.BaseResumeVersionId, out var resume) || resume is null)
+            return $"(deleted: {snapshot}) (v{versionNum})";
+
+        if (!string.IsNullOrEmpty(snapshot) &&
+            !resume.Name.Equals(snapshot, StringComparison.Ordinal))
+            return $"{resume.Name} (formerly: {snapshot}) (v{versionNum})";
+
+        return $"{resume.Name} (v{versionNum})";
+    }
+
+    private bool GetFieldMatch(SessionRecord session)
+    {
+        if (session.OpportunityId is null) return false;
+        var opp = _opportunities.FirstOrDefault(o => o.Id == session.OpportunityId);
+        return opp is not null &&
+               session.Role == opp.Role &&
+               session.RoleDescription == opp.RoleDescription;
+    }
+
+    // ── Clone helpers ─────────────────────────────────────────────────────────
+
+    private static Organization CloneOrg(Organization src) => new()
+    {
+        Id = src.Id, Version = src.Version, Name = src.Name,
+        Description = src.Description, Industry = src.Industry, Size = src.Size,
+        Website = src.Website, LinkedIn = src.LinkedIn,
+        CreatedAt = src.CreatedAt, UpdatedAt = src.UpdatedAt,
+    };
+
+    private static Contact CloneContact(Contact src) => new()
+    {
+        Id = src.Id, Version = src.Version, OrganizationId = src.OrganizationId,
+        FullName = src.FullName, Title = src.Title, Email = src.Email,
+        Phone = src.Phone, LinkedIn = src.LinkedIn, Notes = src.Notes,
+        CreatedAt = src.CreatedAt, UpdatedAt = src.UpdatedAt,
+    };
+}

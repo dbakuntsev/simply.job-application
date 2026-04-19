@@ -16,7 +16,7 @@ public class IndexedDbService : IIndexedDbService, IAsyncDisposable
     };
 
     // Version token is replaced at build time by the InjectDependencyVersion MSBuild target.
-    private const string _moduleUrl = "./js/indexeddb.js?v=271E3EE133DFD305D8B31C943A768726B196FB362A0FF99C5CC5B579840AF56D";
+    private const string _moduleUrl = "./js/indexeddb.js?v=B47D75E71FA53BE1DD4D80C95050D35D400688F94890E03CE8277AC8C46D74E4";
 
     public IndexedDbService(IJSRuntime js) => _js = js;
 
@@ -199,6 +199,14 @@ public class IndexedDbService : IIndexedDbService, IAsyncDisposable
     }
 
     // ── Contacts ─────────────────────────────────────────────────────────────
+
+    public async Task<Dictionary<string, int>> GetContactsCountPerOrganizationAsync()
+    {
+        var m = await ModuleAsync();
+        var raw = await m.InvokeAsync<string?>("getContactsCountPerOrganization");
+        if (string.IsNullOrEmpty(raw)) return new();
+        return JsonSerializer.Deserialize<Dictionary<string, int>>(raw, _jsonOpts) ?? new();
+    }
 
     public async Task<List<Contact>> GetContactsByOrganizationAsync(string orgId)
     {

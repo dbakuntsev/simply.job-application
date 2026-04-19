@@ -1,0 +1,182 @@
+@page "/organizations"
+@implements IAsyncDisposable
+@inject IIndexedDbService Db
+@inject IDataSyncService DataSync
+@inject NavigationManager Nav
+@using System.Text
+
+<PageTitle>Organizations — Simply Job Application</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="mb-0">Organizations</h4>
+    <button class="btn btn-primary" @onclick='() => Nav.NavigateTo("/organizations/new")'>
+        + New Organization
+    </button>
+</div>
+
+@if (_loading)
+{
+    <div class="text-center py-5"><div class="spinner-border" role="status"></div></div>
+}
+else if (_orgs.Count == 0)
+{
+    <div class="alert alert-info d-flex align-items-center gap-3">
+        <span>No organizations yet — add one to get started</span>
+        <button class="btn btn-primary btn-sm" @onclick='() => Nav.NavigateTo("/organizations/new")'>
+            New Organization
+        </button>
+    </div>
+}
+else
+{
+    <div class="mb-3">
+        <input class="form-control" type="text" placeholder="Filter organizations..."
+               @bind="_filter" @bind:event="oninput" />
+    </div>
+
+    var filtered = FilteredOrgs();
+
+    if (filtered.Count == 0)
+    {
+        <div class="text-muted">No organizations match your filter.</div>
+    }
+    else
+    {
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Industry</th>
+                    <th>Size</th>
+                    <th class="text-center" style="width:130px">Opportunities</th>
+                    <th class="text-center" style="width:100px">Contacts</th>
+                    <th style="width:1%"></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var org in filtered)
+                {
+                    <tr style="cursor:pointer" @onclick='() => Nav.NavigateTo($"/organizations/{org.Id}")'>
+                        <td class="fw-semibold">@HighlightMatch(org.Name, _filter)</td>
+                        <td>@HighlightMatch(org.Industry, _filter)</td>
+                        <td>@HighlightMatch(org.Size, _filter)</td>
+                        <td class="text-center text-muted small">@(_oppCounts.GetValueOrDefault(org.Id, 0))</td>
+                        <td class="text-center text-muted small">@(_contactCounts.GetValueOrDefault(org.Id, 0))</td>
+                        <td class="pe-2" @onclick:stopPropagation>
+                            <button class="btn btn-sm btn-outline-danger"
+                                    title="Delete @org.Name"
+                                    @onclick="() => _deleteTarget = org">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13"
+                                     viewBox="0 0 24 24" fill="none" stroke="currentColor"
+                                     stroke-width="2" stroke-linecap="round" stroke-linejoin="round"
+                                     aria-hidden="true">
+                                    <polyline points="3 6 5 6 21 6"/>
+                                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                                    <path d="M10 11v6M14 11v6"/>
+                                    <path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/>
+                                </svg>
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+<ConfirmDeleteModal Show="_deleteTarget is not null"
+                   Title="Delete Organization"
+                   Message=@($"Delete '{_deleteTarget?.Name}'? This will permanently delete the organization, all its contacts, opportunities, correspondence, and associated sessions. This action cannot be undone.")
+                   DeleteLabel="Delete"
+                   OnConfirm="ConfirmDeleteAsync"
+                   OnCancel="() => _deleteTarget = null" />
+
+@code {
+    private List<Organization> _orgs = new();
+    private Dictionary<string, int> _oppCounts = new();
+    private Dictionary<string, int> _contactCounts = new();
+    private string _filter = "";
+    private bool _loading = true;
+    private Organization? _deleteTarget;
+
+    protected override async Task OnInitializedAsync()
+    {
+        DataSync.OnOrganizationChanged += HandleOrgChanged;
+        await LoadDataAsync();
+    }
+
+    private async Task LoadDataAsync()
+    {
+        _loading = true;
+        _orgs = (await Db.GetAllOrganizationsAsync())
+            .OrderBy(o => o.Name, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var allOpps = await Db.GetAllOpportunitiesAsync();
+        _oppCounts = allOpps
+            .GroupBy(o => o.OrganizationId)
+            .ToDictionary(g => g.Key, g => g.Count());
+        _contactCounts = await Db.GetContactsCountPerOrganizationAsync();
+        _loading = false;
+    }
+
+    private List<Organization> FilteredOrgs()
+    {
+        if (string.IsNullOrWhiteSpace(_filter)) return _orgs;
+        var f = _filter.Trim();
+        return _orgs.Where(o =>
+            Contains(o.Name, f) || Contains(o.Industry, f) || Contains(o.Size, f)
+        ).ToList();
+    }
+
+    private static bool Contains(string? text, string filter) =>
+        text?.Contains(filter, StringComparison.OrdinalIgnoreCase) == true;
+
+    private MarkupString HighlightMatch(string? text, string filter)
+    {
+        var safe = text ?? "";
+        if (string.IsNullOrWhiteSpace(filter))
+            return (MarkupString)System.Net.WebUtility.HtmlEncode(safe);
+
+        var sb = new StringBuilder();
+        int pos = 0;
+        while (pos < safe.Length)
+        {
+            var idx = safe.IndexOf(filter, pos, StringComparison.OrdinalIgnoreCase);
+            if (idx < 0)
+            {
+                sb.Append(System.Net.WebUtility.HtmlEncode(safe[pos..]));
+                break;
+            }
+            sb.Append(System.Net.WebUtility.HtmlEncode(safe[pos..idx]));
+            sb.Append("<mark>");
+            sb.Append(System.Net.WebUtility.HtmlEncode(safe.Substring(idx, filter.Length)));
+            sb.Append("</mark>");
+            pos = idx + filter.Length;
+        }
+        return (MarkupString)sb.ToString();
+    }
+
+    private async Task ConfirmDeleteAsync()
+    {
+        if (_deleteTarget is null) return;
+        var id = _deleteTarget.Id;
+        _deleteTarget = null;
+        await Db.DeleteOrganizationCascadeAsync(id);
+        await DataSync.BroadcastAsync("organization", id, "deleted");
+        await LoadDataAsync();
+    }
+
+    private void HandleOrgChanged(string? id, string @event)
+    {
+        InvokeAsync(async () =>
+        {
+            await LoadDataAsync();
+            StateHasChanged();
+        });
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        DataSync.OnOrganizationChanged -= HandleOrgChanged;
+    }
+}

@@ -37,6 +37,7 @@ public interface IIndexedDbService
     Task SaveOrganizationAsync(Organization org);
     Task DeleteOrganizationAsync(string id);
 
+    Task<Dictionary<string, int>> GetContactsCountPerOrganizationAsync();
     Task<List<Contact>> GetContactsByOrganizationAsync(string orgId);
     Task<Contact?> GetContactAsync(string id);
     Task SaveContactAsync(Contact contact);

@@ -1,0 +1,144 @@
+@page "/organizations/new"
+@inherits NavigationGuardBase
+@inject IIndexedDbService Db
+@inject IDataSyncService DataSync
+@inject NavigationManager Nav
+
+<PageTitle>New Organization — Simply Job Application</PageTitle>
+
+<NavigationLock OnBeforeInternalNavigation="HandleLocationChanging" />
+<NavigationGuardModal Show="_showGuardModal" StayLabel="@StayLabel" LeaveLabel="@LeaveLabel"
+                      OnStay="() => OnGuardStay()" OnLeave="() => OnGuardLeave()" />
+
+<nav aria-label="breadcrumb" class="mb-3">
+    <ol class="breadcrumb">
+        <li class="breadcrumb-item"><a href="/organizations">Organizations</a></li>
+        <li class="breadcrumb-item active">New Organization</li>
+    </ol>
+</nav>
+
+<h4 class="mb-4">New Organization</h4>
+
+<div class="card">
+    <div class="card-body">
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label fw-semibold">Name <span class="text-danger">*</span></label>
+                <input class="@NameInputClass"
+                       @bind="_org.Name" @bind:event="oninput" @bind:after="ValidateName" />
+                @if (_nameError is not null)
+                {
+                    <div class="invalid-feedback">@_nameError</div>
+                }
+            </div>
+            <div class="col-md-6">
+                <label class="form-label fw-semibold">Industry</label>
+                <select class="form-select" @bind="_org.Industry">
+                    <option value="">— Select industry —</option>
+                    @foreach (var ind in _industries)
+                    {
+                        <option value="@ind.Value">@ind.Value</option>
+                    }
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label fw-semibold">Size</label>
+                <input class="form-control" @bind="_org.Size" placeholder="e.g. 500–1000" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label fw-semibold">Website</label>
+                <input class="form-control" @bind="_org.Website" placeholder="https://" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label fw-semibold">LinkedIn</label>
+                <input class="form-control" @bind="_org.LinkedIn"
+                       placeholder="https://linkedin.com/company/..." />
+            </div>
+            <div class="col-12">
+                <label class="form-label fw-semibold">Description</label>
+                <textarea class="form-control" rows="3" @bind="_org.Description"></textarea>
+            </div>
+        </div>
+
+        @if (_saveError is not null)
+        {
+            <div class="alert alert-danger mt-3 mb-0">@_saveError</div>
+        }
+
+        <div class="d-flex gap-2 justify-content-end mt-4">
+            <button class="btn btn-outline-secondary" @onclick="Cancel">Cancel</button>
+            <button class="btn btn-primary" @onclick="SaveAsync" disabled="@(!CanSave)">
+                Save
+            </button>
+        </div>
+    </div>
+</div>
+
+@code {
+    private readonly Organization _org = new();
+    private List<LookupValue> _industries = new();
+    private List<Organization> _allOrgs = new();
+    private string? _nameError;
+    private string? _saveError;
+    private bool _saving;
+    private bool _saved;
+
+    protected override bool IsDirty =>
+        !_saved && (
+        !string.IsNullOrWhiteSpace(_org.Name) ||
+        !string.IsNullOrWhiteSpace(_org.Industry) ||
+        !string.IsNullOrWhiteSpace(_org.Size) ||
+        !string.IsNullOrWhiteSpace(_org.Description) ||
+        !string.IsNullOrWhiteSpace(_org.Website) ||
+        !string.IsNullOrWhiteSpace(_org.LinkedIn));
+
+    private string NameInputClass =>
+        _nameError is not null ? "form-control is-invalid" : "form-control";
+
+    private bool CanSave =>
+        !string.IsNullOrWhiteSpace(_org.Name) && _nameError is null && !_saving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _industries = await Db.GetLookupValuesAsync("lookupIndustries");
+        _allOrgs = await Db.GetAllOrganizationsAsync();
+    }
+
+    private void Cancel()
+    {
+        _saved = true;
+        Nav.NavigateTo("/organizations");
+    }
+
+    private void ValidateName()
+    {
+        var name = _org.Name.Trim();
+        if (string.IsNullOrEmpty(name)) { _nameError = null; return; }
+        _nameError = _allOrgs.Any(o => o.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+            ? "An organization with this name already exists."
+            : null;
+    }
+
+    private async Task SaveAsync()
+    {
+        ValidateName();
+        if (!CanSave) return;
+        _saving = true;
+        _saveError = null;
+        try
+        {
+            _org.Name = _org.Name.Trim();
+            _org.CreatedAt = DateTime.UtcNow;
+            _org.UpdatedAt = DateTime.UtcNow;
+            await Db.SaveOrganizationAsync(_org);
+            await DataSync.BroadcastAsync("organization", _org.Id, "created");
+            _saved = true;
+            Nav.NavigateTo($"/organizations/{_org.Id}");
+        }
+        catch (Exception ex)
+        {
+            _saveError = $"Failed to save: {ex.Message}";
+            _saving = false;
+        }
+    }
+}

@@ -186,6 +186,15 @@ export async function deleteContact(id) {
     return tx('contacts', 'readwrite', s => s.delete(id));
 }
 
+export async function getContactsCountPerOrganization() {
+    const all = await tx('contacts', 'readonly', s => s.getAll());
+    const map = {};
+    for (const c of (all ?? [])) {
+        if (c.organizationId) map[c.organizationId] = (map[c.organizationId] ?? 0) + 1;
+    }
+    return JSON.stringify(map);
+}
+
 // ── ContactOpportunityRoles ───────────────────────────────────────────────────
 
 export async function getRolesByOpportunity(oppId) {
