@@ -1293,4 +1293,56 @@ public class OpenAiProvider : IAiProvider
         // Stream closed without response.completed — transient; eligible for retry.
         throw new TruncatedStreamException();
     }
+
+    // ── Qualification extraction ───────────────────────────────────────────────
+
+    public async Task<QualificationExtractionResult> ExtractQualificationsAsync(
+        string roleDescription, string modelId, string apiKey,
+        Action<string>? onProgress = null)
+    {
+        const string instructions = """
+            You are an expert at analyzing job descriptions and extracting qualification requirements.
+
+            Your task is to read the provided role description and identify two categories of qualifications:
+            - Required: skills, experience, certifications, or capabilities that are mandatory or clearly expected.
+            - Preferred: skills or experience that are desired but not mandatory (often indicated by "nice to have", "preferred", "bonus", "plus", or a "Preferred Qualifications" section).
+
+            Rules:
+            - Each qualification must be a concise phrase (1–10 words), not a full sentence.
+            - Do not duplicate items across the two lists.
+            - If a qualification appears in both required and preferred sections, classify it as required.
+            - If the description has no preferred qualifications, return an empty preferred list.
+            - Return only qualifications explicitly stated or clearly implied by the text. Do not invent qualifications.
+            - Omit soft skills (e.g., "communication", "teamwork") unless they are explicitly required.
+            - Limit each list to 15 items maximum; prioritize the most important.
+
+            Respond with a JSON object only — no markdown, no explanation:
+            {
+              "required": ["string", ...],
+              "preferred": ["string", ...]
+            }
+            """;
+
+        var userText = $"""
+            Role description:
+
+            {roleDescription}
+
+            Extract qualifications and respond in JSON.
+            """;
+
+        var (_, raw) = await ExecuteWithRetryAsync(
+            () => CreateResponseWithTextAsync(modelId, apiKey, instructions, userText),
+            "Extracting qualifications\u2026", onProgress);
+
+        try
+        {
+            return JsonSerializer.Deserialize<QualificationExtractionResult>(raw, _json)
+                   ?? throw new InvalidOperationException("Empty response");
+        }
+        catch
+        {
+            throw new InvalidOperationException($"Could not parse AI response: {raw}");
+        }
+    }
 }

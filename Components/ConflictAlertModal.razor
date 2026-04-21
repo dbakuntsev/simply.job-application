@@ -10,7 +10,10 @@
                 <div class="modal-body">@Message</div>
                 <div class="modal-footer">
                     <button class="btn btn-primary" @onclick="OnDiscardAndReload">Discard &amp; Reload</button>
-                    <button class="btn btn-outline-secondary" @onclick="OnKeepEditing">Keep Editing</button>
+                    @if (ShowKeepEditing)
+                    {
+                        <button class="btn btn-outline-secondary" @onclick="OnKeepEditing">Keep Editing</button>
+                    }
                 </div>
             </div>
         </div>
@@ -20,6 +23,7 @@
 @code {
     [Parameter] public bool Show { get; set; }
     [Parameter] public string Message { get; set; } = "";
+    [Parameter] public bool ShowKeepEditing { get; set; } = true;
     [Parameter] public EventCallback OnDiscardAndReload { get; set; }
     [Parameter] public EventCallback OnKeepEditing { get; set; }
 }

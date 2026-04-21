@@ -8,6 +8,7 @@
     <link rel="stylesheet" href="css/bootstrap.min.css" />
     <link rel="stylesheet" href="css/app.css?v=586EA11BDB4CEE7C6F8A54266DE53A60170D791EBA1478857B0AD317F78B3025" />
     <link rel="stylesheet" href="_content/Radzen.Blazor/css/default.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" />
     <script>
         // GitHub Pages SPA redirect: rewrite ?/path back to /path
         (function (l) {
@@ -49,6 +50,11 @@
             creation. A direct <script> tag resolves before Blazor WASM starts.
          WARNING: Do NOT enable Blazor enhanced navigation on pages hosting Monaco editors
                   (not applicable in pure WASM). -->
+    <!-- jQuery + Select2 must load before Monaco's AMD loader so Select2 registers
+         as a plain jQuery plugin rather than attempting AMD module resolution. -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery/3.7.1/jquery.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/js/select2.min.js"></script>
+    <script src="js/select2interop.js"></script>
     <script src="_content/BlazorMonaco/jsInterop.js"></script>
     <script>require.paths.vs = 'https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.0/min/vs';</script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.0/min/vs/loader.min.js"></script>

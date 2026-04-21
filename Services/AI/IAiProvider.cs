@@ -27,6 +27,12 @@ public interface IAiProvider
         int sourcePageCount = 2,
         int targetPageCount = 2,
         Action<string>? onProgress = null);
+
+    Task<QualificationExtractionResult> ExtractQualificationsAsync(
+        string roleDescription,
+        string modelId,
+        string apiKey,
+        Action<string>? onProgress = null);
 }
 
 public record AiModel(string Id, string DisplayName);
