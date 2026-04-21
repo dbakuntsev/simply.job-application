@@ -371,6 +371,38 @@ export async function deleteFilesByCorrespondence(corrId) {
     });
 }
 
+// Versioned write for a correspondence record + file additions/removals in one
+// atomic transaction. Returns 'success' or 'versionMismatch'.
+export async function saveCorrespondenceWithFiles(corr, filesToAdd, fileIdsToDelete) {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+        const t = db.transaction(['correspondence', 'correspondenceFiles'], 'readwrite');
+        t.onerror = () => reject(t.error);
+        t.oncomplete = () => resolve('success');
+
+        const corrStore = t.objectStore('correspondence');
+        const fileStore = t.objectStore('correspondenceFiles');
+
+        const heldVersion = corr.version;
+        const getReq = corrStore.get(corr.id);
+        getReq.onsuccess = () => {
+            const current = getReq.result;
+            if (current && current.version !== heldVersion) {
+                resolve('versionMismatch');
+                return;
+            }
+            corrStore.put({ ...corr, version: current ? heldVersion + 1 : 1 });
+            for (const f of filesToAdd)       fileStore.put(f);
+            for (const id of fileIdsToDelete) fileStore.delete(id);
+        };
+        getReq.onerror = () => reject(getReq.error);
+    });
+}
+
+export async function getCorrespondenceFileCount(corrId) {
+    return tx('correspondenceFiles', 'readonly', s => s.index('correspondenceId').count(corrId));
+}
+
 // ── BaseResumes ───────────────────────────────────────────────────────────────
 
 export async function getAllBaseResumes() {
@@ -666,6 +698,17 @@ export async function lockedVersionedWrite(lockNames, storeName, record) {
 }
 
 // ── Misc ──────────────────────────────────────────────────────────────────────
+
+export function downloadFile(fileName, base64Data) {
+    const bytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+    const blob = new Blob([bytes], { type: 'application/octet-stream' });
+    const url = URL.createObjectURL(blob);
+    const a = Object.assign(document.createElement('a'), { href: url, download: fileName });
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+}
 
 export function downloadBlob(fileName, base64Data) {
     const bytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));

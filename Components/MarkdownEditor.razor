@@ -1,12 +1,13 @@
 @using BlazorMonaco.Editor
 @using BlazorMonaco
 
-<StandaloneCodeEditor @ref="_editor"
-                      Id="@Id"
-                      ConstructionOptions="GetOptions"
-                      OnDidChangeModelContent="OnContentChanged"
-                      CssClass="@CssClass"
-                      style="@EditorStyle" />
+<div style="@EditorStyle">
+    <StandaloneCodeEditor @ref="_editor"
+                          Id="@Id"
+                          ConstructionOptions="GetOptions"
+                          OnDidChangeModelContent="OnContentChanged"
+                          CssClass="@($"{CssClass} w-100 h-100")" />
+</div>
 
 @code {
     [Parameter] public string Id { get; set; } = $"md-editor-{Guid.NewGuid():N}";
@@ -19,7 +20,7 @@
     private bool _suppressChange;
 
     private string EditorStyle =>
-        $"height:{Height};border:1px solid #ced4da;border-radius:.375rem";
+        $"height:{Height};border:1px solid #ced4da;border-radius:.375rem;overflow:hidden";
 
     private StandaloneEditorConstructionOptions GetOptions(StandaloneCodeEditor _) => new()
     {

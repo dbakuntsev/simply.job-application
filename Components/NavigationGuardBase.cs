@@ -55,10 +55,10 @@ public abstract class NavigationGuardBase : ComponentBase, IAsyncDisposable
     }
 
     // Wire to NavigationGuardModal.OnStay.
-    protected void OnGuardStay() => _guardTcs?.TrySetResult(false);
+    protected virtual void OnGuardStay() => _guardTcs?.TrySetResult(false);
 
     // Wire to NavigationGuardModal.OnLeave.
-    protected void OnGuardLeave() => _guardTcs?.TrySetResult(true);
+    protected virtual void OnGuardLeave() => _guardTcs?.TrySetResult(true);
 
     public virtual async ValueTask DisposeAsync()
     {

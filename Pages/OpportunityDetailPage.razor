@@ -298,6 +298,79 @@ else
         </div>
     </div>
 
+    @* ── Correspondence section ───────────────────────────────────────────────────── *@
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Correspondence</h5>
+            @if (!_isEditing)
+            {
+                <div class="dropdown @(_showAddCorrDropdown ? "show" : "")">
+                    <button class="btn btn-sm btn-primary dropdown-toggle" type="button"
+                            @onclick="() => _showAddCorrDropdown = !_showAddCorrDropdown">
+                        Add
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end @(_showAddCorrDropdown ? "show" : "")">
+                        @foreach (var ct in Enum.GetValues<CorrespondenceType>())
+                        {
+                            var captured = ct;
+                            <li>
+                                <a class="dropdown-item" href="#" @onclick:preventDefault
+                                   @onclick="() => OpenAddCorrespondence(captured)">
+                                    @CorrTypeLabel(captured)
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            }
+        </div>
+        <div class="card-body p-0">
+            @if (_correspondence.Count == 0)
+            {
+                <div class="px-3 py-3 text-muted">No correspondence yet.</div>
+            }
+            else
+            {
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="ps-3" style="width:140px">Date / Time</th>
+                            <th style="width:180px">Type</th>
+                            <th>Content</th>
+                            <th style="width:160px">Contact</th>
+                            <th class="text-center" style="width:60px">Files</th>
+                            <th style="width:1%"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var corr in _correspondence.OrderByDescending(c => c.OccurredAt))
+                        {
+                            <tr style="cursor:pointer" @onclick="() => OpenEditCorrespondence(corr)">
+                                <td class="ps-3 small text-muted">@corr.OccurredAt.ToLocalTime().ToString("g")</td>
+                                <td class="small">@GetTypeDirectionLabel(corr)</td>
+                                <td class="small text-muted text-truncate" style="max-width:250px">@GetCorrContentPreview(corr)</td>
+                                <td class="small text-muted">@GetCorrContactDisplay(corr)</td>
+                                <td class="text-center small text-muted">
+                                    @(_correspondenceFileCounts.TryGetValue(corr.Id, out var cnt) && cnt > 0 ? cnt.ToString() : "—")
+                                </td>
+                                <td class="pe-2" @onclick:stopPropagation>
+                                    @if (!_isEditing)
+                                    {
+                                        <button class="btn btn-sm btn-outline-danger"
+                                                title="Delete correspondence"
+                                                @onclick="() => _deleteCorrespondenceTarget = corr">
+                                            @TrashIcon
+                                        </button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+
     @* ── Contacts section ──────────────────────────────────────────────────────── *@
     <div class="card mb-4">
         <div class="card-header d-flex justify-content-between align-items-center">
@@ -433,6 +506,154 @@ else
     </div>
 }
 
+@* ── Correspondence Add/Edit modal ──────────────────────────────────────────── *@
+@if (_showCorrespondenceModal)
+{
+    <div class="modal d-block" tabindex="-1" role="dialog" aria-modal="true"
+         style="background:rgba(0,0,0,.45)" @onclick="HandleCorrModalBackdropClick">
+        <div class="modal-dialog modal-lg" @onclick:stopPropagation>
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@GetCorrModalTitle()</h5>
+                    <button type="button" class="btn-close" @onclick="HandleCorrModalClose"></button>
+                </div>
+                <div class="modal-body">
+                    @if (_corrSaveError is not null)
+                    {
+                        <div class="alert alert-danger">@_corrSaveError</div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label">Date / Time</label>
+                        <input type="datetime-local" class="form-control"
+                               value="@_modalCorr.OccurredAt.ToLocalTime().ToString("yyyy-MM-ddTHH:mm")"
+                               @onchange="e => _modalCorr.OccurredAt = ParseDateTimeLocal(e.Value?.ToString())" />
+                    </div>
+
+                    @if (TypeHasDirection(_modalCorr.Type))
+                    {
+                        var (inLbl, outLbl) = GetDirectionLabels(_modalCorr.Type);
+                        <div class="mb-3">
+                            <label class="form-label">Direction</label>
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" id="corr-dir-in" name="corrdir" autocomplete="off"
+                                       checked="@(_modalCorr.Direction == CorrespondenceDirection.Incoming)"
+                                       @onchange="() => _modalCorr.Direction = CorrespondenceDirection.Incoming" />
+                                <label class="btn btn-outline-primary" for="corr-dir-in">@inLbl</label>
+                                <input type="radio" class="btn-check" id="corr-dir-out" name="corrdir" autocomplete="off"
+                                       checked="@(_modalCorr.Direction == CorrespondenceDirection.Outgoing)"
+                                       @onchange="() => _modalCorr.Direction = CorrespondenceDirection.Outgoing" />
+                                <label class="btn btn-outline-primary" for="corr-dir-out">@outLbl</label>
+                            </div>
+                        </div>
+                    }
+
+                    @if (_modalCorr.Type == CorrespondenceType.Email)
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Subject</label>
+                            <input class="form-control" @bind="_modalCorr.Subject" />
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label">Contact <span class="text-muted fw-normal small">(optional)</span></label>
+                        <select class="form-select"
+                                value="@(_modalCorr.ContactId ?? "")"
+                                @onchange="e => _modalCorr.ContactId = string.IsNullOrEmpty(e.Value?.ToString()) ? null : e.Value.ToString()">
+                            <option value="">— none —</option>
+                            @if (DanglingContactId is not null)
+                            {
+                                <option value="@DanglingContactId">(deleted)</option>
+                            }
+                            @foreach (var c in _orgContacts.OrderBy(c => c.FullName, StringComparer.OrdinalIgnoreCase))
+                            {
+                                <option value="@c.Id">@c.FullName</option>
+                            }
+                        </select>
+                    </div>
+
+                    @if (_modalCorr.Type == CorrespondenceType.ResumeSubmitted)
+                    {
+                        var noSessions = !_sessions.Any() && DanglingSessionId is null;
+                        <div class="mb-3">
+                            <label class="form-label">Session <span class="text-muted fw-normal small">(optional)</span></label>
+                            <select class="form-select" disabled="@noSessions"
+                                    value="@(_modalCorr.LinkedSessionId ?? "")"
+                                    @onchange="e => _modalCorr.LinkedSessionId = string.IsNullOrEmpty(e.Value?.ToString()) ? null : e.Value.ToString()">
+                                <option value="">— none —</option>
+                                @if (DanglingSessionId is not null)
+                                {
+                                    <option value="@DanglingSessionId">(deleted)</option>
+                                }
+                                @foreach (var s in _sessions.OrderByDescending(s => s.CreatedAt))
+                                {
+                                    <option value="@s.Id">@s.CreatedAt.ToLocalTime().ToString("g") – @s.Role</option>
+                                }
+                            </select>
+                            @if (noSessions)
+                            {
+                                <div class="form-text">No sessions available for this opportunity.</div>
+                            }
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="corr-coverletter"
+                                       @bind="_modalCorr.CoverLetterSubmitted" />
+                                <label class="form-check-label" for="corr-coverletter">Cover Letter Submitted</label>
+                            </div>
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label">Body / Notes</label>
+                        <MarkdownEditor Value="@_modalCorr.Body" ValueChanged="v => _modalCorr.Body = v" Height="200px" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Attachments</label>
+                        @if (_fileUploadError is not null)
+                        {
+                            <div class="alert alert-warning py-1 px-2 small mb-2">@_fileUploadError</div>
+                        }
+                        <InputFile OnChange="HandleCorrFileSelected" multiple class="form-control form-control-sm mb-2" />
+                        @if (_modalExistingFiles.Count > 0 || _modalNewFiles.Count > 0)
+                        {
+                            <ul class="list-group list-group-flush">
+                                @foreach (var f in _modalExistingFiles)
+                                {
+                                    var ef = f;
+                                    <li class="list-group-item d-flex justify-content-between align-items-center py-1 px-0">
+                                        <span class="small">@ef.FileName <span class="text-muted">(@FormatFileSize(ef.FileSize))</span></span>
+                                        <div class="d-flex gap-1">
+                                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => DownloadExistingFile(ef)">Download</button>
+                                            <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveExistingFile(ef.Id)">Remove</button>
+                                        </div>
+                                    </li>
+                                }
+                                @foreach (var f in _modalNewFiles)
+                                {
+                                    var nf = f;
+                                    <li class="list-group-item d-flex justify-content-between align-items-center py-1 px-0">
+                                        <span class="small text-success">@nf.FileName <span class="text-muted">(@FormatFileSize(nf.FileSize))</span></span>
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveStagedFile(nf)">Remove</button>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-secondary" @onclick="HandleCorrModalClose" disabled="@_savingCorr">Cancel</button>
+                    <button class="btn btn-primary" @onclick="SaveCorrespondenceAsync" disabled="@_savingCorr">
+                        @(_savingCorr ? "Saving…" : "Save")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @* ── Extract qualifications confirmation ────────────────────────────────────── *@
 @if (_showExtractConfirm)
 {
@@ -526,6 +747,13 @@ else
                     OnConfirm="ConfirmDeleteSessionAsync"
                     OnCancel="() => _deleteSessionTarget = null" />
 
+<ConfirmDeleteModal Show="_deleteCorrespondenceTarget is not null"
+                    Title="Delete Correspondence"
+                    Message="@GetDeleteCorrMessage()"
+                    DeleteLabel="Delete"
+                    OnConfirm="ConfirmDeleteCorrespondenceAsync"
+                    OnCancel="() => _deleteCorrespondenceTarget = null" />
+
 @code {
     [Parameter] public string Id { get; set; } = "";
 
@@ -554,6 +782,22 @@ else
 
     private List<SessionRecord> _sessions = new();
     private SessionRecord? _deleteSessionTarget;
+
+    private List<Correspondence> _correspondence = new();
+    private Dictionary<string, int> _correspondenceFileCounts = new();
+    private bool _showCorrespondenceModal;
+    private Correspondence? _editCorrespondence;
+    private Correspondence _modalCorr = new();
+    private DateTime _addModeDefaultTime;
+    private List<CorrespondenceFile> _modalExistingFiles = new();
+    private List<CorrespondenceFile> _modalNewFiles = new();
+    private List<string> _modalRemovedFileIds = new();
+    private string? _fileUploadError;
+    private Correspondence? _deleteCorrespondenceTarget;
+    private bool _corrGuardPending;
+    private bool _showAddCorrDropdown;
+    private string? _corrSaveError;
+    private bool _savingCorr;
 
     private List<OpportunityFieldHistory> _history = new();
     private bool _showHistoryModal;
@@ -584,7 +828,10 @@ else
         !_editRequired.SequenceEqual(_opp.RequiredQualifications) ||
         !_editPreferred.SequenceEqual(_opp.PreferredQualifications));
 
-    protected override bool IsDirty => EditModeDirty;
+    private bool CorrModalDirty => _showCorrespondenceModal && IsCorrModalDirty();
+    protected override bool IsDirty => EditModeDirty || CorrModalDirty;
+    protected override string StayLabel  => _corrGuardPending ? "Keep Editing"      : "Stay and continue editing";
+    protected override string LeaveLabel => _corrGuardPending ? "Discard Changes"   : "Discard changes and leave";
 
     private bool CanSaveEdit => !string.IsNullOrWhiteSpace(_editOpp.Role);
 
@@ -638,6 +885,105 @@ else
     }
 
     private void NavigateToSession(string id) => Nav.NavigateTo("/history/" + id);
+
+    // ── Correspondence helpers ────────────────────────────────────────────────
+
+    private static bool TypeHasDirection(CorrespondenceType t) =>
+        t is CorrespondenceType.Email or CorrespondenceType.PhoneCall or CorrespondenceType.Text;
+
+    private static (string inLabel, string outLabel) GetDirectionLabels(CorrespondenceType t) =>
+        t == CorrespondenceType.PhoneCall ? ("Received", "Made") : ("Received", "Sent");
+
+    private static string CorrTypeLabel(CorrespondenceType t) => t switch
+    {
+        CorrespondenceType.ResumeSubmitted => "Resume Submitted",
+        CorrespondenceType.PhoneCall       => "Phone Call",
+        CorrespondenceType.VideoCall       => "Video Call",
+        _                                  => t.ToString(),
+    };
+
+    private static string GetTypeDirectionLabel(Correspondence corr)
+    {
+        var type = CorrTypeLabel(corr.Type);
+        if (!TypeHasDirection(corr.Type)) return type;
+        var dir = corr.Type == CorrespondenceType.PhoneCall
+            ? (corr.Direction == CorrespondenceDirection.Incoming ? "Received" : "Made")
+            : (corr.Direction == CorrespondenceDirection.Incoming ? "Received" : "Sent");
+        return $"{type} · {dir}";
+    }
+
+    private static string StripMarkdown(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+        var ml = System.Text.RegularExpressions.RegexOptions.Multiline;
+        Func<string, string, string, string> r =
+            System.Text.RegularExpressions.Regex.Replace;
+        Func<string, string, string, System.Text.RegularExpressions.RegexOptions, string> rm =
+            System.Text.RegularExpressions.Regex.Replace;
+        text = rm(text, @"^#{1,6}\s+", "", ml);
+        text = r(text, @"\*{1,2}([^*\r\n]+)\*{1,2}", "$1");
+        text = r(text, @"_{1,2}([^_\r\n]+)_{1,2}", "$1");
+        text = r(text, @"\[([^\]]+)\]\([^\)]+\)", "$1");
+        text = r(text, @"`{1,3}[^`\r\n]*`{1,3}", "");
+        text = rm(text, @"^[\*\-\+]\s+", "", ml);
+        text = rm(text, @"^\d+\.\s+", "", ml);
+        text = r(text, @"\s+", " ").Trim();
+        return text;
+    }
+
+    private string GetCorrContentPreview(Correspondence corr)
+    {
+        var raw = corr.Type == CorrespondenceType.Email && !string.IsNullOrWhiteSpace(corr.Subject)
+            ? corr.Subject
+            : StripMarkdown(corr.Body);
+        return raw.Length > 120 ? raw[..120] + "…" : raw;
+    }
+
+    private string GetCorrContactDisplay(Correspondence corr)
+    {
+        if (string.IsNullOrEmpty(corr.ContactId)) return "—";
+        var c = _orgContacts.FirstOrDefault(c => c.Id == corr.ContactId);
+        return c?.FullName ?? "(deleted)";
+    }
+
+    private string GetCorrModalTitle() =>
+        _editCorrespondence is null ? $"New {CorrTypeLabel(_modalCorr.Type)}" : $"Edit {CorrTypeLabel(_modalCorr.Type)}";
+
+    private string GetDeleteCorrMessage()
+    {
+        if (_deleteCorrespondenceTarget is null) return "";
+        return $"Delete this {CorrTypeLabel(_deleteCorrespondenceTarget.Type)}? Any attached files will also be deleted. This action cannot be undone.";
+    }
+
+    private static string FormatFileSize(long bytes) => bytes switch
+    {
+        < 1024             => $"{bytes} B",
+        < 1024 * 1024      => $"{bytes / 1024.0:F1} KB",
+        _                  => $"{bytes / (1024.0 * 1024):F1} MB",
+    };
+
+    private static DateTime ParseDateTimeLocal(string? value) =>
+        DateTime.TryParse(value, out var dt)
+            ? DateTime.SpecifyKind(dt, DateTimeKind.Local).ToUniversalTime()
+            : DateTime.UtcNow;
+
+    private string? DanglingContactId
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(_modalCorr.ContactId)) return null;
+            return _orgContacts.Any(c => c.Id == _modalCorr.ContactId) ? null : _modalCorr.ContactId;
+        }
+    }
+
+    private string? DanglingSessionId
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(_modalCorr.LinkedSessionId)) return null;
+            return _sessions.Any(s => s.Id == _modalCorr.LinkedSessionId) ? null : _modalCorr.LinkedSessionId;
+        }
+    }
 
     private static readonly RenderFragment TrashIcon = builder =>
     {
@@ -696,22 +1042,26 @@ else
 
     private void SubscribeEvents()
     {
-        DataSync.OnOpportunityChanged            += HandleOppChangedRemote;
+        DataSync.OnOpportunityChanged             += HandleOppChangedRemote;
         DataSync.OnOpportunityFieldHistoryChanged += HandleHistoryChanged;
-        DataSync.OnContactChanged                += HandleContactChanged;
-        DataSync.OnContactOpportunityRoleChanged += HandleRoleChanged;
-        DataSync.OnOrganizationChanged           += HandleOrgChanged;
-        DataSync.OnSessionChanged                += HandleSessionChanged;
+        DataSync.OnContactChanged                 += HandleContactChanged;
+        DataSync.OnContactOpportunityRoleChanged  += HandleRoleChanged;
+        DataSync.OnOrganizationChanged            += HandleOrgChanged;
+        DataSync.OnSessionChanged                 += HandleSessionChanged;
+        DataSync.OnCorrespondenceChanged          += HandleCorrespondenceChanged;
+        DataSync.OnCorrespondenceFileChanged      += HandleCorrFileChanged;
     }
 
     private void UnsubscribeEvents()
     {
-        DataSync.OnOpportunityChanged            -= HandleOppChangedRemote;
+        DataSync.OnOpportunityChanged             -= HandleOppChangedRemote;
         DataSync.OnOpportunityFieldHistoryChanged -= HandleHistoryChanged;
-        DataSync.OnContactChanged                -= HandleContactChanged;
-        DataSync.OnContactOpportunityRoleChanged -= HandleRoleChanged;
-        DataSync.OnOrganizationChanged           -= HandleOrgChanged;
-        DataSync.OnSessionChanged                -= HandleSessionChanged;
+        DataSync.OnContactChanged                 -= HandleContactChanged;
+        DataSync.OnContactOpportunityRoleChanged  -= HandleRoleChanged;
+        DataSync.OnOrganizationChanged            -= HandleOrgChanged;
+        DataSync.OnSessionChanged                 -= HandleSessionChanged;
+        DataSync.OnCorrespondenceChanged          -= HandleCorrespondenceChanged;
+        DataSync.OnCorrespondenceFileChanged      -= HandleCorrFileChanged;
     }
 
     // ── Data loading ──────────────────────────────────────────────────────────
@@ -737,6 +1087,8 @@ else
             .OrderByDescending(s => s.CreatedAt).ToList();
 
         _history = await Db.GetHistoryByOpportunityAsync(Id);
+
+        await LoadCorrespondenceAsync();
 
         _loading = false;
     }
@@ -1064,6 +1416,198 @@ else
         Nav.NavigateTo(_pendingNavigation);
     }
 
+    // ── Correspondence modal (M5-2/M5-3) ─────────────────────────────────────
+
+    protected override void OnGuardStay()
+    {
+        if (_corrGuardPending) { _showGuardModal = false; _corrGuardPending = false; }
+        else base.OnGuardStay();
+    }
+
+    protected override void OnGuardLeave()
+    {
+        if (_corrGuardPending) { _showGuardModal = false; _corrGuardPending = false; CloseCorrModal(); }
+        else base.OnGuardLeave();
+    }
+
+    private bool IsCorrModalDirty()
+    {
+        if (_editCorrespondence is null)
+        {
+            return _modalCorr.OccurredAt != _addModeDefaultTime ||
+                   !string.IsNullOrEmpty(_modalCorr.Subject) ||
+                   !string.IsNullOrEmpty(_modalCorr.Body) ||
+                   !string.IsNullOrEmpty(_modalCorr.ContactId) ||
+                   !string.IsNullOrEmpty(_modalCorr.LinkedSessionId) ||
+                   _modalCorr.CoverLetterSubmitted ||
+                   _modalNewFiles.Count > 0;
+        }
+        return _modalCorr.OccurredAt  != _editCorrespondence.OccurredAt ||
+               _modalCorr.Subject     != _editCorrespondence.Subject ||
+               _modalCorr.Body        != _editCorrespondence.Body ||
+               _modalCorr.ContactId   != _editCorrespondence.ContactId ||
+               _modalCorr.LinkedSessionId   != _editCorrespondence.LinkedSessionId ||
+               _modalCorr.Direction         != _editCorrespondence.Direction ||
+               _modalCorr.CoverLetterSubmitted != _editCorrespondence.CoverLetterSubmitted ||
+               _modalNewFiles.Count > 0 ||
+               _modalRemovedFileIds.Count > 0;
+    }
+
+    private void OpenAddCorrespondence(CorrespondenceType type)
+    {
+        _showAddCorrDropdown = false;
+        var now = DateTime.UtcNow;
+        _addModeDefaultTime = now;
+        _editCorrespondence = null;
+        _modalCorr = new Correspondence
+        {
+            OpportunityId = Id,
+            Type = type,
+            OccurredAt = now,
+            Direction = CorrespondenceDirection.Incoming,
+        };
+        _modalExistingFiles = new();
+        _modalNewFiles = new();
+        _modalRemovedFileIds = new();
+        _fileUploadError = null;
+        _corrSaveError = null;
+        _showCorrespondenceModal = true;
+    }
+
+    private async Task OpenEditCorrespondence(Correspondence corr)
+    {
+        _editCorrespondence = corr;
+        _modalCorr = new Correspondence
+        {
+            Id                   = corr.Id,
+            Version              = corr.Version,
+            OpportunityId        = corr.OpportunityId,
+            Type                 = corr.Type,
+            OccurredAt           = corr.OccurredAt,
+            Direction            = corr.Direction,
+            Subject              = corr.Subject,
+            Body                 = corr.Body,
+            ContactId            = corr.ContactId,
+            LinkedSessionId      = corr.LinkedSessionId,
+            CoverLetterSubmitted = corr.CoverLetterSubmitted,
+            CreatedAt            = corr.CreatedAt,
+            UpdatedAt            = corr.UpdatedAt,
+        };
+        _modalExistingFiles = await Db.GetFilesByCorrespondenceAsync(corr.Id);
+        _modalNewFiles = new();
+        _modalRemovedFileIds = new();
+        _fileUploadError = null;
+        _corrSaveError = null;
+        _showCorrespondenceModal = true;
+    }
+
+    private void CloseCorrModal()
+    {
+        _showCorrespondenceModal = false;
+        _editCorrespondence = null;
+        _modalNewFiles = new();
+        _modalRemovedFileIds = new();
+        _fileUploadError = null;
+        _corrSaveError = null;
+    }
+
+    private void HandleCorrModalClose()
+    {
+        if (IsCorrModalDirty()) { _corrGuardPending = true; _showGuardModal = true; }
+        else CloseCorrModal();
+    }
+
+    private void HandleCorrModalBackdropClick() => HandleCorrModalClose();
+
+    private async Task SaveCorrespondenceAsync()
+    {
+        if (_savingCorr) return;
+        _savingCorr = true;
+        _corrSaveError = null;
+
+        _modalCorr.UpdatedAt = DateTime.UtcNow;
+        if (_editCorrespondence is null)
+            _modalCorr.CreatedAt = DateTime.UtcNow;
+
+        if (!TypeHasDirection(_modalCorr.Type))
+            _modalCorr.Direction = CorrespondenceDirection.Incoming;
+
+        var newFiles = _modalNewFiles.Select(f => { f.CorrespondenceId = _modalCorr.Id; return f; }).ToList();
+        var result = await Db.SaveCorrespondenceWithFilesAsync(_modalCorr, newFiles, _modalRemovedFileIds);
+
+        if (result == VersionedWriteResult.VersionMismatch)
+        {
+            _savingCorr = false;
+            _showCorrespondenceModal = false;
+            _corrGuardPending = false;
+            _conflictShowKeepEditing = false;
+            _conflictMessage = "This correspondence entry was modified in another tab. Your changes have been discarded.";
+            _showConflictAlert = true;
+            await LoadCorrespondenceAsync();
+            return;
+        }
+
+        var isNew = _editCorrespondence is null;
+        await DataSync.BroadcastAsync("correspondence", _modalCorr.Id, isNew ? "create" : "update");
+        CloseCorrModal();
+        await LoadCorrespondenceAsync();
+        _savingCorr = false;
+    }
+
+    private async Task HandleCorrFileSelected(InputFileChangeEventArgs e)
+    {
+        _fileUploadError = null;
+        const long maxSize = 5 * 1024 * 1024;
+        foreach (var file in e.GetMultipleFiles(100))
+        {
+            if (file.Size > maxSize)
+            {
+                _fileUploadError = $"File \"{file.Name}\" exceeds the 5 MB limit and was not added.";
+                continue;
+            }
+            using var ms = new System.IO.MemoryStream();
+            await file.OpenReadStream(maxSize).CopyToAsync(ms);
+            _modalNewFiles.Add(new CorrespondenceFile
+            {
+                CorrespondenceId = _modalCorr.Id,
+                FileName         = file.Name,
+                FileSize         = file.Size,
+                FileDataBase64   = Convert.ToBase64String(ms.ToArray()),
+                UploadedAt       = DateTime.UtcNow,
+            });
+        }
+    }
+
+    private void RemoveStagedFile(CorrespondenceFile f) => _modalNewFiles.Remove(f);
+
+    private void RemoveExistingFile(string id)
+    {
+        _modalRemovedFileIds.Add(id);
+        _modalExistingFiles.RemoveAll(f => f.Id == id);
+    }
+
+    private async Task DownloadExistingFile(CorrespondenceFile f) =>
+        await Db.DownloadGenericFileAsync(f.FileName, f.FileDataBase64);
+
+    private async Task ConfirmDeleteCorrespondenceAsync()
+    {
+        if (_deleteCorrespondenceTarget is null) return;
+        var id = _deleteCorrespondenceTarget.Id;
+        _deleteCorrespondenceTarget = null;
+        await Db.DeleteCorrespondenceCascadeAsync(id);
+        await DataSync.BroadcastAsync("correspondence", id, "delete");
+        _correspondence.RemoveAll(c => c.Id == id);
+        _correspondenceFileCounts.Remove(id);
+    }
+
+    private async Task LoadCorrespondenceAsync()
+    {
+        _correspondence = await Db.GetCorrespondenceByOpportunityAsync(Id);
+        _correspondenceFileCounts = new();
+        foreach (var c in _correspondence)
+            _correspondenceFileCounts[c.Id] = await Db.GetCorrespondenceFileCountAsync(c.Id);
+    }
+
     // ── BroadcastChannel live updates (M4-8) ──────────────────────────────────
 
     private void HandleOppChangedRemote(string? id, string @event)
@@ -1153,4 +1697,23 @@ else
             StateHasChanged();
         });
     }
+
+    // ── BroadcastChannel live updates (M5-5) ──────────────────────────────────
+
+    private void HandleCorrespondenceChanged(string? id, string @event)
+    {
+        if (@event == "delete" && id == _editCorrespondence?.Id && _showCorrespondenceModal)
+        {
+            CloseCorrModal();
+            _corrGuardPending = false;
+            _deletionMessage = "This correspondence entry was deleted in another tab.";
+            _showDeletionAlert = true;
+            InvokeAsync(StateHasChanged);
+            return;
+        }
+        InvokeAsync(async () => { await LoadCorrespondenceAsync(); StateHasChanged(); });
+    }
+
+    private void HandleCorrFileChanged(string? id, string @event) =>
+        InvokeAsync(async () => { await LoadCorrespondenceAsync(); StateHasChanged(); });
 }

@@ -87,4 +87,8 @@ public interface IIndexedDbService
     Task DeleteOpportunityCascadeAsync(string oppId);
     Task DeleteContactCascadeAsync(string contactId);
     Task DeleteCorrespondenceCascadeAsync(string corrId);
+
+    Task<VersionedWriteResult> SaveCorrespondenceWithFilesAsync(Correspondence corr, List<CorrespondenceFile> add, List<string> removeIds);
+    Task<int> GetCorrespondenceFileCountAsync(string corrId);
+    Task DownloadGenericFileAsync(string fileName, string base64Data);
 }

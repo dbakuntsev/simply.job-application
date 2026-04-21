@@ -16,7 +16,7 @@ public class IndexedDbService : IIndexedDbService, IAsyncDisposable
     };
 
     // Version token is replaced at build time by the InjectDependencyVersion MSBuild target.
-    private const string _moduleUrl = "./js/indexeddb.js?v=B47D75E71FA53BE1DD4D80C95050D35D400688F94890E03CE8277AC8C46D74E4";
+    private const string _moduleUrl = "./js/indexeddb.js?v=0CAD00C99A6CAEC715867E6491956AD0C6BC2F97439E61D06E6CE18D963C7823";
 
     public IndexedDbService(IJSRuntime js) => _js = js;
 
@@ -510,6 +510,29 @@ public class IndexedDbService : IIndexedDbService, IAsyncDisposable
     {
         var m = await ModuleAsync();
         await m.InvokeVoidAsync("deleteCorrespondenceCascade", corrId);
+    }
+
+    public async Task<VersionedWriteResult> SaveCorrespondenceWithFilesAsync(
+        Correspondence corr, List<CorrespondenceFile> add, List<string> removeIds)
+    {
+        var m = await ModuleAsync();
+        var corrObj    = JsonSerializer.SerializeToElement(corr, _jsonOpts);
+        var addArr     = JsonSerializer.SerializeToElement(add, _jsonOpts);
+        var removeArr  = JsonSerializer.SerializeToElement(removeIds, _jsonOpts);
+        var result = await m.InvokeAsync<string>("saveCorrespondenceWithFiles", corrObj, addArr, removeArr);
+        return result == "success" ? VersionedWriteResult.Success : VersionedWriteResult.VersionMismatch;
+    }
+
+    public async Task<int> GetCorrespondenceFileCountAsync(string corrId)
+    {
+        var m = await ModuleAsync();
+        return await m.InvokeAsync<int>("getCorrespondenceFileCount", corrId);
+    }
+
+    public async Task DownloadGenericFileAsync(string fileName, string base64Data)
+    {
+        var m = await ModuleAsync();
+        await m.InvokeVoidAsync("downloadFile", fileName, base64Data);
     }
 
     // ── Versioned write ──────────────────────────────────────────────────────
