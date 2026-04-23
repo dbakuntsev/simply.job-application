@@ -146,6 +146,20 @@ export async function clearFiles() {
     return tx('files', 'readwrite', s => s.clear());
 }
 
+export async function clearAllUserData() {
+    const stores = [
+        'sessions', 'files',
+        'baseResumes', 'baseResumeVersions',
+        'organizations', 'contacts', 'contactOpportunityRoles', 'lookupIndustries', 'lookupContactRoles',
+        'opportunities', 'opportunityFieldHistory',
+        'correspondence', 'correspondenceFiles',
+    ];
+    return txMulti(stores, 'readwrite', (t, resolve) => {
+        for (const name of stores) t.objectStore(name).clear();
+        t.oncomplete = () => resolve();
+    });
+}
+
 // ── Organizations ─────────────────────────────────────────────────────────────
 
 export async function getAllOrganizations() {

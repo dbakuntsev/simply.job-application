@@ -19,6 +19,7 @@ public interface IIndexedDbService
     Task SaveFileAsync(StoredFile file);
     Task DeleteFileAsync(string id);
     Task ClearFilesAsync();
+    Task ClearAllUserDataAsync();
 
     Task DownloadFileAsync(string fileName, byte[] data);
 

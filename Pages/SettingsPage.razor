@@ -134,12 +134,20 @@
                     <button class="btn-close" @onclick="() => _confirmClear = false"></button>
                 </div>
                 <div class="modal-body">
-                    This will permanently delete all session history and stored files.
-                    Settings (API key, model) will not be affected.
+                    <p class="fw-semibold text-danger mb-2">This action is permanent and cannot be undone.</p>
+                    <p class="mb-2">The following data will be permanently deleted:</p>
+                    <ul class="mb-2">
+                        <li>Sessions &amp; Files</li>
+                        <li>Resumes</li>
+                        <li>Organizations &amp; Contacts</li>
+                        <li>Opportunities</li>
+                        <li>Correspondence</li>
+                    </ul>
+                    <p class="mb-0">Your settings (API key, model, preferences) will not be affected.</p>
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" @onclick="() => _confirmClear = false">Cancel</button>
-                    <button class="btn btn-danger" @onclick="ClearStorageAsync">Yes, clear everything</button>
+                    <button class="btn btn-danger" @onclick="ClearStorageAsync">Yes, delete everything</button>
                 </div>
             </div>
         </div>
@@ -266,8 +274,7 @@
         _confirmClear = false;
         try
         {
-            await Db.ClearSessionsAsync();
-            await Db.ClearFilesAsync();
+            await Db.ClearAllUserDataAsync();
             _saved = true;
         }
         catch (Exception ex)

@@ -16,7 +16,7 @@ public class IndexedDbService : IIndexedDbService, IAsyncDisposable
     };
 
     // Version token is replaced at build time by the InjectDependencyVersion MSBuild target.
-    private const string _moduleUrl = "./js/indexeddb.js?v=EFD28042D7265FAC03E8536B1EADADC7EF70295F44F5578AB70CF73BCEBDA640";
+    private const string _moduleUrl = "./js/indexeddb.js?v=EA52BD937162C34E7FD0114DCFA1DA78CC80B7CD87A35A9B8F4DED70177EE7F2";
 
     public IndexedDbService(IJSRuntime js) => _js = js;
 
@@ -146,6 +146,12 @@ public class IndexedDbService : IIndexedDbService, IAsyncDisposable
     {
         var m = await ModuleAsync();
         await m.InvokeVoidAsync("clearFiles");
+    }
+
+    public async Task ClearAllUserDataAsync()
+    {
+        var m = await ModuleAsync();
+        await m.InvokeVoidAsync("clearAllUserData");
     }
 
     public async Task DownloadFileAsync(string fileName, byte[] data)
