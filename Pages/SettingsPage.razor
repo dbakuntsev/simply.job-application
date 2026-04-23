@@ -38,21 +38,8 @@
         </div>
 
         <div class="card mt-3">
-            <div class="card-header">Storage Limits</div>
+            <div class="card-header">Storage</div>
             <div class="card-body">
-                <div class="mb-3">
-                    <label class="form-label">Session history limit</label>
-                    <input type="number" class="form-control" @bind="_historyLimit" min="1" max="500" />
-                    <div class="form-text">Oldest sessions are removed first when the limit is exceeded.</div>
-                </div>
-                <div class="mb-3">
-                    <label class="form-label">Files library limit</label>
-                    <input type="number" class="form-control" @bind="_filesLimit" min="1" max="500" />
-                    <div class="form-text">Least recently used files are removed first.</div>
-                </div>
-
-                <hr class="my-3" />
-
                 <div class="mb-1">
                     <label class="form-label mb-1">Storage usage</label>
                     @if (!_storageLoaded)
@@ -74,14 +61,13 @@
                                      aria-valuenow="@((int)pct)" aria-valuemin="0" aria-valuemax="100"></div>
                             </div>
                         }
-                        <div class="d-flex justify-content-between small">
-                            <span class="text-muted">Files</span>
-                            <span>@FormatBytes(_filesBytes)</span>
-                        </div>
-                        <div class="d-flex justify-content-between small mt-1">
-                            <span class="text-muted">Sessions</span>
-                            <span>@FormatBytes(_sessionsBytes)</span>
-                        </div>
+                        @foreach (var group in _storeGroups)
+                        {
+                            <div class="d-flex justify-content-between small mt-1">
+                                <span class="text-muted">@group.Label</span>
+                                <span>@FormatBytes(group.Bytes)</span>
+                            </div>
+                        }
                     }
                 </div>
             </div>
@@ -149,7 +135,7 @@
                 </div>
                 <div class="modal-body">
                     This will permanently delete all session history and stored files.
-                    Settings (API key, model, limits) will not be affected.
+                    Settings (API key, model) will not be affected.
                 </div>
                 <div class="modal-footer">
                     <button class="btn btn-secondary" @onclick="() => _confirmClear = false">Cancel</button>
@@ -166,12 +152,10 @@
     string _selectedProvider = "openai";
     string _apiKey = "";
     string _selectedModel = "";
-    int _historyLimit = 20;
-    int _filesLimit = 41;
     int? _outputResumePages;
 
-    long _filesBytes;
-    long _sessionsBytes;
+    record StoreGroup(string Label, long Bytes);
+    List<StoreGroup> _storeGroups = new();
     long _storageQuota;
     long _storageUsage;
     bool _storageLoaded;
@@ -195,26 +179,35 @@
     {
         _settings = await Db.GetSettingsAsync();
         _selectedProvider = _settings.AiProvider;
-        _historyLimit = _settings.HistoryLimit;
-        _filesLimit = _settings.FilesLimit;
         _outputResumePages = _settings.OutputResumePages;
         LoadProviderFields();
 
         await LoadStorageUsageAsync();
     }
 
-    static readonly System.Text.Json.JsonSerializerOptions _jsonOpts = new()
-    {
-        PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase,
-    };
+    static readonly string[] _allStores =
+    [
+        "sessions", "files",
+        "baseResumes", "baseResumeVersions",
+        "organizations", "contacts", "contactOpportunityRoles", "lookupIndustries", "lookupContactRoles",
+        "opportunities", "opportunityFieldHistory",
+        "correspondence", "correspondenceFiles",
+    ];
 
     async Task LoadStorageUsageAsync()
     {
-        var files = await Db.GetAllFilesAsync();
-        _filesBytes = files.Sum(f => (long)System.Text.Json.JsonSerializer.Serialize(f, _jsonOpts).Length);
+        var storeBytes = await Db.GetStoreBytesAsync(_allStores);
 
-        var sessions = await Db.GetAllSessionsAsync();
-        _sessionsBytes = sessions.Sum(s => (long)System.Text.Json.JsonSerializer.Serialize(s, _jsonOpts).Length);
+        long Sum(params string[] names) => names.Sum(n => storeBytes.GetValueOrDefault(n));
+
+        _storeGroups =
+        [
+            new("Sessions & Files",           Sum("sessions", "files")),
+            new("Resumes",                    Sum("baseResumes", "baseResumeVersions")),
+            new("Organizations & Contacts",   Sum("organizations", "contacts", "contactOpportunityRoles", "lookupIndustries", "lookupContactRoles")),
+            new("Opportunities",              Sum("opportunities", "opportunityFieldHistory")),
+            new("Correspondence",             Sum("correspondence", "correspondenceFiles")),
+        ];
 
         var estimate = await JS.InvokeAsync<double[]?>("sjaGetStorageEstimate");
         if (estimate is { Length: >= 2 })
@@ -258,8 +251,6 @@
             _settings.AiProvider = _selectedProvider;
             _settings.ProviderApiKeys[_selectedProvider] = _apiKey;
             _settings.ProviderModels[_selectedProvider] = _selectedModel;
-            _settings.HistoryLimit = _historyLimit;
-            _settings.FilesLimit = _filesLimit;
             _settings.OutputResumePages = _outputResumePages;
             await Db.SaveSettingsAsync(_settings);
             _saved = true;

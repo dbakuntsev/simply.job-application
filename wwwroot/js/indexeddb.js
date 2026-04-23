@@ -730,6 +730,28 @@ export async function deleteAdHocSessionsWithFiles() {
     });
 }
 
+// ── Storage stats ─────────────────────────────────────────────────────────────
+
+export async function getStoreBytesAsync(storeNames) {
+    const db = await openDb();
+    const result = {};
+    for (const name of storeNames) {
+        if (!db.objectStoreNames.contains(name)) { result[name] = 0; continue; }
+        result[name] = await new Promise((resolve, reject) => {
+            const t = db.transaction(name, 'readonly');
+            const req = t.objectStore(name).openCursor();
+            let bytes = 0;
+            req.onsuccess = e => {
+                const cursor = e.target.result;
+                if (cursor) { bytes += JSON.stringify(cursor.value).length; cursor.continue(); }
+                else resolve(bytes);
+            };
+            req.onerror = () => reject(req.error);
+        });
+    }
+    return JSON.stringify(result);
+}
+
 // ── Misc ──────────────────────────────────────────────────────────────────────
 
 export function downloadFile(fileName, base64Data) {

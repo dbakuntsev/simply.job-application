@@ -21,8 +21,8 @@ public interface IIndexedDbService
     Task ClearFilesAsync();
 
     Task DownloadFileAsync(string fileName, byte[] data);
-    Task EnforceSessionLimitAsync(int limit);
-    Task EnforceFileLimitAsync(int limit);
+
+    Task<Dictionary<string, long>> GetStoreBytesAsync(string[] storeNames);
 
     Task<VersionedWriteResult> VersionedWriteAsync<T>(string storeName, T record, string[]? lockNames = null) where T : IVersioned;
 

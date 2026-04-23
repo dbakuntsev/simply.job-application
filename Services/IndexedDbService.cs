@@ -16,7 +16,7 @@ public class IndexedDbService : IIndexedDbService, IAsyncDisposable
     };
 
     // Version token is replaced at build time by the InjectDependencyVersion MSBuild target.
-    private const string _moduleUrl = "./js/indexeddb.js?v=9E181F1A1992C3AA7155FE7BDB629481CFACF1BFA8B24D0471A217BC519549B8";
+    private const string _moduleUrl = "./js/indexeddb.js?v=EFD28042D7265FAC03E8536B1EADADC7EF70295F44F5578AB70CF73BCEBDA640";
 
     public IndexedDbService(IJSRuntime js) => _js = js;
 
@@ -579,28 +579,15 @@ public class IndexedDbService : IIndexedDbService, IAsyncDisposable
         };
     }
 
-    // ── Retention enforcement ────────────────────────────────────────────────
+    // ── Storage stats ─────────────────────────────────────────────────────────
 
-    public async Task EnforceSessionLimitAsync(int limit)
+    public async Task<Dictionary<string, long>> GetStoreBytesAsync(string[] storeNames)
     {
-        var all = await GetAllSessionsAsync();
-        var ordered = all.OrderBy(s => s.CreatedAt).ToList();
-        while (ordered.Count > limit)
-        {
-            await DeleteSessionAsync(ordered[0].Id);
-            ordered.RemoveAt(0);
-        }
-    }
-
-    public async Task EnforceFileLimitAsync(int limit)
-    {
-        var all = await GetAllFileMetaAsync();
-        var ordered = all.OrderBy(f => f.LastUsedAt).ToList();
-        while (ordered.Count > limit)
-        {
-            await DeleteFileAsync(ordered[0].Id);
-            ordered.RemoveAt(0);
-        }
+        var m = await ModuleAsync();
+        var json = await m.InvokeAsync<string?>("getStoreBytesAsync", new object[] { storeNames });
+        if (string.IsNullOrEmpty(json)) return new Dictionary<string, long>();
+        return JsonSerializer.Deserialize<Dictionary<string, long>>(json, _jsonOpts)
+               ?? new Dictionary<string, long>();
     }
 
     public async ValueTask DisposeAsync()
