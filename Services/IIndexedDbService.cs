@@ -83,6 +83,10 @@ public interface IIndexedDbService
     Task SaveBaseResumeVersionAsync(BaseResumeVersion version);
     Task DeleteVersionsByResumeAsync(string resumeId);
 
+    Task<List<OrganizationProjection>> GetOrganizationProjectionsAsync();
+    Task<List<OpportunityProjection>> GetOpportunityProjectionsAsync();
+    Task DeleteAdHocSessionsAsync();
+
     Task DeleteOrganizationCascadeAsync(string orgId);
     Task DeleteOpportunityCascadeAsync(string oppId);
     Task DeleteContactCascadeAsync(string contactId);

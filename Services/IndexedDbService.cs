@@ -16,7 +16,7 @@ public class IndexedDbService : IIndexedDbService, IAsyncDisposable
     };
 
     // Version token is replaced at build time by the InjectDependencyVersion MSBuild target.
-    private const string _moduleUrl = "./js/indexeddb.js?v=0CAD00C99A6CAEC715867E6491956AD0C6BC2F97439E61D06E6CE18D963C7823";
+    private const string _moduleUrl = "./js/indexeddb.js?v=9E181F1A1992C3AA7155FE7BDB629481CFACF1BFA8B24D0471A217BC519549B8";
 
     public IndexedDbService(IJSRuntime js) => _js = js;
 
@@ -79,6 +79,28 @@ public class IndexedDbService : IIndexedDbService, IAsyncDisposable
     {
         var m = await ModuleAsync();
         await m.InvokeVoidAsync("clearSessions");
+    }
+
+    public async Task<List<OrganizationProjection>> GetOrganizationProjectionsAsync()
+    {
+        var m = await ModuleAsync();
+        var raw = await m.InvokeAsync<string?>("getOrganizationProjections");
+        if (string.IsNullOrEmpty(raw)) return new();
+        return JsonSerializer.Deserialize<List<OrganizationProjection>>(raw, _jsonOpts) ?? new();
+    }
+
+    public async Task<List<OpportunityProjection>> GetOpportunityProjectionsAsync()
+    {
+        var m = await ModuleAsync();
+        var raw = await m.InvokeAsync<string?>("getOpportunityProjections");
+        if (string.IsNullOrEmpty(raw)) return new();
+        return JsonSerializer.Deserialize<List<OpportunityProjection>>(raw, _jsonOpts) ?? new();
+    }
+
+    public async Task DeleteAdHocSessionsAsync()
+    {
+        var m = await ModuleAsync();
+        await m.InvokeVoidAsync("deleteAdHocSessionsWithFiles");
     }
 
     // ── Files ────────────────────────────────────────────────────────────────

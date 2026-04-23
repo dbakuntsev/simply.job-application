@@ -1,10 +1,25 @@
 @page "/history"
+@implements IAsyncDisposable
 @inject IIndexedDbService Db
+@inject IDataSyncService DataSync
 @inject NavigationManager Nav
+@using System.Text
 
 <PageTitle>History — Simply Job Application</PageTitle>
 
-<h4 class="mb-4">Session History</h4>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h4 class="mb-0">Session History</h4>
+    <span title="@(_hasAdHocSessions ? null : "No ad-hoc sessions to clear")">
+        <button class="btn btn-outline-danger btn-sm"
+                disabled="@(!_hasAdHocSessions)"
+                @onclick="RequestClearAdHoc">Clear Ad-hoc Sessions</button>
+    </span>
+</div>
+
+<div class="mb-3">
+    <input type="search" class="form-control" placeholder="Filter sessions…"
+           @bind="_filter" @bind:event="oninput" />
+</div>
 
 @if (_loading)
 {
@@ -14,48 +29,234 @@
 }
 else if (_sessions.Count == 0)
 {
-    <div class="alert alert-info">No sessions recorded yet. Use the Evaluate &amp; Generate screen to evaluate and generate application materials.</div>
+    <div class="alert alert-info">No sessions yet — use Evaluate &amp; Generate to create your first session.</div>
 }
 else
 {
-    <div class="list-group">
-        @foreach (var s in _sessions)
-        {
-            <button class="list-group-item list-group-item-action"
-                    @onclick="() => GoToSession(s.Id)">
-                <div class="d-flex justify-content-between align-items-start">
-                    <div>
-                        <div class="fw-semibold">@s.OrganizationNameSnapshot</div>
-                        <div class="text-muted">@s.Role</div>
-                    </div>
-                    <div class="d-flex flex-column align-items-end gap-1">
-                        <span class="badge @ScoreBadgeClass(s.MatchScore)">@s.MatchScore</span>
-                        <small class="text-muted">@s.CreatedAt.ToLocalTime().ToString("g")</small>
-                    </div>
-                </div>
-            </button>
-        }
-    </div>
+    var filtered = Filtered();
+    @if (filtered.Count == 0)
+    {
+        <div class="text-muted">No sessions match your filter.</div>
+    }
+    else
+    {
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Organization</th>
+                    <th>Opportunity</th>
+                    <th>Role</th>
+                    <th>Score</th>
+                    <th>Artifacts</th>
+                    <th>Created</th>
+                    <th></th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var s in filtered)
+                {
+                    var org = SessionDisplayHelper.ResolveOrg(s, _orgMap);
+                    var opp = SessionDisplayHelper.ResolveOpp(s, _oppMap);
+                    <tr style="cursor:pointer" @onclick="() => GoToSession(s.Id)">
+                        <td>
+                            @if (org.Url is not null)
+                            {
+                                <a href="@org.Url" @onclick:stopPropagation="true">@HighlightMatch(org.Text, _filter)</a>
+                            }
+                            else
+                            {
+                                @HighlightMatch(org.Text, _filter)
+                            }
+                        </td>
+                        <td>
+                            @if (!string.IsNullOrEmpty(opp.Text))
+                            {
+                                @if (opp.Url is not null)
+                                {
+                                    <a href="@opp.Url" @onclick:stopPropagation="true">@HighlightMatch(opp.Text, _filter)</a>
+                                }
+                                else
+                                {
+                                    @HighlightMatch(opp.Text, _filter)
+                                }
+                            }
+                        </td>
+                        <td>@HighlightMatch(s.Role, _filter)</td>
+                        <td><span class="badge @ScoreBadgeClass(s.MatchScore)">@HighlightMatch(s.MatchScore, _filter)</span></td>
+                        <td>@(s.ArtifactsGenerated ? "✓" : "")</td>
+                        <td class="text-nowrap">@HighlightMatch(s.CreatedAt.ToLocalTime().ToString("g"), _filter)</td>
+                        <td>
+                            @if (s.OrganizationId is null)
+                            {
+                                <button class="btn btn-sm btn-outline-danger"
+                                        @onclick="() => RequestDeleteSession(s)"
+                                        @onclick:stopPropagation="true">Delete</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
 }
+
+<ConfirmDeleteModal Show="@_showDeleteModal"
+                    Title="Delete Session"
+                    Message="Delete this session and its generated files? This action cannot be undone."
+                    DeleteLabel="Delete"
+                    OnConfirm="ConfirmDeleteSessionAsync"
+                    OnCancel="CancelDelete" />
+
+<ConfirmDeleteModal Show="@_showClearModal"
+                    Title="Clear Ad-hoc Sessions"
+                    Message="Delete all ad-hoc sessions (those with no linked organization) and their generated files? This action cannot be undone."
+                    DeleteLabel="Clear All"
+                    OnConfirm="ConfirmClearAdHocAsync"
+                    OnCancel="CancelClear" />
 
 @code {
     List<SessionRecord> _sessions = new();
+    Dictionary<string, OrganizationProjection> _orgMap = new();
+    Dictionary<string, OpportunityProjection> _oppMap = new();
     bool _loading = true;
+    string _filter = "";
+    SessionRecord? _deleteTarget;
+    bool _showDeleteModal;
+    bool _showClearModal;
+    bool _hasAdHocSessions;
 
     protected override async Task OnInitializedAsync()
     {
-        var all = await Db.GetAllSessionsAsync();
-        _sessions = all.OrderByDescending(s => s.CreatedAt).ToList();
+        await LoadAsync();
+        DataSync.OnSessionChanged += HandleSessionChanged;
+        DataSync.OnSessionsCleared += HandleSessionsCleared;
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        var sessions = await Db.GetAllSessionsAsync();
+        _sessions = sessions.OrderByDescending(s => s.CreatedAt).ToList();
+        _hasAdHocSessions = _sessions.Any(s => s.OrganizationId is null);
+
+        var orgProj = await Db.GetOrganizationProjectionsAsync();
+        _orgMap = orgProj.ToDictionary(o => o.Id);
+
+        var oppProj = await Db.GetOpportunityProjectionsAsync();
+        _oppMap = oppProj.ToDictionary(o => o.Id);
+
         _loading = false;
     }
 
-    void GoToSession(string id) => Nav.NavigateTo("history/" + id);
+    private List<SessionRecord> Filtered()
+    {
+        if (string.IsNullOrWhiteSpace(_filter)) return _sessions;
+        var f = _filter.Trim();
+        return _sessions.Where(s =>
+        {
+            var org = SessionDisplayHelper.ResolveOrg(s, _orgMap);
+            var opp = SessionDisplayHelper.ResolveOpp(s, _oppMap);
+            return Contains(org.Text, f) || Contains(opp.Text, f) ||
+                   Contains(s.Role, f)   || Contains(s.MatchScore, f) ||
+                   Contains(s.CreatedAt.ToLocalTime().ToString("g"), f);
+        }).ToList();
+    }
 
-    static string ScoreBadgeClass(string score) => score switch
+    private void GoToSession(string id) => Nav.NavigateTo("history/" + id);
+
+    private void RequestDeleteSession(SessionRecord s)
+    {
+        _deleteTarget = s;
+        _showDeleteModal = true;
+    }
+
+    private void CancelDelete()
+    {
+        _showDeleteModal = false;
+        _deleteTarget = null;
+    }
+
+    private async Task ConfirmDeleteSessionAsync()
+    {
+        if (_deleteTarget is null) return;
+        var s = _deleteTarget;
+        _deleteTarget = null;
+        _showDeleteModal = false;
+
+        if (s.TailoredResumeFileId is not null)
+            await Db.DeleteFileAsync(s.TailoredResumeFileId);
+        if (s.CoverLetterFileId is not null)
+            await Db.DeleteFileAsync(s.CoverLetterFileId);
+        await Db.DeleteSessionAsync(s.Id);
+        await DataSync.BroadcastAsync("session", s.Id, "deleted");
+        await LoadAsync();
+    }
+
+    private void RequestClearAdHoc() => _showClearModal = true;
+
+    private void CancelClear() => _showClearModal = false;
+
+    private async Task ConfirmClearAdHocAsync()
+    {
+        _showClearModal = false;
+        await Db.DeleteAdHocSessionsAsync();
+        await DataSync.BroadcastAsync("session", null, "cleared");
+        await LoadAsync();
+    }
+
+    private void HandleSessionChanged(string? id, string @event)
+    {
+        InvokeAsync(async () =>
+        {
+            await LoadAsync();
+            StateHasChanged();
+        });
+    }
+
+    private void HandleSessionsCleared()
+    {
+        InvokeAsync(async () =>
+        {
+            await LoadAsync();
+            StateHasChanged();
+        });
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        DataSync.OnSessionChanged -= HandleSessionChanged;
+        DataSync.OnSessionsCleared -= HandleSessionsCleared;
+        await Task.CompletedTask;
+    }
+
+    private static bool Contains(string? text, string filter) =>
+        text?.Contains(filter, StringComparison.OrdinalIgnoreCase) == true;
+
+    private static string ScoreBadgeClass(string score) => score switch
     {
         "Excellent" => "bg-success",
         "Good"      => "bg-primary",
-        "Fair"      => "bg-warning",
+        "Fair"      => "bg-warning text-dark",
         _           => "bg-danger",
     };
+
+    private MarkupString HighlightMatch(string? text, string filter)
+    {
+        var safe = text ?? "";
+        if (string.IsNullOrWhiteSpace(filter))
+            return (MarkupString)System.Net.WebUtility.HtmlEncode(safe);
+        var sb = new StringBuilder();
+        int pos = 0;
+        while (pos < safe.Length)
+        {
+            var idx = safe.IndexOf(filter, pos, StringComparison.OrdinalIgnoreCase);
+            if (idx < 0) { sb.Append(System.Net.WebUtility.HtmlEncode(safe[pos..])); break; }
+            sb.Append(System.Net.WebUtility.HtmlEncode(safe[pos..idx]));
+            sb.Append("<mark>");
+            sb.Append(System.Net.WebUtility.HtmlEncode(safe.Substring(idx, filter.Length)));
+            sb.Append("</mark>");
+            pos = idx + filter.Length;
+        }
+        return (MarkupString)sb.ToString();
+    }
 }

@@ -697,6 +697,39 @@ export async function lockedVersionedWrite(lockNames, storeName, record) {
     });
 }
 
+// ── Session / History helpers ─────────────────────────────────────────────────
+
+export async function getOrganizationProjections() {
+    const all = await tx('organizations', 'readonly', s => s.getAll());
+    return JSON.stringify((all ?? []).map(o => ({ id: o.id, name: o.name })));
+}
+
+export async function getOpportunityProjections() {
+    const all = await tx('opportunities', 'readonly', s => s.getAll());
+    return JSON.stringify((all ?? []).map(o => ({ id: o.id, organizationId: o.organizationId, role: o.role })));
+}
+
+export async function deleteAdHocSessionsWithFiles() {
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+        const t = db.transaction(['sessions', 'files'], 'readwrite');
+        t.onerror = () => reject(t.error);
+        t.oncomplete = () => resolve();
+
+        const sessionStore = t.objectStore('sessions');
+        const fileStore    = t.objectStore('files');
+
+        sessionStore.getAll().onsuccess = e => {
+            const adHoc = (e.target.result ?? []).filter(s => !s.organizationId);
+            for (const s of adHoc) {
+                if (s.tailoredResumeFileId) fileStore.delete(s.tailoredResumeFileId);
+                if (s.coverLetterFileId)    fileStore.delete(s.coverLetterFileId);
+                sessionStore.delete(s.id);
+            }
+        };
+    });
+}
+
 // ── Misc ──────────────────────────────────────────────────────────────────────
 
 export function downloadFile(fileName, base64Data) {
