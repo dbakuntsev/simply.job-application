@@ -3,6 +3,7 @@
 @inject IIndexedDbService Db
 @inject IDataSyncService DataSync
 @inject IAiProviderFactory Providers
+@inject AppStateService AppState
 @inject NavigationManager Nav
 @using System.Text.Json
 
@@ -53,7 +54,7 @@ else
                 @if (!_isEditing)
                 {
                     <button class="btn btn-sm btn-outline-secondary" @onclick="StartEdit">Edit</button>
-                    <button class="btn btn-sm btn-outline-primary" disabled title="Available in a future version">
+                    <button class="btn btn-sm btn-outline-primary" @onclick="NavigateToEvaluate">
                         Evaluate &amp; Generate
                     </button>
                 }
@@ -1093,6 +1094,19 @@ else
         _loading = false;
     }
 
+    // ── Navigate to E&G ──────────────────────────────────────────────────────
+
+    private void NavigateToEvaluate()
+    {
+        if (_opp is null) return;
+        AppState.ContextualOrgId      = _opp.OrganizationId;
+        AppState.ContextualOrgName    = _org?.Name ?? "";
+        AppState.ContextualOppId      = _opp.Id;
+        AppState.ContextualOppRole    = _opp.Role;
+        AppState.ContextualOppRoleDesc = _opp.RoleDescription;
+        Nav.NavigateTo("/evaluate");
+    }
+
     // ── Edit mode ─────────────────────────────────────────────────────────────
 
     private void StartEdit()
@@ -1241,7 +1255,7 @@ else
 
     // ── AI Qualification Extraction ───────────────────────────────────────────
 
-    private void TryExtractQualificationsAsync()
+    private async Task TryExtractQualificationsAsync()
     {
         if (_opp is null) return;
         var hasContent = _opp.RequiredQualifications.Length > 0 || _opp.PreferredQualifications.Length > 0;
@@ -1251,7 +1265,7 @@ else
         }
         else
         {
-            _ = RunExtractQualificationsAsync();
+            await RunExtractQualificationsAsync();
         }
     }
 
