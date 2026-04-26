@@ -810,6 +810,7 @@ else
     private bool _showConflictAlert;
     private string _conflictMessage = "";
     private bool _conflictShowKeepEditing = true;
+    private bool _conflictIsForCorr;
 
     private bool _showDeletionAlert;
     private string _deletionMessage = "";
@@ -1418,11 +1419,27 @@ else
     private async Task HandleConflictDiscardAndReload()
     {
         _showConflictAlert = false;
-        _isEditing = false;
-        await LoadAsync();
+        if (_conflictIsForCorr && _editCorrespondence is not null)
+        {
+            _conflictIsForCorr = false;
+            var freshCorr = await Db.GetCorrespondenceAsync(_editCorrespondence.Id);
+            if (freshCorr is not null)
+                await OpenEditCorrespondence(freshCorr);
+            else
+                _showCorrespondenceModal = false;
+        }
+        else
+        {
+            _isEditing = false;
+            await LoadAsync();
+        }
     }
 
-    private void HandleConflictKeepEditing() => _showConflictAlert = false;
+    private void HandleConflictKeepEditing()
+    {
+        _showConflictAlert = false;
+        _conflictIsForCorr = false;
+    }
 
     private void HandleDeletionDismiss()
     {
@@ -1628,12 +1645,15 @@ else
     {
         if (id != Id) return;
 
-        if (@event == "delete")
+        if (@event == "deleted")
         {
             _pendingNavigation = _opp?.OrganizationId is not null
                 ? $"/organizations/{_opp.OrganizationId}"
                 : "/opportunities";
-            _deletionMessage = "This opportunity has been deleted in another tab.";
+            var oppRole = _opp?.Role ?? "Unknown";
+            _deletionMessage = _showCorrespondenceModal && _editCorrespondence is not null
+                ? $"Opportunity '{oppRole}' was deleted in another tab. This Correspondence entry no longer exists."
+                : $"Opportunity '{oppRole}' was deleted in another tab.";
             _showDeletionAlert = true;
             InvokeAsync(StateHasChanged);
             return;
@@ -1642,7 +1662,7 @@ else
         if (_isEditing)
         {
             _conflictShowKeepEditing = true;
-            _conflictMessage = "This opportunity was updated in another tab. You can discard your changes and reload, or continue editing.";
+            _conflictMessage = "This record was changed in another tab. Your unsaved changes may conflict.";
             _showConflictAlert = true;
             InvokeAsync(StateHasChanged);
             return;
@@ -1685,10 +1705,16 @@ else
     {
         if (id != _opp?.OrganizationId) return;
 
-        if (@event == "delete")
+        if (@event == "deleted")
         {
             _pendingNavigation = "/organizations";
-            _deletionMessage = "The organization for this opportunity has been deleted in another tab.";
+            var orgName = _org?.Name ?? "Unknown";
+            if (_showCorrespondenceModal && _editCorrespondence is not null)
+                _deletionMessage = $"Organization '{orgName}' was deleted in another tab. This Correspondence entry no longer exists.";
+            else if (_showCorrespondenceModal)
+                _deletionMessage = $"Organization '{orgName}' was deleted in another tab.";
+            else
+                _deletionMessage = $"Organization '{orgName}' was deleted in another tab. This Opportunity no longer exists.";
             _showDeletionAlert = true;
             InvokeAsync(StateHasChanged);
             return;
@@ -1716,14 +1742,26 @@ else
 
     private void HandleCorrespondenceChanged(string? id, string @event)
     {
-        if (@event == "delete" && id == _editCorrespondence?.Id && _showCorrespondenceModal)
+        if (_showCorrespondenceModal && id == _editCorrespondence?.Id)
         {
-            CloseCorrModal();
-            _corrGuardPending = false;
-            _deletionMessage = "This correspondence entry was deleted in another tab.";
-            _showDeletionAlert = true;
-            InvokeAsync(StateHasChanged);
-            return;
+            if (@event == "deleted")
+            {
+                CloseCorrModal();
+                _corrGuardPending = false;
+                _deletionMessage = "This correspondence entry was deleted in another tab.";
+                _showDeletionAlert = true;
+                InvokeAsync(StateHasChanged);
+                return;
+            }
+            if (@event == "updated")
+            {
+                _conflictShowKeepEditing = true;
+                _conflictIsForCorr = true;
+                _conflictMessage = "This record was changed in another tab. Your unsaved changes may conflict.";
+                _showConflictAlert = true;
+                InvokeAsync(StateHasChanged);
+                return;
+            }
         }
         InvokeAsync(async () => { await LoadCorrespondenceAsync(); StateHasChanged(); });
     }

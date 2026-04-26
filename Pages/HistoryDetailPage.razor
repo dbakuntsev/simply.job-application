@@ -392,7 +392,7 @@ else
         if (id == _session?.Id && @event == "deleted")
             InvokeAsync(() =>
             {
-                _deletionMessage = "This session has been deleted in another tab.";
+                _deletionMessage = "This session was deleted in another tab.";
                 _showDeletionAlert = true;
                 StateHasChanged();
                 return Task.CompletedTask;
@@ -404,7 +404,8 @@ else
         if (@event == "deleted" && id == _session?.OrganizationId)
             InvokeAsync(() =>
             {
-                _deletionMessage = "The organization linked to this session has been deleted in another tab.";
+                var name = _session?.OrganizationNameSnapshot ?? "Unknown";
+                _deletionMessage = $"Organization '{name}' was deleted in another tab. This session no longer exists.";
                 _showDeletionAlert = true;
                 StateHasChanged();
                 return Task.CompletedTask;
@@ -416,14 +417,15 @@ else
         if (@event == "deleted" && id == _session?.OpportunityId)
             InvokeAsync(() =>
             {
-                _deletionMessage = "The opportunity linked to this session has been deleted in another tab.";
+                var role = _session?.OpportunityRoleSnapshot ?? "Unknown";
+                _deletionMessage = $"Opportunity '{role}' was deleted in another tab. This session no longer exists.";
                 _showDeletionAlert = true;
                 StateHasChanged();
                 return Task.CompletedTask;
             });
     }
 
-    private void HandleDeletionDismiss() => Nav.NavigateTo("history");
+    private void HandleDeletionDismiss() => Nav.NavigateTo("/history");
 
     public async ValueTask DisposeAsync()
     {

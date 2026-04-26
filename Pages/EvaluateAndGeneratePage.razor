@@ -2194,66 +2194,72 @@
 
     private void HandleOpportunityChanged(string? id, string @event)
     {
-        if (id != _linkedOppId) return;
         InvokeAsync(async () =>
         {
-            if (@event == "deleted")
+            // Refresh the opportunity dropdown list whenever any opp changes for the linked org
+            if (_linkedOrgId is not null)
+                _opportunities = await Db.GetOpportunitiesByOrganizationAsync(_linkedOrgId);
+
+            if (id == _linkedOppId && _linkedOppId is not null)
             {
-                if (_sessionId is not null)
+                if (@event == "deleted")
                 {
-                    _remoteDeletionMessage = "The linked opportunity was deleted in another tab. The current session is no longer available.";
-                    _remoteDeletionNavTarget = _linkedOrgId is not null
-                        ? $"/organizations/{_linkedOrgId}"
-                        : "/organizations";
-                    _showRemoteDeletionModal = true;
-                }
-                else
-                {
-                    _linkedOppId = null;
-                    _linkedOppRole = null;
-                    _linkedOppRoleDesc = null;
-                    _entitySelectionLocked = false;
-                    _showPreEvalOppDeletedBanner = true;
-                    RecalculateUnsavedChangesBanner();
-                }
-            }
-            else if (@event == "updated")
-            {
-                var opp = await Db.GetOpportunityAsync(id!);
-                if (opp is null) return;
-
-                bool roleChanged = opp.Role != _linkedOppRole;
-                bool descChanged = opp.RoleDescription != _linkedOppRoleDesc;
-                if (!roleChanged && !descChanged) return;
-
-                var oldOppRole = _linkedOppRole;
-                var oldOppDesc = _linkedOppRoleDesc;
-                _linkedOppRole = opp.Role;
-                _linkedOppRoleDesc = opp.RoleDescription;
-
-                bool userModified = _role != oldOppRole || _roleDescription != oldOppDesc;
-
-                if (!userModified)
-                {
-                    _role = opp.Role;
-                    _roleDescription = opp.RoleDescription;
                     if (_sessionId is not null)
                     {
-                        DiscardEvaluation();
-                        _remoteChangeNoticeMessage = "The linked opportunity was changed in another tab. Evaluation results have been discarded — please re-evaluate.";
-                        _showRemoteChangeNoticeModal = true;
+                        _remoteDeletionMessage = "The linked opportunity was deleted in another tab. The current session is no longer available.";
+                        _remoteDeletionNavTarget = _linkedOrgId is not null
+                            ? $"/organizations/{_linkedOrgId}"
+                            : "/organizations";
+                        _showRemoteDeletionModal = true;
+                    }
+                    else
+                    {
+                        _linkedOppId = null;
+                        _linkedOppRole = null;
+                        _linkedOppRoleDesc = null;
+                        _entitySelectionLocked = false;
+                        _showPreEvalOppDeletedBanner = true;
+                        RecalculateUnsavedChangesBanner();
                     }
                 }
-                else if (_role != opp.Role || _roleDescription != opp.RoleDescription)
+                else if (@event == "updated")
                 {
-                    _remoteConflictMyRole = _role;
-                    _remoteConflictMyRoleDesc = _roleDescription;
-                    _remoteConflictRemoteRole = opp.Role;
-                    _remoteConflictRemoteRoleDesc = opp.RoleDescription;
-                    _showRemoteConflictModal = true;
-                }
+                    var opp = await Db.GetOpportunityAsync(id!);
+                    if (opp is null) return;
 
-                RecalculateUnsavedChangesBanner();
+                    bool roleChanged = opp.Role != _linkedOppRole;
+                    bool descChanged = opp.RoleDescription != _linkedOppRoleDesc;
+                    if (!roleChanged && !descChanged) return;
+
+                    var oldOppRole = _linkedOppRole;
+                    var oldOppDesc = _linkedOppRoleDesc;
+                    _linkedOppRole = opp.Role;
+                    _linkedOppRoleDesc = opp.RoleDescription;
+
+                    bool userModified = _role != oldOppRole || _roleDescription != oldOppDesc;
+
+                    if (!userModified)
+                    {
+                        _role = opp.Role;
+                        _roleDescription = opp.RoleDescription;
+                        if (_sessionId is not null)
+                        {
+                            DiscardEvaluation();
+                            _remoteChangeNoticeMessage = "The linked opportunity was changed in another tab. Evaluation results have been discarded — please re-evaluate.";
+                            _showRemoteChangeNoticeModal = true;
+                        }
+                    }
+                    else if (_role != opp.Role || _roleDescription != opp.RoleDescription)
+                    {
+                        _remoteConflictMyRole = _role;
+                        _remoteConflictMyRoleDesc = _roleDescription;
+                        _remoteConflictRemoteRole = opp.Role;
+                        _remoteConflictRemoteRoleDesc = opp.RoleDescription;
+                        _showRemoteConflictModal = true;
+                    }
+
+                    RecalculateUnsavedChangesBanner();
+                }
             }
             StateHasChanged();
         });

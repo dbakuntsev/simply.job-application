@@ -467,6 +467,7 @@ else
     // Conflict / deletion alerts
     private bool _showConflictAlert;
     private string _conflictMessage = "";
+    private bool _conflictIsForContact;
     private bool _showDeletionAlert;
     private string _deletionMessage = "";
     private string _pendingNavigation = "/organizations";
@@ -854,17 +855,35 @@ else
 
     // ── Conflict / deletion alert handlers ───────────────────────────────────
 
-    private void HandleConflictKeepEditing() => _showConflictAlert = false;
+    private void HandleConflictKeepEditing()
+    {
+        _showConflictAlert = false;
+        _conflictIsForContact = false;
+    }
 
     private async Task HandleConflictDiscardAndReload()
     {
         _showConflictAlert = false;
-        var fresh = await Db.GetOrganizationAsync(Id);
-        if (fresh is not null)
+        if (_conflictIsForContact && _editingContact is not null)
         {
-            _org = fresh;
-            _editOrg = CloneOrg(fresh);
-            _allOrgs = await Db.GetAllOrganizationsAsync();
+            _conflictIsForContact = false;
+            var freshContact = await Db.GetContactAsync(_editingContact.Id);
+            if (freshContact is not null)
+            {
+                _editingContact = freshContact;
+                _contactDraft = CloneContact(freshContact);
+                _contactSaveError = null;
+            }
+        }
+        else
+        {
+            var fresh = await Db.GetOrganizationAsync(Id);
+            if (fresh is not null)
+            {
+                _org = fresh;
+                _editOrg = CloneOrg(fresh);
+                _allOrgs = await Db.GetAllOrganizationsAsync();
+            }
         }
         StateHasChanged();
     }
@@ -884,7 +903,10 @@ else
         {
             if (@event == "deleted")
             {
-                _deletionMessage = $"Organization '{_org?.Name ?? "Unknown"}' was deleted in another tab.";
+                var orgName = _org?.Name ?? "Unknown";
+                _deletionMessage = _showContactModal && _editingContact is not null
+                    ? $"Organization '{orgName}' was deleted in another tab. This Contact no longer exists."
+                    : $"Organization '{orgName}' was deleted in another tab.";
                 _pendingNavigation = "/organizations";
                 _showDeletionAlert = true;
                 StateHasChanged();
@@ -910,6 +932,23 @@ else
     {
         InvokeAsync(async () =>
         {
+            if (_showContactModal && _editingContact?.Id == id)
+            {
+                if (@event == "deleted")
+                {
+                    var name = _editingContact!.FullName;
+                    CloseContactModal();
+                    _deletionMessage = $"Contact '{name}' was deleted in another tab.";
+                    _pendingNavigation = $"/organizations/{Id}";
+                    _showDeletionAlert = true;
+                }
+                else if (@event == "updated")
+                {
+                    _conflictMessage = "This record was changed in another tab. Your unsaved changes may conflict.";
+                    _conflictIsForContact = true;
+                    _showConflictAlert = true;
+                }
+            }
             _contacts = (await Db.GetContactsByOrganizationAsync(Id))
                 .OrderBy(c => c.FullName, StringComparer.OrdinalIgnoreCase).ToList();
             StateHasChanged();
