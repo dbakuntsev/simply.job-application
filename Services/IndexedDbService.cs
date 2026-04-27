@@ -16,7 +16,7 @@ public class IndexedDbService : IIndexedDbService, IAsyncDisposable
     };
 
     // Version token is replaced at build time by the InjectDependencyVersion MSBuild target.
-    private const string _moduleUrl = "./js/indexeddb.js?v=EA52BD937162C34E7FD0114DCFA1DA78CC80B7CD87A35A9B8F4DED70177EE7F2";
+    private const string _moduleUrl = "./js/indexeddb.js?v=472BFE53DA3ADC2CEE356CF5F56E11EC22363D07A9466F42FC81040125DACBCC";
 
     public IndexedDbService(IJSRuntime js) => _js = js;
 
@@ -193,6 +193,13 @@ public class IndexedDbService : IIndexedDbService, IAsyncDisposable
         var m = await ModuleAsync();
         var obj = JsonSerializer.SerializeToElement(value, _jsonOpts);
         await m.InvokeVoidAsync("addLookupValue", tableName, obj);
+    }
+
+    public async Task AddLookupValueLockedAsync(string tableName, LookupValue value)
+    {
+        var m = await ModuleAsync();
+        var obj = JsonSerializer.SerializeToElement(value, _jsonOpts);
+        await m.InvokeVoidAsync("addLookupValueLocked", $"sja-{tableName}", tableName, obj);
     }
 
     // ── Organizations ────────────────────────────────────────────────────────

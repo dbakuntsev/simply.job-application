@@ -33,13 +33,14 @@
             </div>
             <div class="col-md-6">
                 <label class="form-label fw-semibold">Industry</label>
-                <select class="form-select" @bind="_org.Industry">
-                    <option value="">— Select industry —</option>
+                <input class="form-control" list="industry-options"
+                       @bind="_org.Industry" placeholder="Select or type industry" autocomplete="off" />
+                <datalist id="industry-options">
                     @foreach (var ind in _industries)
                     {
-                        <option value="@ind.Value">@ind.Value</option>
+                        <option value="@ind.Value" />
                     }
-                </select>
+                </datalist>
             </div>
             <div class="col-md-4">
                 <label class="form-label fw-semibold">Size</label>
@@ -104,6 +105,19 @@
         _allOrgs = await Db.GetAllOrganizationsAsync();
     }
 
+    private async Task<string> NormalizeIndustryAsync(string? raw)
+    {
+        var trimmed = (raw ?? "").Trim();
+        if (string.IsNullOrEmpty(trimmed)) return "";
+        var existing = _industries.FirstOrDefault(i =>
+            i.Value.Equals(trimmed, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null) return existing.Value;
+        var lv = new LookupValue { Id = Guid.NewGuid().ToString(), Value = trimmed };
+        await Db.AddLookupValueLockedAsync("lookupIndustries", lv);
+        _industries.Add(lv);
+        return trimmed;
+    }
+
     private void Cancel()
     {
         _saved = true;
@@ -128,6 +142,7 @@
         try
         {
             _org.Name = _org.Name.Trim();
+            _org.Industry = await NormalizeIndustryAsync(_org.Industry);
             _org.CreatedAt = DateTime.UtcNow;
             _org.UpdatedAt = DateTime.UtcNow;
             await Db.SaveOrganizationAsync(_org);

@@ -32,6 +32,7 @@ public interface IIndexedDbService
 
     Task<List<LookupValue>> GetLookupValuesAsync(string tableName);
     Task AddLookupValueAsync(string tableName, LookupValue value);
+    Task AddLookupValueLockedAsync(string tableName, LookupValue value);
 
     Task<List<Organization>> GetAllOrganizationsAsync();
     Task<Organization?> GetOrganizationAsync(string id);

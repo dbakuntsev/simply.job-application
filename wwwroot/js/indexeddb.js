@@ -479,6 +479,10 @@ export async function addLookupValue(tableName, record) {
     return tx(tableName, 'readwrite', s => s.put(record));
 }
 
+export async function addLookupValueLocked(lockName, tableName, record) {
+    return navigator.locks.request(lockName, () => tx(tableName, 'readwrite', s => s.put(record)));
+}
+
 // ── Versioned write ───────────────────────────────────────────────────────────
 
 // Atomic read-check-write: reads the current record, verifies record.version

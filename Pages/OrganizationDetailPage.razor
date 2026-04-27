@@ -106,13 +106,14 @@ else
                     </div>
                     <div class="col-md-6">
                         <label class="form-label fw-semibold">Industry</label>
-                        <select class="form-select" @bind="_editOrg.Industry">
-                            <option value="">— Select industry —</option>
+                        <input class="form-control" list="industry-options"
+                               @bind="_editOrg.Industry" placeholder="Select or type industry" autocomplete="off" />
+                        <datalist id="industry-options">
                             @foreach (var ind in _industries)
                             {
-                                <option value="@ind.Value">@ind.Value</option>
+                                <option value="@ind.Value" />
                             }
-                        </select>
+                        </datalist>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label fw-semibold">Size</label>
@@ -670,6 +671,19 @@ else
         _orgSaveError = null;
     }
 
+    private async Task<string> NormalizeIndustryAsync(string? raw)
+    {
+        var trimmed = (raw ?? "").Trim();
+        if (string.IsNullOrEmpty(trimmed)) return "";
+        var existing = _industries.FirstOrDefault(i =>
+            i.Value.Equals(trimmed, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null) return existing.Value;
+        var lv = new LookupValue { Id = Guid.NewGuid().ToString(), Value = trimmed };
+        await Db.AddLookupValueLockedAsync("lookupIndustries", lv);
+        _industries.Add(lv);
+        return trimmed;
+    }
+
     private void HandleEditNameInput(ChangeEventArgs e)
     {
         _editOrg.Name = e.Value?.ToString() ?? "";
@@ -695,6 +709,7 @@ else
         try
         {
             _editOrg.Name = _editOrg.Name.Trim();
+            _editOrg.Industry = await NormalizeIndustryAsync(_editOrg.Industry);
             _editOrg.UpdatedAt = DateTime.UtcNow;
             var result = await Db.VersionedWriteAsync(
                 "organizations", _editOrg,

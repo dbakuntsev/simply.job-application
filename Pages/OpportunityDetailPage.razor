@@ -1399,7 +1399,7 @@ else
         foreach (var label in newLabels)
         {
             var lv = new LookupValue { Id = Guid.NewGuid().ToString(), Value = label };
-            await Db.AddLookupValueAsync("lookupContactRoles", lv);
+            await Db.AddLookupValueLockedAsync("lookupContactRoles", lv);
             _contactRoleLabels.Add(label);
         }
 
