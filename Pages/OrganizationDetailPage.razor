@@ -294,7 +294,9 @@ else
                                     @if (session.OpportunityId is not null)
                                     {
                                         var opp = _opportunities.FirstOrDefault(o => o.Id == session.OpportunityId);
-                                        var role = opp?.Role ?? session.OpportunityRoleSnapshot;
+                                        var role = opp is not null && opp.Role != session.OpportunityRoleSnapshot
+                                            ? $"{opp.Role} (formerly: {session.OpportunityRoleSnapshot})"
+                                            : opp?.Role ?? session.OpportunityRoleSnapshot;
                                         @if (!_isEditing)
                                         {
                                             <a href="/opportunities/@session.OpportunityId"
@@ -982,19 +984,13 @@ else
 
     private string GetResumeDisplay(SessionRecord session)
     {
-        var versionNum = session.BaseResumeVersionNumberSnapshot;
-        var snapshot = session.BaseResumeNameSnapshot;
         if (string.IsNullOrEmpty(session.BaseResumeVersionId))
-            return string.IsNullOrEmpty(snapshot) ? "—" : $"{snapshot} (v{versionNum})";
-
-        if (!_versionToResume.TryGetValue(session.BaseResumeVersionId, out var resume) || resume is null)
-            return $"(deleted: {snapshot}) (v{versionNum})";
-
-        if (!string.IsNullOrEmpty(snapshot) &&
-            !resume.Name.Equals(snapshot, StringComparison.Ordinal))
-            return $"{resume.Name} (formerly: {snapshot}) (v{versionNum})";
-
-        return $"{resume.Name} (v{versionNum})";
+        {
+            var snapshot = session.BaseResumeNameSnapshot;
+            return string.IsNullOrEmpty(snapshot) ? "—" : $"{snapshot} (v{session.BaseResumeVersionNumberSnapshot})";
+        }
+        _versionToResume.TryGetValue(session.BaseResumeVersionId, out var resume);
+        return SessionDisplayHelper.ResolveResumeName(session, resume?.Name);
     }
 
     private bool GetFieldMatch(SessionRecord session)

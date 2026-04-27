@@ -232,7 +232,7 @@ else
                     {
                         @if (_opp.RequiredQualifications.Length == 0)
                         {
-                            <div class="text-muted fst-italic small">None listed.</div>
+                            <div class="text-muted fst-italic small">No required qualifications yet — use Extract Qualifications or add them manually in Edit mode.</div>
                         }
                         else
                         {
@@ -267,7 +267,7 @@ else
                     {
                         @if (_opp.PreferredQualifications.Length == 0)
                         {
-                            <div class="text-muted fst-italic small">None listed.</div>
+                            <div class="text-muted fst-italic small">No preferred qualifications yet — use Extract Qualifications or add them manually in Edit mode.</div>
                         }
                         else
                         {
@@ -386,7 +386,7 @@ else
                     }
                     <select class="form-select form-select-sm" style="max-width:220px"
                             disabled="@(noContacts || allAssociated || _addingContact)"
-                            title="@(noContacts ? "No contacts in this organization" : allAssociated ? "All contacts already associated" : null)"
+                            title="@(noContacts ? "No Contacts in this Organization" : allAssociated ? "No more Contacts in this Organization" : null)"
                             @onchange="HandleAddContact">
                         <option value="">Add contact…</option>
                         @foreach (var c in unassociated)
@@ -472,6 +472,7 @@ else
                             <th>Resume</th>
                             <th class="text-center" style="width:100px">Match Score</th>
                             <th class="text-center" style="width:80px">Artifacts</th>
+                            <th class="text-center" style="width:90px">Field Match</th>
                             <th style="width:1%"></th>
                         </tr>
                     </thead>
@@ -487,6 +488,9 @@ else
                                 </td>
                                 <td class="text-center">
                                     @if (session.ArtifactsGenerated) { @CheckIcon }
+                                </td>
+                                <td class="text-center">
+                                    @if (GetFieldMatch(session)) { @CheckIcon }
                                 </td>
                                 <td class="pe-2" @onclick:stopPropagation>
                                     @if (!_isEditing)
@@ -782,6 +786,8 @@ else
     private int _tagPickerKey;
 
     private List<SessionRecord> _sessions = new();
+    private List<BaseResume> _baseResumes = new();
+    private Dictionary<string, BaseResume?> _versionToResume = new();
     private SessionRecord? _deleteSessionTarget;
 
     private List<Correspondence> _correspondence = new();
@@ -878,13 +884,33 @@ else
         _ => source.ToString(),
     };
 
+    private async Task BuildVersionToResumeMapAsync()
+    {
+        _versionToResume = new();
+        var versionIds = _sessions
+            .Where(s => !string.IsNullOrEmpty(s.BaseResumeVersionId))
+            .Select(s => s.BaseResumeVersionId)
+            .Distinct();
+        foreach (var vid in versionIds)
+        {
+            var ver = await Db.GetBaseResumeVersionAsync(vid);
+            _versionToResume[vid] = ver is null
+                ? null
+                : _baseResumes.FirstOrDefault(r => r.Id == ver.ResumeId);
+        }
+    }
+
     private string GetResumeDisplay(SessionRecord session)
     {
         if (string.IsNullOrEmpty(session.BaseResumeVersionId)) return "—";
-        var name = session.BaseResumeNameSnapshot;
-        var ver  = session.BaseResumeVersionNumberSnapshot;
-        return string.IsNullOrEmpty(name) ? "(deleted: Snapshot)" : $"{name} (v{ver})";
+        _versionToResume.TryGetValue(session.BaseResumeVersionId, out var resume);
+        return SessionDisplayHelper.ResolveResumeName(session, resume?.Name);
     }
+
+    private bool GetFieldMatch(SessionRecord session) =>
+        _opp is not null &&
+        session.Role == _opp.Role &&
+        session.RoleDescription == _opp.RoleDescription;
 
     private void NavigateToSession(string id) => Nav.NavigateTo("/history/" + id);
 
@@ -1087,6 +1113,9 @@ else
         _sessions = allSessions
             .Where(s => s.OpportunityId == Id)
             .OrderByDescending(s => s.CreatedAt).ToList();
+
+        _baseResumes = await Db.GetAllBaseResumesAsync();
+        await BuildVersionToResumeMapAsync();
 
         _history = await Db.GetHistoryByOpportunityAsync(Id);
 
@@ -1734,6 +1763,7 @@ else
             var allSessions = await Db.GetAllSessionsAsync();
             _sessions = allSessions.Where(s => s.OpportunityId == Id)
                 .OrderByDescending(s => s.CreatedAt).ToList();
+            await BuildVersionToResumeMapAsync();
             StateHasChanged();
         });
     }

@@ -1,8 +1,13 @@
 @page "/settings"
+@inherits NavigationGuardBase
 @inject IIndexedDbService Db
 @inject IAiProviderFactory Providers
 
 <PageTitle>Settings — Simply Job Application</PageTitle>
+
+<NavigationLock OnBeforeInternalNavigation="HandleLocationChanging" />
+<NavigationGuardModal Show="_showGuardModal" StayLabel="@StayLabel" LeaveLabel="@LeaveLabel"
+                      OnStay="() => OnGuardStay()" OnLeave="() => OnGuardLeave()" />
 
 <h4 class="mb-4">Settings</h4>
 
@@ -177,11 +182,24 @@
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
+        await base.OnAfterRenderAsync(firstRender);
         if (firstRender)
             await JS.InvokeVoidAsync("eval",
                 "document.querySelectorAll('[data-bs-toggle=\"popover\"]')" +
                 ".forEach(el => bootstrap.Popover.getOrCreateInstance(el))");
     }
+
+    // ── Navigation guard ──────────────────────────────────────────────────────
+
+    protected override bool IsDirty =>
+        _selectedProvider != _settings.AiProvider ||
+        _apiKey != (_settings.ProviderApiKeys.GetValueOrDefault(_selectedProvider) ?? "") ||
+        _selectedModel != (_settings.ProviderModels.GetValueOrDefault(_selectedProvider)
+                           ?? Providers.Get(_selectedProvider).DefaultModelId) ||
+        _outputResumePages != _settings.OutputResumePages;
+
+    protected override string StayLabel  => "Stay and save settings";
+    protected override string LeaveLabel => "Discard changes and leave";
 
     protected override async Task OnInitializedAsync()
     {
