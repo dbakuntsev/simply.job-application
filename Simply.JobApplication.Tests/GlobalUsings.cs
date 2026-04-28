@@ -12,4 +12,4 @@ global using Simply.JobApplication.Services;
 global using Simply.JobApplication.Services.AI;
 global using Simply.JobApplication.Components;
 global using Simply.JobApplication.Pages;
-global using Simply.JobApplication.Tests.M0.Helpers;
+global using Simply.JobApplication.Tests.Helpers;
