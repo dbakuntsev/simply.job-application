@@ -1,0 +1,198 @@
+@page "/organizations/{OrgId}/opportunities/new"
+@inherits NavigationGuardBase
+@inject IIndexedDbService Db
+@inject IDataSyncService DataSync
+@inject NavigationManager Nav
+
+<PageTitle>New Opportunity — Simply Job Application</PageTitle>
+
+<NavigationLock OnBeforeInternalNavigation="HandleLocationChanging" />
+<NavigationGuardModal Show="_showGuardModal" StayLabel="@StayLabel" LeaveLabel="@LeaveLabel"
+                      OnStay="() => OnGuardStay()" OnLeave="() => OnGuardLeave()" />
+
+<DeletionAlertModal Show="_showOrgDeletedAlert"
+                    Message="@_orgDeletedMessage"
+                    OnDismiss="HandleOrgDeletedDismiss" />
+
+@if (_loading)
+{
+    <div class="text-center py-5"><div class="spinner-border" role="status"></div></div>
+}
+else if (_org is null)
+{
+    <div class="alert alert-warning">Organization not found.</div>
+}
+else
+{
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/organizations">Organizations</a></li>
+            <li class="breadcrumb-item"><a href="/organizations/@OrgId">@_org.Name</a></li>
+            <li class="breadcrumb-item active">New Opportunity</li>
+        </ol>
+    </nav>
+
+    <h4 class="mb-4">New Opportunity</h4>
+
+    <div class="card">
+        <div class="card-body">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Organization</label>
+                    <div class="form-control-plaintext">@_org.Name</div>
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label fw-semibold">Role <span class="text-danger">*</span></label>
+                    <input class="form-control" @bind="_opp.Role" @bind:event="oninput" placeholder="e.g. Senior Software Engineer" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Stage</label>
+                    <select class="form-select" @bind="_opp.Stage">
+                        @foreach (var stage in Enum.GetValues<OpportunityStage>())
+                        {
+                            <option value="@stage">@StageName(stage)</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Work Arrangement</label>
+                    <select class="form-select" @bind="_workArrangementStr">
+                        <option value="">— Select —</option>
+                        <option value="Remote">Remote</option>
+                        <option value="Hybrid">Hybrid</option>
+                        <option value="OnSite">On-site</option>
+                    </select>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label fw-semibold">Compensation Range</label>
+                    <input class="form-control" @bind="_opp.CompensationRange" placeholder="e.g. $120k–$150k" />
+                </div>
+                <div class="col-12">
+                    <label class="form-label fw-semibold">Posting URL</label>
+                    <input class="form-control" @bind="_opp.PostingUrl" placeholder="https://" />
+                </div>
+                <div class="col-12">
+                    <label class="form-label fw-semibold">Role Description</label>
+                    <textarea class="form-control" rows="6" @bind="_opp.RoleDescription"
+                              placeholder="Paste or type the role description here…"></textarea>
+                </div>
+            </div>
+
+            @if (_saveError is not null)
+            {
+                <div class="alert alert-danger mt-3 mb-0">@_saveError</div>
+            }
+
+            <div class="d-flex gap-2 justify-content-end mt-4">
+                <button class="btn btn-outline-secondary" @onclick="Cancel">Cancel</button>
+                <button class="btn btn-primary" @onclick="SaveAsync"
+                        disabled="@(!CanSave || _saving)">
+                    @(_saving ? "Saving…" : "Save")
+                </button>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public string OrgId { get; set; } = "";
+
+    private Organization? _org;
+    private readonly Opportunity _opp = new();
+    private string _workArrangementStr = "";
+    private bool _loading = true;
+    private bool _saving;
+    private bool _saved;
+    private string? _saveError;
+    private bool _showOrgDeletedAlert;
+    private string _orgDeletedMessage = "";
+
+    private bool CanSave => !string.IsNullOrWhiteSpace(_opp.Role);
+
+    protected override bool IsDirty =>
+        !_saved && (
+        !string.IsNullOrWhiteSpace(_opp.Role) ||
+        !string.IsNullOrWhiteSpace(_opp.RoleDescription) ||
+        !string.IsNullOrWhiteSpace(_opp.PostingUrl) ||
+        !string.IsNullOrWhiteSpace(_opp.CompensationRange) ||
+        !string.IsNullOrWhiteSpace(_workArrangementStr));
+
+    protected override string StayLabel => "Stay and continue editing";
+    protected override string LeaveLabel => "Discard opportunity and leave";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _opp.OrganizationId = OrgId;
+        _org = await Db.GetOrganizationAsync(OrgId);
+        _loading = false;
+        DataSync.OnOrganizationChanged += HandleOrgChanged;
+    }
+
+    public override async ValueTask DisposeAsync()
+    {
+        DataSync.OnOrganizationChanged -= HandleOrgChanged;
+        await base.DisposeAsync();
+    }
+
+    private void HandleOrgChanged(string? id, string @event)
+    {
+        if (id != OrgId || @event != "deleted") return;
+        _orgDeletedMessage = $"Organization '{_org?.Name ?? "Unknown"}' was deleted in another tab.";
+        _showOrgDeletedAlert = true;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void HandleOrgDeletedDismiss() => Nav.NavigateTo("/organizations");
+
+    private async Task SaveAsync()
+    {
+        if (!CanSave || _saving) return;
+        _saving = true;
+        _saveError = null;
+
+        _opp.OrganizationId = OrgId;
+        _opp.WorkArrangement = _workArrangementStr switch
+        {
+            "Remote" => WorkArrangement.Remote,
+            "Hybrid" => WorkArrangement.Hybrid,
+            "OnSite" => WorkArrangement.OnSite,
+            _ => null,
+        };
+        _opp.CreatedAt = DateTime.UtcNow;
+        _opp.UpdatedAt = DateTime.UtcNow;
+
+        try
+        {
+            await Db.SaveOpportunityAsync(_opp);
+            await DataSync.BroadcastAsync("opportunity", _opp.Id, "create");
+            _saved = true;
+            Nav.NavigateTo("/opportunities/" + _opp.Id);
+        }
+        catch
+        {
+            _saveError = "Failed to save. Please try again.";
+            _saving = false;
+        }
+    }
+
+    private void Cancel()
+    {
+        _saved = true;
+        Nav.NavigateTo("/organizations/" + OrgId);
+    }
+
+    private static string StageName(OpportunityStage stage) => stage switch
+    {
+        OpportunityStage.Open => "Open",
+        OpportunityStage.NotInterested => "Not Interested",
+        OpportunityStage.NotQualified => "Not Qualified",
+        OpportunityStage.Applied => "Applied",
+        OpportunityStage.Interview => "Interview",
+        OpportunityStage.InProgress => "In Progress",
+        OpportunityStage.Offer => "Offer",
+        OpportunityStage.Accepted => "Accepted",
+        OpportunityStage.Rejected => "Rejected",
+        OpportunityStage.Withdrawn => "Withdrawn",
+        _ => stage.ToString(),
+    };
+}

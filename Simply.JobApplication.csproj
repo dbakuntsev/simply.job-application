@@ -6,9 +6,19 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <!-- Exclude the nested test project from the main project's implicit glob -->
   <ItemGroup>
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="8.0.11" />
-    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="8.0.11" PrivateAssets="all" />
+    <Compile Remove="Simply.JobApplication.Tests\**" />
+    <Content Remove="Simply.JobApplication.Tests\**" />
+    <None Remove="Simply.JobApplication.Tests\**" />
+    <EmbeddedResource Remove="Simply.JobApplication.Tests\**" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="BlazorMonaco" Version="3.4.0" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="8.0.26" />
+    <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.DevServer" Version="8.0.26" PrivateAssets="all" />
+    <PackageReference Include="Radzen.Blazor" Version="10.3.1" />
   </ItemGroup>
 
   <!--

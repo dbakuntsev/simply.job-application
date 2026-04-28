@@ -1,7 +1,9 @@
 @page "/evaluate"
-@inject IndexedDbService Db
-@inject DocxService Docx
-@inject AiProviderFactory Providers
+@inherits NavigationGuardBase
+@inject IIndexedDbService Db
+@inject IDocxService Docx
+@inject IAiProviderFactory Providers
+@inject IDataSyncService DataSync
 @inject AppStateService AppState
 @inject NavigationManager Nav
 @inject IJSRuntime JS
@@ -35,11 +37,41 @@
         </div>
     </nav>
     <button class="btn btn-outline-secondary btn-sm"
+            title="Reset all form values."
             disabled="@(_evaluating || _reevaluating || _generating)"
             @onclick="NewSession">
         New
     </button>
 </div>
+
+<!-- ── Pre-evaluate deletion banners (M6-9) ──────────────────────────────── -->
+@if (_showPreEvalOrgDeletedBanner)
+{
+    <div class="alert alert-warning alert-dismissible mt-2" role="alert">
+        The linked organization was deleted in another tab and has been cleared.
+        <button type="button" class="btn-close" @onclick="() => _showPreEvalOrgDeletedBanner = false" aria-label="Dismiss"></button>
+    </div>
+}
+@if (_showPreEvalOppDeletedBanner)
+{
+    <div class="alert alert-warning alert-dismissible mt-2" role="alert">
+        The linked opportunity was deleted in another tab and has been cleared.
+        <button type="button" class="btn-close" @onclick="() => _showPreEvalOppDeletedBanner = false" aria-label="Dismiss"></button>
+    </div>
+}
+
+<!-- ── Unsaved Changes Banner (M6-4) ─────────────────────────────────────── -->
+@if (_showUnsavedChangesBanner)
+{
+    <div class="alert alert-warning d-flex flex-wrap gap-2 justify-content-between align-items-center mt-2" role="alert">
+        <span>Role or description differs from the saved Opportunity values.</span>
+        <button class="btn btn-sm btn-warning"
+                disabled="@(_evaluating || _generating)"
+                @onclick="UpdateOpportunityAsync">
+            Update Opportunity
+        </button>
+    </div>
+}
 
 <!-- ══ Swimlane 1: User Input ════════════════════════════════════════════ -->
 <section id="lane-input" class="sja-swimlane sja-lane-input" aria-label="User Input">
@@ -47,60 +79,160 @@
         <h5 class="mb-0">Job/Role &amp; Resume Input</h5>
     </div>
     <div class="sja-swimlane-body">
+
+        <!-- ── Entity Selection (M6-2) ───────────────────────────────────── -->
+        <div class="card mb-3">
+            <div class="card-body">
+                <div class="row g-2">
+                    <div class="col-12 col-md-6">
+                        <label class="form-label fw-semibold">
+                            Organization <span class="text-danger">*</span>
+                        </label>
+                        @if (_entitySelectionLocked)
+                        {
+                            <div class="input-group">
+                                <span class="form-control bg-light">@_orgText</span>
+                                <button class="btn btn-outline-secondary" type="button"
+                                        title="Clear organization"
+                                        disabled="@(_evaluating || _generating)"
+                                        @onclick="ClearOrganization">✕</button>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="position-relative">
+                                <input type="text"
+                                       class="form-control @(_linkedOrgId is not null ? "border-success" : "")"
+                                       @bind="_orgText"
+                                       @bind:event="oninput"
+                                       @bind:after="OnOrgTextChanged"
+                                       @onblur="OnOrgBlur"
+                                       placeholder="Type to search or enter new…"
+                                       disabled="@(_evaluating || _generating)" />
+                                @if (_orgSuggestions.Count > 0 && _showOrgDropdown)
+                                {
+                                    <div class="dropdown-menu show position-absolute w-100"
+                                         style="top:100%;left:0;z-index:1000;max-height:200px;overflow-y:auto">
+                                        @foreach (var org in _orgSuggestions)
+                                        {
+                                            var orgCopy = org;
+                                            <button class="dropdown-item" type="button"
+                                                    @onmousedown:preventDefault
+                                                    @onmousedown="() => SelectOrgSuggestion(orgCopy)">
+                                                @org.Name
+                                            </button>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                            @if (_linkedOrgId is not null)
+                            {
+                                <small class="text-success">Linked to existing organization</small>
+                            }
+                        }
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label fw-semibold">
+                            Opportunity <span class="text-muted fw-normal small">(optional)</span>
+                        </label>
+                        @if (_entitySelectionLocked && _linkedOppId is not null)
+                        {
+                            <div class="input-group">
+                                <span class="form-control bg-light">@_linkedOppRole</span>
+                                <button class="btn btn-outline-secondary" type="button"
+                                        title="Clear opportunity"
+                                        disabled="@(_evaluating || _generating)"
+                                        @onclick="ClearOpportunity">✕</button>
+                            </div>
+                        }
+                        else
+                        {
+                            <select class="form-select"
+                                    disabled="@(_linkedOrgId is null || _evaluating || _generating)"
+                                    value="@(_linkedOppId ?? "")"
+                                    @onchange="OnOppChanged">
+                                <option value="">-- Select opportunity (optional) --</option>
+                                @if (_linkedOrgId is not null && _opportunities.Count == 0)
+                                {
+                                    <option value="" disabled>(none available)</option>
+                                }
+                                @foreach (var opp in _opportunities)
+                                {
+                                    <option value="@opp.Id">@opp.Role</option>
+                                }
+                            </select>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Job Description + Resume row ──────────────────────────────── -->
         <div class="row g-3">
+            <!-- Role & Role Description card (M6-3) -->
             <div class="col-12 col-lg-7">
                 <div class="card h-100">
-                    <div class="card-header">Job Description</div>
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <span>Job Description</span>
+                        @if (_roleFieldsLocked && !_editingPostEvaluate)
+                        {
+                            <button class="btn btn-sm btn-outline-secondary"
+                                    disabled="@(_evaluating || _generating)"
+                                    @onclick="EditRoleFields">Edit</button>
+                        }
+                    </div>
                     <div class="card-body">
-                        <div class="row g-2 mb-3">
-                            <div class="col-6">
-                                <label class="form-label">Company Name</label>
-                                <input class="form-control" value="@_companyName"
-                                       @onchange="@(e => _companyName = ((string?)e.Value ?? "").Trim())"
-                                       placeholder="Acme Corp" readonly="@_inputsLocked" />
-                            </div>
-                            <div class="col-6">
-                                <label class="form-label">Job Title</label>
-                                <input class="form-control" value="@_jobTitle"
-                                       @onchange="@(e => _jobTitle = ((string?)e.Value ?? "").Trim())"
-                                       placeholder="Software Engineer" readonly="@_inputsLocked" />
-                            </div>
+                        <div class="mb-3">
+                            <label class="form-label">Role</label>
+                            <input class="form-control"
+                                   @bind="_role"
+                                   @bind:event="oninput"
+                                   @bind:after="OnRoleAfterBind"
+                                   placeholder="Software Engineer"
+                                   readonly="@(_roleFieldsLocked && !_editingPostEvaluate)" />
                         </div>
                         <div>
-                            <label class="form-label">Job Details</label>
-                            <textarea class="form-control" rows="8" @bind="_jobDetails" @bind:event="oninput"
+                            <label class="form-label">Role Description</label>
+                            <textarea class="form-control" rows="8"
+                                      @bind="_roleDescription"
+                                      @bind:event="oninput"
+                                      @bind:after="OnRoleDescAfterBind"
                                       placeholder="Paste the full job description here…"
-                                      readonly="@_inputsLocked"></textarea>
+                                      readonly="@(_roleFieldsLocked && !_editingPostEvaluate)"></textarea>
                         </div>
                     </div>
                 </div>
             </div>
+
+            <!-- Resume card (M6-1) -->
             <div class="col-12 col-lg-5">
                 <div class="card h-100">
                     <div class="card-header">Resume</div>
                     <div class="card-body">
-                        @if (_selectedFileName is not null)
+                        @if (_noResumesExist)
                         {
-                            <div class="alert alert-success py-2 d-flex justify-content-between align-items-center mb-3">
-                                <span>📄 @_selectedFileName</span>
-                                @if (!_inputsLocked)
-                                {
-                                    <button class="btn btn-sm btn-outline-danger"
-                                            @onclick="ClearResume"
-                                            aria-label="Clear selected resume">✕</button>
-                                }
+                            <div class="alert alert-info mb-3">
+                                No resumes available.
+                                <a href="/resumes">Go to My Resumes</a> to upload your first resume.
                             </div>
                         }
-                        @if (!_inputsLocked)
+                        else
                         {
-                            <div class="mb-2">
-                                <label class="form-label">Upload DOCX</label>
-                                <InputFile class="form-control" accept=".docx" OnChange="OnFileUpload" />
-                            </div>
-                            <div class="text-center text-muted small my-2">— or —</div>
+                            @if (_selectedResumeId is not null)
+                            {
+                                <div class="alert @(_resumeDeleted ? "alert-danger" : "alert-success") py-2 d-flex align-items-center gap-2 mb-3">
+                                    <span>@(_resumeDeleted ? "⚠️" : "📄")</span>
+                                    <span class="flex-grow-1">@ResumeDisplayLabel()</span>
+                                    @if (_resumeDeleted)
+                                    {
+                                        <span class="text-danger small">(deleted)</span>
+                                    }
+                                </div>
+                            }
                             <button class="btn btn-outline-secondary w-100" type="button"
-                                    @onclick="OpenFilePickerAsync">
-                                Choose from Files Library
+                                    disabled="@(_evaluating || _generating)"
+                                    @onclick="OpenResumePicker">
+                                @(_selectedResumeId is null ? "Select Resume" : "Change Resume")
                             </button>
                         }
                     </div>
@@ -108,12 +240,25 @@
             </div>
         </div>
 
-        @if (_inputError is not null)
+        <!-- Evaluate error shown in pre-eval state -->
+        @if (_evalError is not null && !_evaluating && !_roleFieldsLocked)
         {
-            <div class="alert alert-danger mt-3" role="alert">@_inputError</div>
+            <div class="alert alert-danger mt-3" role="alert">@_evalError</div>
         }
 
-        <div class="d-flex justify-content-end mt-3">
+        <div class="d-flex justify-content-between align-items-center mt-3">
+            @if (_evaluation is not null && _linkedOppId is null)
+            {
+                <button class="btn btn-outline-primary"
+                        disabled="@(_evaluating || _generating)"
+                        @onclick="OpenSaveOppModal">
+                    Save Opportunity
+                </button>
+            }
+            else
+            {
+                <div></div>
+            }
             <button class="btn btn-primary px-4"
                     disabled="@(!CanEvaluate)"
                     @onclick="EvaluateWithScrollAsync"
@@ -247,7 +392,10 @@
                             var kwIdx = 0;
                             foreach (var group in _evaluation.SuggestedKeywords.GroupBy(k => k.Category))
                             {
-                                <p class="fw-semibold mb-1 mt-2 small">@group.Key</p>
+                                if (!string.IsNullOrEmpty(group.Key))
+                                {
+                                    <p class="fw-semibold mb-1 mt-2 small">@group.Key</p>
+                                }
                                 foreach (var kw in group)
                                 {
                                     var idx = kwIdx++;
@@ -273,7 +421,8 @@
                             </label>
                             <textarea class="form-control form-control-sm" rows="2"
                                       placeholder="@("Developer Tools: Terraform\nGraphQL, REST")"
-                                      @bind="_customKeywords"></textarea>
+                                      @bind="_customKeywords"
+                                      @bind:after="() => _customKeywords = _customKeywords.Trim()"></textarea>
                         </div>
 
                         @if (GetAdditionalKeywords().Count > 0)
@@ -295,7 +444,8 @@
 
                 <div class="d-flex justify-content-end">
                     <button class="btn btn-success px-4"
-                            disabled="@(_generating || _reevaluating)"
+                            disabled="@(!CanGenerate)"
+                            title="@(_resumeDeleted ? "The selected resume is no longer available. Please select a different resume." : null)"
                             @onclick="GenerateWithScrollAsync"
                             aria-label="Generate application materials">
                         @if (_generating)
@@ -327,7 +477,7 @@
             }
         }
 
-        @if (_evalError is not null && !_evaluating && !_reevaluating)
+        @if (_evalError is not null && !_evaluating && !_reevaluating && _roleFieldsLocked)
         {
             <div class="alert alert-danger mt-3" role="alert">@_evalError</div>
         }
@@ -406,17 +556,19 @@
                             }
                         </div>
                         <div class="card-body text-muted small">
-                            Tailored resume generated and saved to the Files Library.
+                            Tailored resume generated and ready for download.
                         </div>
                     </div>
                 </div>
                 <div class="col-12 col-lg-6">
                     <div class="card h-100">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <span>Why Apply</span>
-                        </div>
+                        <div class="card-header">Why Apply</div>
                         <div class="card-body">
-                            <p class="mb-0">@_materials.WhyApplyText</p>
+                            @foreach (var para in _materials.WhyApplyText.Split(
+                                new[] { "\n\n", "\r\n\r\n" }, StringSplitOptions.RemoveEmptyEntries))
+                            {
+                                <p class="mb-1">@para</p>
+                            }
                         </div>
                     </div>
                 </div>
@@ -450,32 +602,58 @@
     </div>
 </section>
 
-<!-- File picker modal -->
-@if (_showFilePicker)
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+<!-- MODALS                                                                -->
+<!-- ══════════════════════════════════════════════════════════════════════ -->
+
+<!-- ── Resume Picker Modal (M6-1) ────────────────────────────────────── -->
+@if (_showResumePicker)
 {
-    <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4)"
-         role="dialog" aria-modal="true" aria-label="Choose Resume from Files Library">
+    <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4);z-index:1055"
+         role="dialog" aria-modal="true" aria-label="Select Resume">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Choose Resume from Files Library</h5>
-                    <button class="btn-close" @onclick="() => _showFilePicker = false" aria-label="Close"></button>
+                    <h5 class="modal-title">Select Resume</h5>
+                    <button class="btn-close" @onclick="() => _showResumePicker = false" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
-                    @if (_fileMeta.Count == 0)
+                    @if (_resumes.Count == 0)
                     {
-                        <p class="text-muted">No files stored yet.</p>
+                        <p class="text-muted">No resumes available. <a href="/resumes">Go to My Resumes</a> to upload one.</p>
                     }
                     else
                     {
                         <div class="list-group">
-                            @foreach (var f in _fileMeta.OrderByDescending(x => x.LastUsedAt))
+                            @foreach (var resume in _resumes.OrderBy(r => r.Name, StringComparer.OrdinalIgnoreCase))
                             {
-                                <button class="list-group-item list-group-item-action d-flex justify-content-between align-items-center"
-                                        @onclick="() => SelectStoredFile(f.Id, f.Name)">
-                                    <span>@f.Name</span>
-                                    <small class="text-muted">@f.LastUsedAt.ToLocalTime().ToString("g")</small>
-                                </button>
+                                var r = resume;
+                                var isExpanded = _resumePickerExpanded.GetValueOrDefault(r.Id);
+                                var ver = _latestVersions.GetValueOrDefault(r.Id);
+                                var isSelected = r.Id == _selectedResumeId;
+                                <div class="list-group-item @(isSelected ? "list-group-item-success" : "") p-2">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <button class="btn btn-link text-start p-0 flex-grow-1 text-decoration-none @(isSelected ? "fw-semibold" : "")"
+                                                @onclick="() => SelectResume(r)">
+                                            @r.Name
+                                            @if (isSelected) { <span class="ms-1 text-muted small">(selected)</span> }
+                                        </button>
+                                        <button class="btn btn-sm btn-outline-secondary ms-2"
+                                                @onclick="() => ToggleResumePickerExpand(r.Id)">
+                                            @(isExpanded ? "▲" : "▼")
+                                        </button>
+                                    </div>
+                                    @if (isExpanded && ver is not null)
+                                    {
+                                        <div class="mt-2 small text-muted ps-1">
+                                            <div>Uploaded: @ver.UploadedAt.ToLocalTime().ToString("g")</div>
+                                            @if (!string.IsNullOrEmpty(ver.Notes))
+                                            {
+                                                <div>Notes: @ver.Notes</div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
                             }
                         </div>
                     }
@@ -485,59 +663,460 @@
     </div>
 }
 
-@code {
-    string _companyName = "", _jobTitle = "", _jobDetails = "";
-    byte[]? _resumeBytes;
-    string? _selectedFileName;
-    string? _selectedFileId;
+<!-- ── Navigation Guard Modal (from base class) ───────────────────────── -->
+<NavigationGuardModal Show="_showGuardModal"
+                      StayLabel="@StayLabel"
+                      LeaveLabel="@LeaveLabel"
+                      OnStay="() => OnGuardStay()"
+                      OnLeave="() => OnGuardLeave()" />
+<NavigationLock OnBeforeInternalNavigation="HandleLocationChanging" />
 
+<!-- ── New + Banner Modal (M6-7) ─────────────────────────────────────── -->
+@if (_showNewWithBannerModal)
+{
+    <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4);z-index:1055" role="dialog" aria-modal="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Reset Form</h5>
+                </div>
+                <div class="modal-body">
+                    <p>You have unsaved changes to the linked Opportunity's Role or Description. What would you like to do?</p>
+                </div>
+                <div class="modal-footer gap-2">
+                    <button class="btn btn-outline-secondary" @onclick="() => _showNewWithBannerModal = false">Cancel</button>
+                    <button class="btn btn-outline-warning" @onclick="NewWithBannerResetAsync">Reset Without Saving</button>
+                    <button class="btn btn-warning" @onclick="NewWithBannerUpdateAsync">Update Opportunity &amp; Reset</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- ── Save Opportunity Modal (M6-5) ──────────────────────────────────── -->
+@if (_showSaveOppModal)
+{
+    <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4);z-index:1055" role="dialog" aria-modal="true" aria-label="Save Opportunity">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Save Opportunity</h5>
+                    <button class="btn-close" @onclick="CloseSaveOppModal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    @if (_saveOppStep == 0)
+                    {
+                        <!-- Form -->
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Organization</label>
+                            @if (_linkedOrgId is not null)
+                            {
+                                <input class="form-control" value="@_linkedOrgName" readonly />
+                            }
+                            else
+                            {
+                                <input class="form-control"
+                                       @bind="_saveOppOrgName"
+                                       @bind:event="oninput"
+                                       @bind:after="() => _saveOppOrgName = _saveOppOrgName.Trim()"
+                                       placeholder="Organization name" />
+                            }
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Role</label>
+                            <input class="form-control" value="@_role" readonly />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Role Description</label>
+                            <textarea class="form-control" rows="4" value="@_roleDescription" readonly></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Posting URL</label>
+                            <input class="form-control" @bind="_saveOppPostingUrl"
+                                   @bind:after="() => _saveOppPostingUrl = _saveOppPostingUrl.Trim()"
+                                   placeholder="https://…" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Compensation Range</label>
+                            <input class="form-control" @bind="_saveOppCompensationRange"
+                                   @bind:after="() => _saveOppCompensationRange = _saveOppCompensationRange.Trim()"
+                                   placeholder="e.g. $120k–$150k" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Work Arrangement</label>
+                            <select class="form-select" value="@(_saveOppWorkArrangement?.ToString() ?? "")"
+                                    @onchange="e => _saveOppWorkArrangement = string.IsNullOrEmpty((string?)e.Value) ? null : Enum.Parse<WorkArrangement>((string)e.Value!)">
+                                <option value="">-- Not specified --</option>
+                                <option value="Remote">Remote</option>
+                                <option value="Hybrid">Hybrid</option>
+                                <option value="OnSite">On-site</option>
+                            </select>
+                        </div>
+                        @if (_saveOppError is not null)
+                        {
+                            <div class="alert alert-danger">@_saveOppError</div>
+                        }
+                    }
+                    else if (_saveOppStep == 1)
+                    {
+                        <!-- Org conflict resolution -->
+                        <p>An organization named <strong>@_saveOppConflictOrg?.Name</strong> already exists. What would you like to do?</p>
+                        <div class="d-flex flex-column gap-2">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" id="soo-link" name="soo-org"
+                                       checked="@_saveOppOrgChoiceLink"
+                                       @onchange="SelectExistingOrgForSaveOpp" />
+                                <label class="form-check-label" for="soo-link">Link to existing organization</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" id="soo-new" name="soo-org"
+                                       checked="@(!_saveOppOrgChoiceLink)"
+                                       @onchange="() => { _saveOppOrgChoiceLink = false; _saveOppNewOrgName = _saveOppOrgName; }" />
+                                <label class="form-check-label" for="soo-new">Create new organization</label>
+                            </div>
+                            @if (!_saveOppOrgChoiceLink)
+                            {
+                                <div class="ms-4">
+                                    <label class="form-label small">New organization name</label>
+                                    <input class="form-control form-control-sm" @bind="_saveOppNewOrgName"
+                                           @bind:event="oninput"
+                                           @bind:after="() => _saveOppNewOrgName = _saveOppNewOrgName.Trim()" />
+                                </div>
+                            }
+                        </div>
+                    }
+                    else if (_saveOppStep == 2)
+                    {
+                        <!-- Opp conflict resolution -->
+                        @if (_saveOppOppExactMatch)
+                        {
+                            <p>An opportunity with the same Role and Role Description already exists: <strong>@_saveOppConflictOpp?.Role</strong>. Would you like to link to it instead of creating a new one?</p>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="radio" id="soo-opp-link" name="soo-opp"
+                                       checked="@_saveOppOppChoiceLink"
+                                       @onchange="() => _saveOppOppChoiceLink = true" />
+                                <label class="form-check-label" for="soo-opp-link">Link to existing opportunity</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" id="soo-opp-new" name="soo-opp"
+                                       checked="@(!_saveOppOppChoiceLink)"
+                                       @onchange="() => _saveOppOppChoiceLink = false" />
+                                <label class="form-check-label" for="soo-opp-new">Create new opportunity</label>
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="text-warning">An opportunity with the same Role but a different description already exists: <strong>@_saveOppConflictOpp?.Role</strong>. A new opportunity with a duplicate role name will be created. Continue?</p>
+                        }
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-secondary" @onclick="CloseSaveOppModal">Cancel</button>
+                    @if (_saveOppStep == 0)
+                    {
+                        <button class="btn btn-primary" disabled="@(_saveOppSaving || string.IsNullOrWhiteSpace(_linkedOrgId is null ? _saveOppOrgName : _linkedOrgName))"
+                                @onclick="SaveOppNextAsync">
+                            @if (_saveOppSaving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                            Next
+                        </button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-primary" disabled="@_saveOppSaving"
+                                @onclick="SaveOppNextAsync">
+                            @if (_saveOppSaving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                            @(_saveOppStep == 2 ? "Save" : "Next")
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- ── Remote Change Notice Modal (M6-9) ──────────────────────────────── -->
+@if (_showRemoteChangeNoticeModal)
+{
+    <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4);z-index:1055" role="dialog" aria-modal="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Changes from Another Tab</h5>
+                </div>
+                <div class="modal-body">
+                    <p>@_remoteChangeNoticeMessage</p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" @onclick="() => _showRemoteChangeNoticeModal = false">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- ── Remote Conflict Modal (M6-9) ───────────────────────────────────── -->
+@if (_showRemoteConflictModal)
+{
+    <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4);z-index:1055" role="dialog" aria-modal="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Conflict with Remote Changes</h5>
+                </div>
+                <div class="modal-body">
+                    <p>The linked Opportunity was changed in another tab, and you have also modified these fields. Choose which values to keep:</p>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="card">
+                                <div class="card-header fw-semibold">Remote Values</div>
+                                <div class="card-body small">
+                                    <p class="mb-1"><strong>Role:</strong> @_remoteConflictRemoteRole</p>
+                                    <p class="mb-0"><strong>Description:</strong> @_remoteConflictRemoteRoleDesc</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card border-primary">
+                                <div class="card-header fw-semibold">Your Values</div>
+                                <div class="card-body small">
+                                    <p class="mb-1"><strong>Role:</strong> @_remoteConflictMyRole</p>
+                                    <p class="mb-0"><strong>Description:</strong> @_remoteConflictMyRoleDesc</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer gap-2">
+                    <button class="btn btn-outline-secondary" @onclick="HandleRemoteConflictKeepMine">Keep My Values</button>
+                    <button class="btn btn-warning" @onclick="HandleRemoteConflictResetToRemote">Reset to Remote Values</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- ── Remote Deletion Modal (M6-9) ───────────────────────────────────── -->
+@if (_showRemoteDeletionModal)
+{
+    <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4);z-index:1055" role="dialog" aria-modal="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Deleted in Another Tab</h5>
+                </div>
+                <div class="modal-body">
+                    <p>@_remoteDeletionMessage</p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" @onclick="HandleRemoteDeletionDismiss">Dismiss</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<!-- ── Session Deleted Modal (M6-9) ───────────────────────────────────── -->
+@if (_showSessionDeletedModal)
+{
+    <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4);z-index:1055" role="dialog" aria-modal="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Session Deleted</h5>
+                </div>
+                <div class="modal-body">
+                    <p>@_sessionDeletedMessage</p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-primary" @onclick="HandleSessionDeletedDismiss">OK</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    // ── Entity selection ──────────────────────────────────────────────────────
+    List<Organization> _organizations = new();
+    string _orgText = "";
+    string? _linkedOrgId;
+    string? _linkedOrgName;
+    bool _showOrgDropdown;
+    List<Organization> _orgSuggestions = new();
+    List<Opportunity> _opportunities = new();
+    string? _linkedOppId;
+    string? _linkedOppRole;
+    string? _linkedOppRoleDesc;
+    bool _entitySelectionLocked;
+
+    // ── Role / RoleDescription ────────────────────────────────────────────────
+    string _role = "";
+    string _roleDescription = "";
+    bool _roleFieldsLocked;
+    bool _editingPostEvaluate;
+    string? _evalRoleSnapshot;
+    string? _evalRoleDescSnapshot;
+    MatchEvaluation? _backedUpEvaluation;
+    GeneratedMaterials? _backedUpMaterials;
+    string? _backedUpTailoredResumeFileId;
+    string? _backedUpCoverLetterFileId;
+    string? _backedUpResumeMarkdown;
+
+    // ── Resume ────────────────────────────────────────────────────────────────
+    List<BaseResume> _resumes = new();
+    Dictionary<string, BaseResumeVersion?> _latestVersions = new();
+    string? _selectedResumeId;
+    string? _selectedVersionId;
+    string? _selectedResumeName;
+    int _selectedVersionNumber;
+    bool _selectedVersionIsLatest;
+    bool _resumeDeleted;
+    bool _noResumesExist;
+    bool _showResumePicker;
+    Dictionary<string, bool> _resumePickerExpanded = new();
+
+    // ── Operation state ───────────────────────────────────────────────────────
     bool _evaluating;
     bool _reevaluating;
     bool _generating;
-    bool _inputsLocked;
     string? _loadingStep;
-    string? _inputError;
+    bool _hasApiKey = true;
+    AppSettings _settings = new();
+
+    // ── Error messages ────────────────────────────────────────────────────────
     string? _evalError;
     string? _generateError;
-    bool _hasApiKey = true;
 
+    // ── Evaluation results ────────────────────────────────────────────────────
     MatchEvaluation? _evaluation;
     GeneratedMaterials? _materials;
     string? _tailoredResumeFileId;
     string? _coverLetterFileId;
-
-    // Persisted between Turn 1 and Turn 2
+    byte[]? _resumeBytes;
     string? _resumeMarkdown;
-    string? _inputFileId;
     string? _sessionId;
+    string? _pendingDeleteTailoredFileId;
+    string? _pendingDeleteCoverLetterFileId;
 
-    // Keyword selection — keywords the user has explicitly confirmed
+    // ── Keywords ──────────────────────────────────────────────────────────────
     readonly List<SuggestedKeyword> _confirmedKeywords = new();
     string _customKeywords = "";
 
-    bool _showFilePicker;
-    List<StoredFileMeta> _fileMeta = new();
-    AppSettings _settings = new();
+    // ── Unsaved changes banner (M6-4) ─────────────────────────────────────────
+    bool _showUnsavedChangesBanner;
 
-    bool CanEvaluate => !_evaluating && !_reevaluating && !_generating && !_inputsLocked && _hasApiKey &&
-                        !string.IsNullOrWhiteSpace(_companyName) &&
-                        !string.IsNullOrWhiteSpace(_jobTitle) &&
-                        !string.IsNullOrWhiteSpace(_jobDetails) &&
-                        _resumeBytes is not null;
+    // ── New + Banner modal (M6-7) ─────────────────────────────────────────────
+    bool _showNewWithBannerModal;
+
+    // ── Save Opportunity modal (M6-5) ─────────────────────────────────────────
+    bool _showSaveOppModal;
+    int _saveOppStep;
+    string _saveOppOrgName = "";
+    Organization? _saveOppConflictOrg;
+    bool _saveOppOrgChoiceLink = true;
+    string _saveOppNewOrgName = "";
+    Opportunity? _saveOppConflictOpp;
+    bool _saveOppOppExactMatch;
+    bool _saveOppOppChoiceLink = true;
+    string _saveOppPostingUrl = "";
+    string _saveOppCompensationRange = "";
+    WorkArrangement? _saveOppWorkArrangement;
+    bool _saveOppSaving;
+    string? _saveOppError;
+
+    // ── Remote event modals (M6-9) ────────────────────────────────────────────
+    bool _showRemoteChangeNoticeModal;
+    string? _remoteChangeNoticeMessage;
+    bool _showRemoteConflictModal;
+    string? _remoteConflictMyRole;
+    string? _remoteConflictMyRoleDesc;
+    string? _remoteConflictRemoteRole;
+    string? _remoteConflictRemoteRoleDesc;
+    bool _showRemoteDeletionModal;
+    string? _remoteDeletionMessage;
+    string? _remoteDeletionNavTarget;
+    bool _showSessionDeletedModal;
+    string? _sessionDeletedMessage;
+
+    // ── Pre-eval deletion banners (M6-9) ─────────────────────────────────────
+    bool _showPreEvalOrgDeletedBanner;
+    bool _showPreEvalOppDeletedBanner;
+
+    // ── Computed properties ───────────────────────────────────────────────────
+
+    bool CanEvaluate => !_evaluating && !_reevaluating && !_generating && !_roleFieldsLocked && _hasApiKey &&
+                        !string.IsNullOrWhiteSpace(_orgText) &&
+                        !string.IsNullOrWhiteSpace(_role) &&
+                        !string.IsNullOrWhiteSpace(_roleDescription) &&
+                        _selectedVersionId is not null &&
+                        !_resumeDeleted;
+
+    bool CanGenerate => !_generating && !_reevaluating && !_evaluating &&
+                        _evaluation is not null && !_resumeDeleted;
+
+    protected override bool IsDirty => _showUnsavedChangesBanner;
+    protected override string StayLabel => "Stay and update the Opportunity";
+    protected override string LeaveLabel => "Discard changes and leave";
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
 
     protected override async Task OnInitializedAsync()
     {
+        SubscribeEvents();
         _settings = await Db.GetSettingsAsync();
         _hasApiKey = !string.IsNullOrWhiteSpace(
             _settings.ProviderApiKeys.GetValueOrDefault(_settings.AiProvider));
-        _fileMeta = await Db.GetAllFileMetaAsync();
+        _organizations = await Db.GetAllOrganizationsAsync();
+        _resumes = await Db.GetAllBaseResumesAsync();
+        await LoadLatestVersionsAsync();
+        _noResumesExist = _resumes.Count == 0;
 
-        if (AppState.PendingResumeFileId is not null)
+        if (AppState.HasContextualNav)
         {
-            await SelectStoredFile(AppState.PendingResumeFileId, AppState.PendingResumeFileName ?? "resume.docx");
-            AppState.PendingResumeFileId = null;
-            AppState.PendingResumeFileName = null;
+            await LoadContextualNavAsync();
+            AppState.ClearContextualNav();
         }
+        else if (AppState.HasPreservedState)
+        {
+            await RestorePreservedStateAsync();
+            AppState.ClearPreservedState();
+        }
+        else
+        {
+            await ApplyAutoSelectResume();
+        }
+    }
+
+    public override async ValueTask DisposeAsync()
+    {
+        UnsubscribeEvents();
+        if (_sessionId is null)
+            SavePreEvaluateState();
+        else
+            AppState.ClearPreservedState();
+        await base.DisposeAsync();
+    }
+
+    // ── DataSync subscriptions ────────────────────────────────────────────────
+
+    void SubscribeEvents()
+    {
+        DataSync.OnOrganizationChanged += HandleOrganizationChanged;
+        DataSync.OnOpportunityChanged += HandleOpportunityChanged;
+        DataSync.OnBaseResumeChanged += HandleBaseResumeChanged;
+        DataSync.OnBaseResumeVersionChanged += HandleBaseResumeVersionChanged;
+        DataSync.OnSessionChanged += HandleSessionChanged;
+        DataSync.OnSessionsCleared += HandleSessionsCleared;
+    }
+
+    void UnsubscribeEvents()
+    {
+        DataSync.OnOrganizationChanged -= HandleOrganizationChanged;
+        DataSync.OnOpportunityChanged -= HandleOpportunityChanged;
+        DataSync.OnBaseResumeChanged -= HandleBaseResumeChanged;
+        DataSync.OnBaseResumeVersionChanged -= HandleBaseResumeVersionChanged;
+        DataSync.OnSessionChanged -= HandleSessionChanged;
+        DataSync.OnSessionsCleared -= HandleSessionsCleared;
     }
 
     // ── Scroll helpers ────────────────────────────────────────────────────────
@@ -561,151 +1140,381 @@
 
     string StepClass(int step) => step switch
     {
-        1 => _inputsLocked              ? "completed" : "active",
-        2 => _materials is not null     ? "completed"
-           : _inputsLocked             ? "active"
-                                       : "",
-        3 => _materials is not null     ? "active"    : "",
+        1 => (_roleFieldsLocked && !_editingPostEvaluate) ? "completed" : "active",
+        2 => _materials is not null                       ? "completed"
+           : (_roleFieldsLocked && !_editingPostEvaluate) ? "active"
+                                                          : "",
+        3 => _materials is not null                       ? "active" : "",
         _ => ""
     };
 
-    // ── File handling ─────────────────────────────────────────────────────────
+    // ── Org combobox handlers (M6-2) ──────────────────────────────────────────
 
-    async Task OnFileUpload(InputFileChangeEventArgs e)
+    async Task OnOrgTextChanged()
     {
-        try
+        _orgText = _orgText.Trim();
+        _showOrgDropdown = false;
+
+        if (string.IsNullOrWhiteSpace(_orgText))
         {
-            var file = e.File;
-            using var ms = new MemoryStream();
-            await file.OpenReadStream(maxAllowedSize: 10 * 1024 * 1024).CopyToAsync(ms);
-            _resumeBytes = ms.ToArray();
-            _selectedFileName = file.Name;
-            _selectedFileId = null;
+            if (_linkedOrgId is not null || _evaluation is not null || _materials is not null)
+            {
+                _linkedOrgId = null;
+                _linkedOrgName = null;
+                _linkedOppId = null;
+                _linkedOppRole = null;
+                _linkedOppRoleDesc = null;
+                _entitySelectionLocked = false;
+                _opportunities.Clear();
+                DiscardEvaluation();
+            }
+            _orgSuggestions.Clear();
+            RecalculateUnsavedChangesBanner();
+            return;
         }
-        catch (Exception ex)
+
+        var exactMatch = _organizations.FirstOrDefault(o =>
+            string.Equals(o.Name.Trim(), _orgText.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        if (exactMatch is not null)
         {
-            _inputError = $"Error reading file: {ex.Message}";
+            _orgText = exactMatch.Name;
+            if (_linkedOrgId != exactMatch.Id)
+            {
+                _linkedOrgId = exactMatch.Id;
+                _linkedOrgName = exactMatch.Name;
+                _opportunities = await Db.GetOpportunitiesByOrganizationAsync(exactMatch.Id);
+            }
+            _orgSuggestions.Clear();
+        }
+        else
+        {
+            if (_linkedOrgId is not null)
+            {
+                _linkedOrgId = null;
+                _linkedOrgName = null;
+                _linkedOppId = null;
+                _linkedOppRole = null;
+                _linkedOppRoleDesc = null;
+                _entitySelectionLocked = false;
+                _opportunities.Clear();
+                DiscardEvaluation();
+            }
+
+            _orgSuggestions = _organizations
+                .Where(o => o.Name.Contains(_orgText, StringComparison.OrdinalIgnoreCase))
+                .Take(8)
+                .ToList();
+            _showOrgDropdown = _orgSuggestions.Count > 0;
+        }
+
+        RecalculateUnsavedChangesBanner();
+    }
+
+    void OnOrgBlur()
+    {
+        _showOrgDropdown = false;
+        if (string.IsNullOrWhiteSpace(_orgText) || _linkedOrgId is not null) return;
+
+        var exactMatch = _organizations.FirstOrDefault(o =>
+            string.Equals(o.Name.Trim(), _orgText.Trim(), StringComparison.OrdinalIgnoreCase));
+        if (exactMatch is not null)
+        {
+            _orgText = exactMatch.Name;
+            _linkedOrgId = exactMatch.Id;
+            _linkedOrgName = exactMatch.Name;
+            _ = LoadOpportunitiesAsync(exactMatch.Id);
         }
     }
 
-    async Task SelectStoredFile(string id, string name)
+    async Task SelectOrgSuggestion(Organization org)
     {
-        var file = await Db.GetFileAsync(id);
-        if (file is null) { _inputError = "File not found in storage."; return; }
-        _resumeBytes = Convert.FromBase64String(file.DataBase64);
-        _selectedFileName = name;
-        _selectedFileId = id;
-        _showFilePicker = false;
+        _orgText = org.Name;
+        _showOrgDropdown = false;
+        _orgSuggestions.Clear();
+        if (_linkedOrgId != org.Id)
+        {
+            _linkedOrgId = org.Id;
+            _linkedOrgName = org.Name;
+            _opportunities = await Db.GetOpportunitiesByOrganizationAsync(org.Id);
+        }
+        RecalculateUnsavedChangesBanner();
     }
 
-    async Task OpenFilePickerAsync()
+    async Task LoadOpportunitiesAsync(string orgId)
     {
-        _fileMeta = await Db.GetAllFileMetaAsync();
-        _showFilePicker = true;
+        _opportunities = await Db.GetOpportunitiesByOrganizationAsync(orgId);
+        StateHasChanged();
     }
 
-    void ClearResume()
+    void ClearOrganization()
     {
-        _resumeBytes = null;
-        _selectedFileName = null;
-        _selectedFileId = null;
+        _orgText = "";
+        _linkedOrgId = null;
+        _linkedOrgName = null;
+        _linkedOppId = null;
+        _linkedOppRole = null;
+        _linkedOppRoleDesc = null;
+        _entitySelectionLocked = false;
+        _opportunities.Clear();
+        _showUnsavedChangesBanner = false;
+        DiscardEvaluation();
     }
 
-    async Task NewSession()
+    // ── Opportunity dropdown handlers (M6-2) ──────────────────────────────────
+
+    async Task OnOppChanged(ChangeEventArgs e)
     {
-        _companyName = "";
-        _jobTitle = "";
-        _jobDetails = "";
-        _resumeBytes = null;
-        _selectedFileName = null;
-        _selectedFileId = null;
+        var oppId = (string?)e.Value;
+        if (string.IsNullOrEmpty(oppId))
+        {
+            _linkedOppId = null;
+            _linkedOppRole = null;
+            _linkedOppRoleDesc = null;
+            _entitySelectionLocked = false;
+            RecalculateUnsavedChangesBanner();
+            return;
+        }
+
+        var opp = _opportunities.FirstOrDefault(o => o.Id == oppId);
+        if (opp is null) return;
+
+        _linkedOppId = opp.Id;
+        _linkedOppRole = opp.Role;
+        _linkedOppRoleDesc = opp.RoleDescription;
+        _entitySelectionLocked = true;
+
+        if (!_roleFieldsLocked)
+        {
+            _role = opp.Role;
+            _roleDescription = opp.RoleDescription;
+        }
+
+        RecalculateUnsavedChangesBanner();
+        await Task.CompletedTask;
+    }
+
+    void ClearOpportunity()
+    {
+        _linkedOppId = null;
+        _linkedOppRole = null;
+        _linkedOppRoleDesc = null;
+        _entitySelectionLocked = false;
+        _showUnsavedChangesBanner = false;
+    }
+
+    // ── Role field handlers (M6-3) ────────────────────────────────────────────
+
+    void OnRoleAfterBind()
+    {
+        _role = _role.Trim();
+        if (_editingPostEvaluate) CheckRoleEditState();
+        RecalculateUnsavedChangesBanner();
+    }
+
+    void OnRoleDescAfterBind()
+    {
+        _roleDescription = _roleDescription.Trim();
+        if (_editingPostEvaluate) CheckRoleEditState();
+        RecalculateUnsavedChangesBanner();
+    }
+
+    void EditRoleFields()
+    {
+        _editingPostEvaluate = true;
+        _backedUpEvaluation = _evaluation;
+        _backedUpMaterials = _materials;
+        _backedUpTailoredResumeFileId = _tailoredResumeFileId;
+        _backedUpCoverLetterFileId = _coverLetterFileId;
+        _backedUpResumeMarkdown = _resumeMarkdown;
+    }
+
+    void CheckRoleEditState()
+    {
+        if (_role == _evalRoleSnapshot && _roleDescription == _evalRoleDescSnapshot)
+        {
+            // Exact revert — restore evaluation
+            _evaluation = _backedUpEvaluation;
+            _materials = _backedUpMaterials;
+            _tailoredResumeFileId = _backedUpTailoredResumeFileId;
+            _coverLetterFileId = _backedUpCoverLetterFileId;
+            _resumeMarkdown = _backedUpResumeMarkdown;
+            _roleFieldsLocked = true;
+            _editingPostEvaluate = false;
+        }
+        else
+        {
+            // Field changed — discard evaluation
+            DiscardEvaluation();
+        }
+        RecalculateUnsavedChangesBanner();
+    }
+
+    // ── Resume handlers (M6-1) ────────────────────────────────────────────────
+
+    void OpenResumePicker() => _showResumePicker = true;
+
+    void SelectResume(BaseResume resume)
+    {
+        var version = _latestVersions.GetValueOrDefault(resume.Id);
+        if (version is null) return;
+
+        bool isDifferent = _selectedResumeId != resume.Id;
+        _selectedResumeId = resume.Id;
+        _selectedVersionId = version.Id;
+        _selectedResumeName = resume.Name;
+        _selectedVersionNumber = version.VersionNumber;
+        _selectedVersionIsLatest = true;
+        _resumeDeleted = false;
+        _showResumePicker = false;
+
+        if (isDifferent && (_evaluation is not null || _materials is not null))
+            DiscardEvaluation();
+    }
+
+    void ToggleResumePickerExpand(string resumeId)
+    {
+        _resumePickerExpanded[resumeId] = !_resumePickerExpanded.GetValueOrDefault(resumeId);
+    }
+
+    async Task ApplyAutoSelectResume()
+    {
+        _noResumesExist = _resumes.Count == 0;
+        if (_resumes.Count != 1) return;
+
+        var resume = _resumes[0];
+        var version = _latestVersions.GetValueOrDefault(resume.Id);
+        if (version is null) return;
+
+        _selectedResumeId = resume.Id;
+        _selectedVersionId = version.Id;
+        _selectedResumeName = resume.Name;
+        _selectedVersionNumber = version.VersionNumber;
+        _selectedVersionIsLatest = true;
+        _resumeDeleted = false;
+        await Task.CompletedTask;
+    }
+
+    async Task LoadLatestVersionsAsync()
+    {
+        _latestVersions.Clear();
+        foreach (var resume in _resumes)
+        {
+            var versions = await Db.GetVersionsByResumeAsync(resume.Id);
+            _latestVersions[resume.Id] = versions.OrderByDescending(v => v.VersionNumber).FirstOrDefault();
+        }
+    }
+
+    string ResumeDisplayLabel()
+    {
+        if (_selectedResumeName is null) return "";
+        return _selectedVersionIsLatest
+            ? $"{_selectedResumeName} (latest)"
+            : $"{_selectedResumeName} (v{_selectedVersionNumber})";
+    }
+
+    // ── Entity helpers ────────────────────────────────────────────────────────
+
+    void DiscardEvaluation()
+    {
+        if (_tailoredResumeFileId is not null) _pendingDeleteTailoredFileId = _tailoredResumeFileId;
+        if (_coverLetterFileId is not null) _pendingDeleteCoverLetterFileId = _coverLetterFileId;
+
         _evaluation = null;
         _materials = null;
         _tailoredResumeFileId = null;
         _coverLetterFileId = null;
+        _resumeBytes = null;
         _resumeMarkdown = null;
-        _inputFileId = null;
-        _sessionId = null;
+        _roleFieldsLocked = false;
+        _editingPostEvaluate = false;
+        _evalRoleSnapshot = null;
+        _evalRoleDescSnapshot = null;
+        _backedUpEvaluation = null;
+        _backedUpMaterials = null;
+        _backedUpTailoredResumeFileId = null;
+        _backedUpCoverLetterFileId = null;
+        _backedUpResumeMarkdown = null;
         _confirmedKeywords.Clear();
         _customKeywords = "";
-        _inputsLocked = false;
-        _inputError = null;
         _evalError = null;
         _generateError = null;
-        await ScrollToAsync("lane-input");
     }
+
+    void RecalculateUnsavedChangesBanner() =>
+        _showUnsavedChangesBanner = _linkedOppId is not null &&
+                                    (_role != _linkedOppRole || _roleDescription != _linkedOppRoleDesc);
 
     // ── AI turns ──────────────────────────────────────────────────────────────
 
     async Task EvaluateAsync()
     {
         _evalError = null;
+        _generateError = null;
         _evaluation = null;
-        _materials = null;
-        _tailoredResumeFileId = null;
-        _coverLetterFileId = null;
-        _resumeMarkdown = null;
-        _inputFileId = null;
         _confirmedKeywords.Clear();
         _customKeywords = "";
-        _inputsLocked = true;
+        _roleFieldsLocked = true;
+        _editingPostEvaluate = false;
         _evaluating = true;
+        _evalRoleSnapshot = _role;
+        _evalRoleDescSnapshot = _roleDescription;
 
         try
         {
+            // Delete old generated files if re-evaluating a session that had Generate
+            if (_sessionId is not null)
+            {
+                if (_pendingDeleteTailoredFileId is not null)
+                {
+                    await Db.DeleteFileAsync(_pendingDeleteTailoredFileId);
+                    _pendingDeleteTailoredFileId = null;
+                }
+                if (_pendingDeleteCoverLetterFileId is not null)
+                {
+                    await Db.DeleteFileAsync(_pendingDeleteCoverLetterFileId);
+                    _pendingDeleteCoverLetterFileId = null;
+                }
+            }
+
             _settings = await Db.GetSettingsAsync();
-            var apiKey = _settings.ProviderApiKeys.GetValueOrDefault(_settings.AiProvider) ?? "";
+            var apiKey  = _settings.ProviderApiKeys.GetValueOrDefault(_settings.AiProvider) ?? "";
             var modelId = _settings.ProviderModels.GetValueOrDefault(_settings.AiProvider)
                           ?? Providers.Get(_settings.AiProvider).DefaultModelId;
             var provider = Providers.Get(_settings.AiProvider);
 
+            _loadingStep = "Loading resume…";
+            StateHasChanged();
+
+            var version = await Db.GetBaseResumeVersionAsync(_selectedVersionId!);
+            if (version is null) throw new InvalidOperationException("Selected resume version not found.");
+            _resumeBytes = Convert.FromBase64String(version.FileDataBase64);
+
             _loadingStep = "Extracting resume…";
             StateHasChanged();
-            _resumeMarkdown = Docx.ExtractMarkdown(_resumeBytes!);
+            _resumeMarkdown = Docx.ExtractMarkdown(_resumeBytes);
 
             var job = new JobDescription
             {
-                CompanyName = _companyName,
-                JobTitle    = _jobTitle,
-                JobDetails  = _jobDetails,
+                CompanyName = _linkedOrgName ?? _orgText,
+                JobTitle    = _role,
+                JobDetails  = _roleDescription,
             };
+
             _evaluation = await provider.EvaluateMatchAsync(job, _resumeMarkdown, modelId, apiKey, null,
                 onProgress: msg => { _loadingStep = msg; StateHasChanged(); });
 
-            // Store resume in file library (needed for session record).
-            _inputFileId = _selectedFileId;
-            if (_inputFileId is null)
-            {
-                _inputFileId = Guid.NewGuid().ToString();
-                await Db.SaveFileAsync(new StoredFile
-                {
-                    Id           = _inputFileId,
-                    Name         = _selectedFileName ?? "resume.docx",
-                    DataBase64   = Convert.ToBase64String(_resumeBytes!),
-                    LastUsedAt   = DateTime.UtcNow,
-                    SessionCount = 1,
-                });
-                await Db.EnforceFileLimitAsync(_settings.FilesLimit);
-            }
-            else
-            {
-                var existing = await Db.GetFileAsync(_inputFileId);
-                if (existing is not null)
-                {
-                    existing.LastUsedAt = DateTime.UtcNow;
-                    existing.SessionCount++;
-                    await Db.SaveFileAsync(existing);
-                }
-            }
-
-            _sessionId = Guid.NewGuid().ToString();
+            if (_sessionId is null)
+                _sessionId = Guid.NewGuid().ToString();
             await SaveSessionAsync();
-            await Db.EnforceSessionLimitAsync(_settings.HistoryLimit);
+            await DataSync.BroadcastAsync("session", _sessionId, "updated");
         }
         catch (Exception ex)
         {
             _evalError = ex.Message;
-            _inputsLocked = false;
+            _roleFieldsLocked = false;
+            _evalRoleSnapshot = null;
+            _evalRoleDescSnapshot = null;
         }
         finally
         {
@@ -724,16 +1533,17 @@
         try
         {
             _settings = await Db.GetSettingsAsync();
-            var apiKey = _settings.ProviderApiKeys.GetValueOrDefault(_settings.AiProvider) ?? "";
+            var apiKey  = _settings.ProviderApiKeys.GetValueOrDefault(_settings.AiProvider) ?? "";
             var modelId = _settings.ProviderModels.GetValueOrDefault(_settings.AiProvider)
                           ?? Providers.Get(_settings.AiProvider).DefaultModelId;
             var provider = Providers.Get(_settings.AiProvider);
 
+            var orgName = _linkedOrgName ?? _orgText;
             var job = new JobDescription
             {
-                CompanyName = _companyName,
-                JobTitle    = _jobTitle,
-                JobDetails  = _jobDetails,
+                CompanyName = orgName,
+                JobTitle    = _role,
+                JobDetails  = _roleDescription,
             };
 
             var sourcePageCount = Docx.GetPageCount(_resumeBytes!);
@@ -749,32 +1559,33 @@
             var resumeFileId = Guid.NewGuid().ToString();
             await Db.SaveFileAsync(new StoredFile
             {
-                Id           = resumeFileId,
-                Name         = $"Resume - {_companyName} - {_jobTitle}.docx",
-                DataBase64   = Convert.ToBase64String(resumeDocxBytes),
-                LastUsedAt   = DateTime.UtcNow,
+                Id         = resumeFileId,
+                Name       = $"Resume - {orgName} - {_role}.docx",
+                DataBase64 = Convert.ToBase64String(resumeDocxBytes),
+                LastUsedAt = DateTime.UtcNow,
                 SessionCount = 1,
             });
             _tailoredResumeFileId = resumeFileId;
 
-            var clDocx    = Docx.GenerateCoverLetterDocx(_materials.CoverLetterText);
-            var clFileId  = Guid.NewGuid().ToString();
+            var clDocx   = Docx.GenerateCoverLetterDocx(_materials.CoverLetterText);
+            var clFileId = Guid.NewGuid().ToString();
             await Db.SaveFileAsync(new StoredFile
             {
-                Id           = clFileId,
-                Name         = $"Cover Letter - {_companyName} - {_jobTitle}.docx",
-                DataBase64   = Convert.ToBase64String(clDocx),
-                LastUsedAt   = DateTime.UtcNow,
+                Id         = clFileId,
+                Name       = $"Cover Letter - {orgName} - {_role}.docx",
+                DataBase64 = Convert.ToBase64String(clDocx),
+                LastUsedAt = DateTime.UtcNow,
                 SessionCount = 1,
             });
             _coverLetterFileId = clFileId;
 
-            await Db.EnforceFileLimitAsync(_settings.FilesLimit);
-            await SaveSessionAsync();   // updates the record created during Evaluate
+            await SaveSessionAsync();
+            await DataSync.BroadcastAsync("session", _sessionId!, "updated");
         }
         catch (Exception ex)
         {
             _generateError = ex.Message;
+            _materials = null;
         }
         finally
         {
@@ -797,16 +1608,16 @@
         try
         {
             _settings = await Db.GetSettingsAsync();
-            var apiKey   = _settings.ProviderApiKeys.GetValueOrDefault(_settings.AiProvider) ?? "";
-            var modelId  = _settings.ProviderModels.GetValueOrDefault(_settings.AiProvider)
-                           ?? Providers.Get(_settings.AiProvider).DefaultModelId;
+            var apiKey  = _settings.ProviderApiKeys.GetValueOrDefault(_settings.AiProvider) ?? "";
+            var modelId = _settings.ProviderModels.GetValueOrDefault(_settings.AiProvider)
+                          ?? Providers.Get(_settings.AiProvider).DefaultModelId;
             var provider = Providers.Get(_settings.AiProvider);
 
             var job = new JobDescription
             {
-                CompanyName = _companyName,
-                JobTitle    = _jobTitle,
-                JobDetails  = _jobDetails,
+                CompanyName = _linkedOrgName ?? _orgText,
+                JobTitle    = _role,
+                JobDetails  = _roleDescription,
             };
 
             _evaluation = await provider.EvaluateMatchAsync(
@@ -814,6 +1625,7 @@
                 onProgress: msg => { _loadingStep = msg; StateHasChanged(); });
 
             await SaveSessionAsync();
+            await DataSync.BroadcastAsync("session", _sessionId!, "updated");
         }
         catch (Exception ex)
         {
@@ -822,12 +1634,724 @@
         finally
         {
             _reevaluating = false;
+            _loadingStep = null;
         }
+    }
+
+    // ── Session persistence ───────────────────────────────────────────────────
+
+    async Task SaveSessionAsync()
+    {
+        var existing = await Db.GetSessionAsync(_sessionId!);
+        var session = new SessionRecord
+        {
+            Id                              = _sessionId!,
+            Version                         = existing?.Version ?? 1,
+            CreatedAt                       = existing?.CreatedAt ?? DateTime.UtcNow,
+            OrganizationId                  = _linkedOrgId,
+            OrganizationNameSnapshot        = _linkedOrgName ?? _orgText,
+            OpportunityId                   = _linkedOppId,
+            OpportunityRoleSnapshot         = _linkedOppRole ?? "",
+            Role                            = _role,
+            RoleDescription                 = _roleDescription,
+            BaseResumeVersionId             = _selectedVersionId ?? "",
+            BaseResumeNameSnapshot          = _selectedResumeName ?? "",
+            BaseResumeVersionNumberSnapshot = _selectedVersionNumber,
+            MatchScore                      = _evaluation?.Score ?? "",
+            MatchGaps                       = _evaluation?.Gaps ?? new(),
+            MatchStrengths                  = _evaluation?.Strengths ?? new(),
+            AdditionalKeywords              = GetAllKeywordsForSession(),
+            CoverLetterText                 = _materials?.CoverLetterText ?? "",
+            WhyApplyText                    = _materials?.WhyApplyText ?? "",
+            TailoredResumeFileId            = _tailoredResumeFileId,
+            CoverLetterFileId               = _coverLetterFileId,
+            ArtifactsGenerated              = _materials is not null,
+        };
+        await Db.SaveSessionAsync(session);
+    }
+
+    // ── Update Opportunity (M6-4) ──────────────────────────────────────────────
+
+    async Task UpdateOpportunityAsync()
+    {
+        if (_linkedOppId is null) return;
+        var opp = await Db.GetOpportunityAsync(_linkedOppId);
+        if (opp is null) return;
+
+        var changes = new List<FieldChange>();
+        if (opp.Role != _role)
+            changes.Add(new FieldChange { FieldName = "Role", OldValue = opp.Role });
+        if (opp.RoleDescription != _roleDescription)
+            changes.Add(new FieldChange { FieldName = "RoleDescription", OldValue = opp.RoleDescription });
+
+        if (changes.Count == 0) { _showUnsavedChangesBanner = false; return; }
+
+        opp.Role = _role;
+        opp.RoleDescription = _roleDescription;
+        opp.UpdatedAt = DateTime.UtcNow;
+
+        var result = await Db.VersionedWriteAsync("opportunities", opp, new[] { $"org:{opp.OrganizationId}", $"opp:{opp.Id}" });
+        if (result == VersionedWriteResult.Success)
+        {
+            await Db.SaveHistoryEntryAsync(new OpportunityFieldHistory
+            {
+                Id            = Guid.NewGuid().ToString(),
+                OpportunityId = opp.Id,
+                ChangedAt     = DateTime.UtcNow,
+                Source        = HistorySource.EvaluateAndGenerate,
+                Changes       = changes,
+            });
+            _linkedOppRole = _role;
+            _linkedOppRoleDesc = _roleDescription;
+            await DataSync.BroadcastAsync("opportunity", opp.Id, "updated");
+        }
+        RecalculateUnsavedChangesBanner();
+    }
+
+    // ── New button (M6-7) ─────────────────────────────────────────────────────
+
+    async Task NewSession()
+    {
+        if (_showUnsavedChangesBanner)
+        {
+            _showNewWithBannerModal = true;
+            return;
+        }
+        await ResetFormAsync();
+    }
+
+    async Task NewWithBannerResetAsync()
+    {
+        _showNewWithBannerModal = false;
+        await ResetFormAsync();
+    }
+
+    async Task NewWithBannerUpdateAsync()
+    {
+        _showNewWithBannerModal = false;
+        await UpdateOpportunityAsync();
+        await ResetFormAsync();
+    }
+
+    async Task ResetFormAsync()
+    {
+        _orgText = "";
+        _linkedOrgId = null;
+        _linkedOrgName = null;
+        _linkedOppId = null;
+        _linkedOppRole = null;
+        _linkedOppRoleDesc = null;
+        _entitySelectionLocked = false;
+        _opportunities.Clear();
+        _role = "";
+        _roleDescription = "";
+        _roleFieldsLocked = false;
+        _editingPostEvaluate = false;
+        _evalRoleSnapshot = null;
+        _evalRoleDescSnapshot = null;
+        _evaluation = null;
+        _materials = null;
+        _tailoredResumeFileId = null;
+        _coverLetterFileId = null;
+        _resumeBytes = null;
+        _resumeMarkdown = null;
+        _pendingDeleteTailoredFileId = null;
+        _pendingDeleteCoverLetterFileId = null;
+        _sessionId = null;
+        _confirmedKeywords.Clear();
+        _customKeywords = "";
+        _evalError = null;
+        _generateError = null;
+        _showUnsavedChangesBanner = false;
+        _showPreEvalOrgDeletedBanner = false;
+        _showPreEvalOppDeletedBanner = false;
+
+        _selectedResumeId = null;
+        _selectedVersionId = null;
+        _selectedResumeName = null;
+        _selectedVersionNumber = 0;
+        _selectedVersionIsLatest = false;
+        _resumeDeleted = false;
+
+        await ApplyAutoSelectResume();
+        await ScrollToAsync("lane-input");
+    }
+
+    // ── Save Opportunity modal (M6-5) ─────────────────────────────────────────
+
+    void OpenSaveOppModal()
+    {
+        _saveOppStep = 0;
+        _saveOppOrgName = _orgText;
+        _saveOppPostingUrl = "";
+        _saveOppCompensationRange = "";
+        _saveOppWorkArrangement = null;
+        _saveOppConflictOrg = null;
+        _saveOppOrgChoiceLink = true;
+        _saveOppNewOrgName = "";
+        _saveOppConflictOpp = null;
+        _saveOppOppExactMatch = false;
+        _saveOppOppChoiceLink = true;
+        _saveOppSaving = false;
+        _saveOppError = null;
+        _showSaveOppModal = true;
+    }
+
+    void CloseSaveOppModal() => _showSaveOppModal = false;
+
+    void SelectExistingOrgForSaveOpp() { _saveOppOrgChoiceLink = true; _saveOppNewOrgName = _saveOppConflictOrg?.Name ?? string.Empty; }
+
+    async Task SaveOppNextAsync()
+    {
+        _saveOppSaving = true;
+        _saveOppError = null;
+
+        try
+        {
+            if (_saveOppStep == 0)
+            {
+                // Resolve org
+                if (_linkedOrgId is null)
+                {
+                    var orgName = _saveOppOrgName.Trim();
+                    var existingOrg = _organizations.FirstOrDefault(o =>
+                        string.Equals(o.Name.Trim(), orgName, StringComparison.OrdinalIgnoreCase));
+                    if (existingOrg is not null)
+                    {
+                        _saveOppConflictOrg = existingOrg;
+                        _saveOppOrgChoiceLink = true;
+                        _saveOppNewOrgName = orgName;
+                        _saveOppStep = 1;
+                        return;
+                    }
+                }
+                // No org conflict — go straight to opp conflict check
+                await CheckOppConflictAsync();
+            }
+            else if (_saveOppStep == 1)
+            {
+                // Org conflict resolved — check opp conflict
+                await CheckOppConflictAsync();
+            }
+            else if (_saveOppStep == 2)
+            {
+                await CommitSaveOppAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _saveOppError = ex.Message;
+        }
+        finally
+        {
+            _saveOppSaving = false;
+        }
+    }
+
+    async Task CheckOppConflictAsync()
+    {
+        var resolvedOrgId = await GetOrCreateOrgIdAsync(dryRun: true);
+        if (resolvedOrgId is null) return;
+
+        var orgOpps = await Db.GetOpportunitiesByOrganizationAsync(resolvedOrgId);
+        var exactMatch = orgOpps.FirstOrDefault(o =>
+            string.Equals(o.Role.Trim(), _role.Trim(), StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(o.RoleDescription.Trim(), _roleDescription.Trim(), StringComparison.OrdinalIgnoreCase));
+        var roleMatch = exactMatch is null
+            ? orgOpps.FirstOrDefault(o =>
+                string.Equals(o.Role.Trim(), _role.Trim(), StringComparison.OrdinalIgnoreCase))
+            : null;
+
+        if (exactMatch is not null || roleMatch is not null)
+        {
+            _saveOppConflictOpp = exactMatch ?? roleMatch;
+            _saveOppOppExactMatch = exactMatch is not null;
+            _saveOppOppChoiceLink = exactMatch is not null;
+            _saveOppStep = 2;
+        }
+        else
+        {
+            await CommitSaveOppAsync();
+        }
+    }
+
+    async Task<string?> GetOrCreateOrgIdAsync(bool dryRun)
+    {
+        if (_linkedOrgId is not null) return _linkedOrgId;
+
+        if (_saveOppStep == 0 || (_saveOppStep >= 1 && _saveOppOrgChoiceLink && _saveOppConflictOrg is not null))
+        {
+            // Link to existing
+            if (_saveOppConflictOrg is not null) return _saveOppConflictOrg.Id;
+            // No conflict found — will create new
+        }
+
+        if (!dryRun)
+        {
+            var name = (_saveOppStep >= 1 && !_saveOppOrgChoiceLink)
+                ? _saveOppNewOrgName.Trim()
+                : _saveOppOrgName.Trim();
+            var newOrg = new Organization { Name = name };
+            await Db.SaveOrganizationAsync(newOrg);
+            await DataSync.BroadcastAsync("organization", newOrg.Id, "created");
+            _organizations = await Db.GetAllOrganizationsAsync();
+            return newOrg.Id;
+        }
+
+        // Dry run: use a placeholder to load the org's existing opps
+        // For dry run when we'd create a new org, there are no existing opps
+        return "__new__";
+    }
+
+    async Task CommitSaveOppAsync()
+    {
+        // Resolve org
+        string resolvedOrgId;
+        string resolvedOrgName;
+
+        if (_linkedOrgId is not null)
+        {
+            resolvedOrgId = _linkedOrgId;
+            resolvedOrgName = _linkedOrgName!;
+        }
+        else if (_saveOppStep >= 1 && _saveOppOrgChoiceLink && _saveOppConflictOrg is not null)
+        {
+            resolvedOrgId = _saveOppConflictOrg.Id;
+            resolvedOrgName = _saveOppConflictOrg.Name;
+        }
+        else
+        {
+            var name = (_saveOppStep >= 1 && !_saveOppOrgChoiceLink)
+                ? _saveOppNewOrgName.Trim()
+                : _saveOppOrgName.Trim();
+            var newOrg = new Organization { Name = name };
+            await Db.SaveOrganizationAsync(newOrg);
+            await DataSync.BroadcastAsync("organization", newOrg.Id, "created");
+            _organizations = await Db.GetAllOrganizationsAsync();
+            resolvedOrgId = newOrg.Id;
+            resolvedOrgName = newOrg.Name;
+        }
+
+        // Resolve opp
+        string resolvedOppId;
+        string resolvedOppRole;
+
+        if (_saveOppStep >= 2 && _saveOppOppChoiceLink && _saveOppOppExactMatch && _saveOppConflictOpp is not null)
+        {
+            resolvedOppId = _saveOppConflictOpp.Id;
+            resolvedOppRole = _saveOppConflictOpp.Role;
+        }
+        else
+        {
+            var newOpp = new Opportunity
+            {
+                OrganizationId    = resolvedOrgId,
+                Role              = _role,
+                RoleDescription   = _roleDescription,
+                PostingUrl        = _saveOppPostingUrl,
+                CompensationRange = _saveOppCompensationRange,
+                WorkArrangement   = _saveOppWorkArrangement,
+                Stage             = OpportunityStage.Open,
+            };
+            await Db.SaveOpportunityAsync(newOpp);
+            await DataSync.BroadcastAsync("opportunity", newOpp.Id, "created");
+            resolvedOppId = newOpp.Id;
+            resolvedOppRole = newOpp.Role;
+        }
+
+        // Update E&G state
+        _linkedOrgId = resolvedOrgId;
+        _linkedOrgName = resolvedOrgName;
+        _orgText = resolvedOrgName;
+        _linkedOppId = resolvedOppId;
+        _linkedOppRole = resolvedOppRole;
+        _linkedOppRoleDesc = _roleDescription;
+        _entitySelectionLocked = true;
+        _opportunities = await Db.GetOpportunitiesByOrganizationAsync(resolvedOrgId);
+
+        await SaveSessionAsync();
+        await DataSync.BroadcastAsync("session", _sessionId!, "updated");
+
+        _showSaveOppModal = false;
+        RecalculateUnsavedChangesBanner();
+    }
+
+    // ── Remote conflict modal (M6-9) ──────────────────────────────────────────
+
+    void HandleRemoteConflictResetToRemote()
+    {
+        _showRemoteConflictModal = false;
+        _role = _remoteConflictRemoteRole ?? _role;
+        _roleDescription = _remoteConflictRemoteRoleDesc ?? _roleDescription;
+        RecalculateUnsavedChangesBanner();
+    }
+
+    void HandleRemoteConflictKeepMine()
+    {
+        _showRemoteConflictModal = false;
+        RecalculateUnsavedChangesBanner();
+    }
+
+    void HandleRemoteDeletionDismiss()
+    {
+        _showRemoteDeletionModal = false;
+        if (_remoteDeletionNavTarget is not null)
+            Nav.NavigateTo(_remoteDeletionNavTarget);
+    }
+
+    void HandleSessionDeletedDismiss()
+    {
+        _showSessionDeletedModal = false;
+        var isAdHoc = _linkedOrgId is null;
+        _sessionId = null;
+
+        if (isAdHoc)
+        {
+            _ = ResetFormAsync();
+        }
+        else
+        {
+            _evaluation = null;
+            _materials = null;
+            _tailoredResumeFileId = null;
+            _coverLetterFileId = null;
+            _resumeBytes = null;
+            _resumeMarkdown = null;
+            _roleFieldsLocked = false;
+            _editingPostEvaluate = false;
+            _confirmedKeywords.Clear();
+            _customKeywords = "";
+            _evalError = null;
+            _generateError = null;
+            RecalculateUnsavedChangesBanner();
+        }
+    }
+
+    // ── State preservation (M6-6) ─────────────────────────────────────────────
+
+    void SavePreEvaluateState()
+    {
+        AppState.PreservedOrgText = _orgText;
+        AppState.PreservedLinkedOrgId = _linkedOrgId;
+        AppState.PreservedLinkedOrgName = _linkedOrgName;
+        AppState.PreservedLinkedOppId = _linkedOppId;
+        AppState.PreservedLinkedOppRole = _linkedOppRole;
+        AppState.PreservedLinkedOppRoleDesc = _linkedOppRoleDesc;
+        AppState.PreservedRole = _role;
+        AppState.PreservedRoleDescription = _roleDescription;
+        AppState.PreservedResumeId = _selectedResumeId;
+    }
+
+    async Task RestorePreservedStateAsync()
+    {
+        _orgText = AppState.PreservedOrgText ?? "";
+        _role = AppState.PreservedRole ?? "";
+        _roleDescription = AppState.PreservedRoleDescription ?? "";
+
+        if (AppState.PreservedLinkedOrgId is not null)
+        {
+            var org = _organizations.FirstOrDefault(o => o.Id == AppState.PreservedLinkedOrgId);
+            if (org is null)
+            {
+                _showPreEvalOrgDeletedBanner = true;
+                _orgText = AppState.PreservedOrgText ?? "";
+            }
+            else
+            {
+                _linkedOrgId = org.Id;
+                _linkedOrgName = org.Name;
+                _orgText = org.Name;
+                _opportunities = await Db.GetOpportunitiesByOrganizationAsync(org.Id);
+
+                if (AppState.PreservedLinkedOppId is not null)
+                {
+                    var opp = _opportunities.FirstOrDefault(o => o.Id == AppState.PreservedLinkedOppId);
+                    if (opp is null)
+                    {
+                        _showPreEvalOppDeletedBanner = true;
+                    }
+                    else
+                    {
+                        _linkedOppId = opp.Id;
+                        _linkedOppRole = opp.Role;
+                        _linkedOppRoleDesc = opp.RoleDescription;
+                        _entitySelectionLocked = true;
+                    }
+                }
+            }
+        }
+
+        if (AppState.PreservedResumeId is not null)
+        {
+            var resume = _resumes.FirstOrDefault(r => r.Id == AppState.PreservedResumeId);
+            if (resume is not null)
+            {
+                var version = _latestVersions.GetValueOrDefault(resume.Id);
+                if (version is not null)
+                {
+                    _selectedResumeId = resume.Id;
+                    _selectedVersionId = version.Id;
+                    _selectedResumeName = resume.Name;
+                    _selectedVersionNumber = version.VersionNumber;
+                    _selectedVersionIsLatest = true;
+                    _resumeDeleted = false;
+                }
+            }
+        }
+
+        if (_selectedResumeId is null)
+            await ApplyAutoSelectResume();
+        else
+            _noResumesExist = _resumes.Count == 0;
+
+        RecalculateUnsavedChangesBanner();
+    }
+
+    async Task LoadContextualNavAsync()
+    {
+        _linkedOrgId = AppState.ContextualOrgId;
+        _linkedOrgName = AppState.ContextualOrgName;
+        _orgText = AppState.ContextualOrgName ?? "";
+
+        if (_linkedOrgId is not null)
+        {
+            var org = _organizations.FirstOrDefault(o => o.Id == _linkedOrgId);
+            if (org is null)
+            {
+                _linkedOrgId = null;
+                _linkedOrgName = null;
+            }
+            else
+            {
+                _linkedOrgName = org.Name;
+                _orgText = org.Name;
+                _opportunities = await Db.GetOpportunitiesByOrganizationAsync(_linkedOrgId);
+
+                if (AppState.ContextualOppId is not null)
+                {
+                    var opp = _opportunities.FirstOrDefault(o => o.Id == AppState.ContextualOppId);
+                    if (opp is not null)
+                    {
+                        _linkedOppId = opp.Id;
+                        _linkedOppRole = opp.Role;
+                        _linkedOppRoleDesc = opp.RoleDescription;
+                        _role = opp.Role;
+                        _roleDescription = opp.RoleDescription;
+                        _entitySelectionLocked = true;
+                    }
+                }
+            }
+        }
+
+        await ApplyAutoSelectResume();
+        RecalculateUnsavedChangesBanner();
+    }
+
+    // ── Remote event handlers (M6-9, M6-10) ──────────────────────────────────
+
+    private void HandleOrganizationChanged(string? id, string @event)
+    {
+        if (id != _linkedOrgId) return;
+        InvokeAsync(async () =>
+        {
+            if (@event == "deleted")
+            {
+                if (_sessionId is not null)
+                {
+                    _remoteDeletionMessage = "The linked organization was deleted in another tab. The current session is no longer available.";
+                    _remoteDeletionNavTarget = "/organizations";
+                    _showRemoteDeletionModal = true;
+                }
+                else
+                {
+                    _linkedOrgId = null;
+                    _linkedOrgName = null;
+                    _linkedOppId = null;
+                    _linkedOppRole = null;
+                    _linkedOppRoleDesc = null;
+                    _entitySelectionLocked = false;
+                    _opportunities.Clear();
+                    _showPreEvalOrgDeletedBanner = true;
+                    RecalculateUnsavedChangesBanner();
+                }
+            }
+            else if (@event == "updated")
+            {
+                var org = await Db.GetOrganizationAsync(id!);
+                if (org is null || org.Name == _linkedOrgName) return;
+                _linkedOrgName = org.Name;
+                _orgText = org.Name;
+                if (_sessionId is not null)
+                {
+                    DiscardEvaluation();
+                    _remoteChangeNoticeMessage = $"The linked organization was renamed to '{org.Name}' in another tab. Evaluation results have been discarded — please re-evaluate.";
+                    _showRemoteChangeNoticeModal = true;
+                }
+            }
+            StateHasChanged();
+        });
+    }
+
+    private void HandleOpportunityChanged(string? id, string @event)
+    {
+        InvokeAsync(async () =>
+        {
+            // Refresh the opportunity dropdown list whenever any opp changes for the linked org
+            if (_linkedOrgId is not null)
+                _opportunities = await Db.GetOpportunitiesByOrganizationAsync(_linkedOrgId);
+
+            if (id == _linkedOppId && _linkedOppId is not null)
+            {
+                if (@event == "deleted")
+                {
+                    if (_sessionId is not null)
+                    {
+                        _remoteDeletionMessage = "The linked opportunity was deleted in another tab. The current session is no longer available.";
+                        _remoteDeletionNavTarget = _linkedOrgId is not null
+                            ? $"/organizations/{_linkedOrgId}"
+                            : "/organizations";
+                        _showRemoteDeletionModal = true;
+                    }
+                    else
+                    {
+                        _linkedOppId = null;
+                        _linkedOppRole = null;
+                        _linkedOppRoleDesc = null;
+                        _entitySelectionLocked = false;
+                        _showPreEvalOppDeletedBanner = true;
+                        RecalculateUnsavedChangesBanner();
+                    }
+                }
+                else if (@event == "updated")
+                {
+                    var opp = await Db.GetOpportunityAsync(id!);
+                    if (opp is null) return;
+
+                    bool roleChanged = opp.Role != _linkedOppRole;
+                    bool descChanged = opp.RoleDescription != _linkedOppRoleDesc;
+                    if (!roleChanged && !descChanged) return;
+
+                    var oldOppRole = _linkedOppRole;
+                    var oldOppDesc = _linkedOppRoleDesc;
+                    _linkedOppRole = opp.Role;
+                    _linkedOppRoleDesc = opp.RoleDescription;
+
+                    bool userModified = _role != oldOppRole || _roleDescription != oldOppDesc;
+
+                    if (!userModified)
+                    {
+                        _role = opp.Role;
+                        _roleDescription = opp.RoleDescription;
+                        if (_sessionId is not null)
+                        {
+                            DiscardEvaluation();
+                            _remoteChangeNoticeMessage = "The linked opportunity was changed in another tab. Evaluation results have been discarded — please re-evaluate.";
+                            _showRemoteChangeNoticeModal = true;
+                        }
+                    }
+                    else if (_role != opp.Role || _roleDescription != opp.RoleDescription)
+                    {
+                        _remoteConflictMyRole = _role;
+                        _remoteConflictMyRoleDesc = _roleDescription;
+                        _remoteConflictRemoteRole = opp.Role;
+                        _remoteConflictRemoteRoleDesc = opp.RoleDescription;
+                        _showRemoteConflictModal = true;
+                    }
+
+                    RecalculateUnsavedChangesBanner();
+                }
+            }
+            StateHasChanged();
+        });
+    }
+
+    private void HandleBaseResumeChanged(string? id, string @event)
+    {
+        InvokeAsync(async () =>
+        {
+            _resumes = await Db.GetAllBaseResumesAsync();
+            await LoadLatestVersionsAsync();
+            _noResumesExist = _resumes.Count == 0;
+
+            if (@event == "created" && _selectedResumeId is null && _resumes.Count == 1)
+            {
+                await ApplyAutoSelectResume();
+            }
+            else if (id == _selectedResumeId)
+            {
+                if (@event == "deleted")
+                {
+                    _resumeDeleted = true;
+                }
+                else if (@event == "updated")
+                {
+                    var resume = _resumes.FirstOrDefault(r => r.Id == id);
+                    if (resume is not null)
+                        _selectedResumeName = resume.Name;
+                }
+            }
+
+            StateHasChanged();
+        });
+    }
+
+    private void HandleBaseResumeVersionChanged(string? id, string @event)
+    {
+        if (@event != "created") return;
+        InvokeAsync(async () =>
+        {
+            var version = await Db.GetBaseResumeVersionAsync(id!);
+            if (version is null) return;
+
+            _latestVersions[version.ResumeId] = version;
+
+            if (version.ResumeId == _selectedResumeId)
+            {
+                if (_sessionId is null)
+                {
+                    // Pre-evaluate: silently update to new latest
+                    _selectedVersionId = version.Id;
+                    _selectedVersionNumber = version.VersionNumber;
+                    _selectedVersionIsLatest = true;
+                }
+                else
+                {
+                    // Post-evaluate/generate: keep original, update display label
+                    _selectedVersionIsLatest = false;
+                }
+            }
+
+            StateHasChanged();
+        });
+    }
+
+    private void HandleSessionChanged(string? id, string @event)
+    {
+        if (id != _sessionId || _sessionId is null) return;
+        if (@event != "deleted") return;
+        InvokeAsync(() =>
+        {
+            _sessionDeletedMessage = "The current session was deleted in another tab.";
+            _showSessionDeletedModal = true;
+            StateHasChanged();
+            return Task.CompletedTask;
+        });
+    }
+
+    private void HandleSessionsCleared()
+    {
+        if (_sessionId is null || _linkedOrgId is not null) return;
+        InvokeAsync(() =>
+        {
+            _sessionDeletedMessage = "All ad-hoc sessions were cleared in another tab.";
+            _showSessionDeletedModal = true;
+            StateHasChanged();
+            return Task.CompletedTask;
+        });
     }
 
     // ── Keyword helpers ───────────────────────────────────────────────────────
 
-    // Returns deduplicated union of confirmed + parsed custom keywords as SuggestedKeyword list.
     List<SuggestedKeyword> GetAllKeywordsForSession()
     {
         var seen   = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -839,14 +2363,11 @@
         return result;
     }
 
-    // Returns strings formatted as "Category: Keyword" (or just "Keyword") for the AI prompt.
     IReadOnlyList<string> GetAdditionalKeywords() =>
         GetAllKeywordsForSession()
             .Select(kw => string.IsNullOrEmpty(kw.Category) ? kw.Keyword : $"{kw.Category}: {kw.Keyword}")
             .ToList();
 
-    // Parses the free-form textarea. Each line: "Category: Keyword" or plain "Keyword".
-    // Comma-separated entries are supported on lines that contain no colon.
     List<SuggestedKeyword> ParseCustomKeywords()
     {
         var result = new List<SuggestedKeyword>();
@@ -888,59 +2409,36 @@
     void RemoveConfirmedKeyword(string keyword) =>
         _confirmedKeywords.RemoveAll(c => string.Equals(c.Keyword, keyword, StringComparison.OrdinalIgnoreCase));
 
-    // ── Session persistence ───────────────────────────────────────────────────
+    // ── Score badge helper ────────────────────────────────────────────────────
 
-    async Task SaveSessionAsync()
+    static string ScoreBadgeClass(string score) => score switch
     {
-        // _sessionId is pinned when Evaluate succeeds; Generate reuses the same ID
-        // so IndexedDB put() overwrites the existing record rather than inserting a new one.
-        var existing = _sessionId is not null ? await Db.GetSessionAsync(_sessionId) : null;
-        var session  = new SessionRecord
-        {
-            Id                = _sessionId ?? Guid.NewGuid().ToString(),
-            CreatedAt         = existing?.CreatedAt ?? DateTime.UtcNow,
-            CompanyName       = _companyName,
-            JobTitle          = _jobTitle,
-            JobDetails        = _jobDetails,
-            InputResumeFileId = _inputFileId ?? "",
-            MatchScore        = _evaluation?.Score ?? "",
-            MatchGaps         = _evaluation?.Gaps ?? new(),
-            MatchStrengths    = _evaluation?.Strengths ?? new(),
-            AdditionalKeywords = GetAllKeywordsForSession(),
-            CoverLetterText   = _materials?.CoverLetterText ?? "",
-            WhyApplyText      = _materials?.WhyApplyText ?? "",
-            TailoredResumeFileId = _tailoredResumeFileId,
-            CoverLetterFileId    = _coverLetterFileId,
-        };
-        await Db.SaveSessionAsync(session);
-    }
+        _ when score.Contains("High", StringComparison.OrdinalIgnoreCase)   => "bg-success",
+        _ when score.Contains("Medium", StringComparison.OrdinalIgnoreCase) => "bg-warning text-dark",
+        _ when score.Contains("Low", StringComparison.OrdinalIgnoreCase)    => "bg-danger",
+        _                                                                    => "bg-secondary",
+    };
 
     // ── Downloads ─────────────────────────────────────────────────────────────
-
-    async Task DownloadCoverLetter()
-    {
-        if (_coverLetterFileId is null) return;
-        await DownloadFileAsync(_coverLetterFileId, $"Cover Letter - {_companyName} - {_jobTitle}.docx");
-    }
 
     async Task DownloadTailoredResume()
     {
         if (_tailoredResumeFileId is null) return;
-        await DownloadFileAsync(_tailoredResumeFileId, $"Resume - {_companyName} - {_jobTitle}.docx");
+        var orgName = _linkedOrgName ?? _orgText;
+        await DownloadFileAsync(_tailoredResumeFileId, $"Resume - {orgName} - {_role}.docx");
+    }
+
+    async Task DownloadCoverLetter()
+    {
+        if (_coverLetterFileId is null) return;
+        var orgName = _linkedOrgName ?? _orgText;
+        await DownloadFileAsync(_coverLetterFileId, $"Cover Letter - {orgName} - {_role}.docx");
     }
 
     async Task DownloadFileAsync(string fileId, string fileName)
     {
         var file = await Db.GetFileAsync(fileId);
-        if (file is null) { _inputError = "File not found."; return; }
+        if (file is null) return;
         await Db.DownloadFileAsync(fileName, Convert.FromBase64String(file.DataBase64));
     }
-
-    static string ScoreBadgeClass(string score) => score switch
-    {
-        "Excellent" => "bg-success",
-        "Good"      => "bg-primary",
-        "Fair"      => "bg-warning text-dark",
-        _           => "bg-danger",
-    };
 }

@@ -1,0 +1,39 @@
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+
+<select @ref="_selectRef" multiple style="width:100%"></select>
+
+@code {
+    [Parameter] public List<string> AvailableOptions { get; set; } = new();
+    [Parameter] public string[] SelectedValues { get; set; } = Array.Empty<string>();
+    [Parameter] public bool AllowCreate { get; set; } = true;
+    [Parameter] public EventCallback<string[]> OnChanged { get; set; }
+
+    private ElementReference _selectRef;
+    private DotNetObjectReference<TagPicker>? _dotNetRef;
+    private bool _initialized;
+
+    // Prevent Blazor from re-rendering the <select> after Select2 takes ownership of the DOM.
+    protected override bool ShouldRender() => !_initialized;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+        _dotNetRef = DotNetObjectReference.Create(this);
+        await JS.InvokeVoidAsync("sjaSelect2Init", _selectRef, AvailableOptions, SelectedValues, AllowCreate, _dotNetRef);
+        _initialized = true;
+    }
+
+    [JSInvokable]
+    public async Task OnTagsChangedFromJs(string[] newValues)
+    {
+        await OnChanged.InvokeAsync(newValues);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_initialized)
+            try { await JS.InvokeVoidAsync("sjaSelect2Destroy", _selectRef); } catch { }
+        _dotNetRef?.Dispose();
+    }
+}

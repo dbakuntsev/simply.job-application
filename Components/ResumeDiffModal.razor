@@ -1,0 +1,93 @@
+@using BlazorMonaco.Editor
+@inject IJSRuntime JS
+
+@if (Show)
+{
+    <div class="modal d-block" tabindex="-1" role="dialog" aria-modal="true"
+         style="background:rgba(0,0,0,.45)">
+        <div class="modal-dialog modal-xl modal-dialog-centered" style="max-width:95vw">
+            <div class="modal-content" style="height:80vh">
+                <div class="modal-header py-2">
+                    <h5 class="modal-title">Compare Versions</h5>
+                    <button type="button" class="btn-close" @onclick="OnClose" aria-label="Close"></button>
+                </div>
+                @* position:relative turns this into the containing block for the absolute editor. *@
+                <div class="modal-body p-0" style="position:relative;overflow:hidden;flex:1;min-height:0">
+                    @* CssClass makes Monaco's own container div absolute-fill the body so it
+                       always has a definite pixel size regardless of the flex chain above it. *@
+                    <StandaloneDiffEditor @ref="_editor"
+                                          Id="resume-diff-editor"
+                                          ConstructionOptions="GetOptions"
+                                          OnDidInit="OnEditorInitAsync"
+                                          CssClass="position-absolute top-0 start-0 end-0 bottom-0" />
+                </div>
+                <div class="modal-footer py-2">
+                    <span class="text-muted small me-auto">Left: selected version &nbsp;|&nbsp; Right: latest version</span>
+                    <div class="form-check form-switch align-self-center me-3 mb-0">
+                        <input class="form-check-input" type="checkbox" id="diff-wrap-toggle"
+                               @bind="_wordWrap" @bind:after="ApplyWordWrapAsync" />
+                        <label class="form-check-label small" for="diff-wrap-toggle">Wrap lines</label>
+                    </div>
+                    <button class="btn btn-secondary" @onclick="OnClose">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Show { get; set; }
+    [Parameter] public string OriginalText { get; set; } = "";
+    [Parameter] public string ModifiedText { get; set; } = "";
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    private StandaloneDiffEditor? _editor;
+    private bool _wordWrap;   // persists across open/close cycles on this component instance
+
+    private StandaloneDiffEditorConstructionOptions GetOptions(StandaloneDiffEditor _) => new()
+    {
+        OriginalEditable = false,
+        RenderSideBySide = true,
+        ReadOnly = true,
+        AutomaticLayout = true,
+        Theme = "vs",
+    };
+
+    // Fires after createDiffEditor JS interop completes — the only safe place to set content.
+    private async Task OnEditorInitAsync()
+    {
+        if (_editor is null) return;
+
+        var orig = await GetOrUpdateModel("resume-diff-original", OriginalText);
+        var mod  = await GetOrUpdateModel("resume-diff-modified", ModifiedText);
+        await _editor.SetModel(new DiffEditorModel { Original = orig, Modified = mod });
+
+        // Re-apply word-wrap if the user had it on before closing and reopening.
+        if (_wordWrap) await ApplyWordWrapAsync();
+
+        // Force Monaco to measure the container's real pixel size.
+        // AutomaticLayout uses ResizeObserver but does not fire on first open when the
+        // container dimensions haven't changed since Monaco initialized (possible in a modal).
+        await JS.InvokeVoidAsync("blazorMonaco.editor.layout", "resume-diff-editor");
+    }
+
+    // Called by @bind:after whenever the checkbox changes.
+    private async Task ApplyWordWrapAsync()
+    {
+        await JS.InvokeVoidAsync("blazorMonaco.editor.updateOptions", "resume-diff-editor",
+            new { wordWrap = _wordWrap ? "on" : "off" });
+    }
+
+    // Monaco models are global singletons keyed by URI. Get and update if already present;
+    // create on first open. This avoids "Already a model with this URI" errors on re-open.
+    private async Task<TextModel> GetOrUpdateModel(string uri, string text)
+    {
+        var model = await Global.GetModel(JS, uri);
+        if (model is not null)
+        {
+            await model.SetValue(text);
+            return model;
+        }
+        return await Global.CreateModel(JS, text, "markdown", uri);
+    }
+}

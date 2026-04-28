@@ -1,0 +1,1801 @@
+@page "/opportunities/{Id}"
+@inherits NavigationGuardBase
+@inject IIndexedDbService Db
+@inject IDataSyncService DataSync
+@inject IAiProviderFactory Providers
+@inject AppStateService AppState
+@inject NavigationManager Nav
+@using System.Text.Json
+
+<PageTitle>@(_opp?.Role ?? "Opportunity") — Simply Job Application</PageTitle>
+
+<NavigationLock OnBeforeInternalNavigation="HandleLocationChanging" />
+<NavigationGuardModal Show="_showGuardModal" StayLabel="@StayLabel" LeaveLabel="@LeaveLabel"
+                      OnStay="() => OnGuardStay()" OnLeave="() => OnGuardLeave()" />
+
+<ConflictAlertModal Show="_showConflictAlert"
+                    Message="@_conflictMessage"
+                    ShowKeepEditing="@_conflictShowKeepEditing"
+                    OnDiscardAndReload="HandleConflictDiscardAndReload"
+                    OnKeepEditing="HandleConflictKeepEditing" />
+
+<DeletionAlertModal Show="_showDeletionAlert"
+                    Message="@_deletionMessage"
+                    OnDismiss="HandleDeletionDismiss" />
+
+@if (_loading)
+{
+    <div class="text-center py-5"><div class="spinner-border" role="status"></div></div>
+}
+else if (_opp is null)
+{
+    <div class="alert alert-warning">Opportunity not found.</div>
+}
+else
+{
+    <nav aria-label="breadcrumb" class="mb-3">
+        <ol class="breadcrumb">
+            <li class="breadcrumb-item"><a href="/organizations">Organizations</a></li>
+            @if (_org is not null)
+            {
+                <li class="breadcrumb-item">
+                    <a href="/organizations/@_opp.OrganizationId">@_org.Name</a>
+                </li>
+            }
+            <li class="breadcrumb-item active">@_opp.Role</li>
+        </ol>
+    </nav>
+
+    @* ── Header section ────────────────────────────────────────────────────────── *@
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">@(_isEditing ? _editOpp.Role : _opp.Role)</h5>
+            <div class="d-flex gap-2 align-items-center">
+                @if (!_isEditing)
+                {
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="StartEdit">Edit</button>
+                    <button class="btn btn-sm btn-outline-primary" @onclick="NavigateToEvaluate">
+                        Evaluate &amp; Generate
+                    </button>
+                }
+                else
+                {
+                    <button class="btn btn-sm btn-outline-secondary" @onclick="CancelEdit">Cancel</button>
+                    <button class="btn btn-sm btn-primary" @onclick="SaveEditAsync"
+                            disabled="@(!CanSaveEdit || _savingEdit)">
+                        @(_savingEdit ? "Saving…" : "Save")
+                    </button>
+                }
+            </div>
+        </div>
+        <div class="card-body">
+            @if (!_isEditing)
+            {
+                <dl class="row mb-0">
+                    <dt class="col-sm-3">Organization</dt>
+                    <dd class="col-sm-9">
+                        @if (_org is not null)
+                        {
+                            <a href="/organizations/@_opp.OrganizationId">@_org.Name</a>
+                        }
+                        else { <span>—</span> }
+                    </dd>
+                    <dt class="col-sm-3">Stage</dt>
+                    <dd class="col-sm-9">
+                        <select class="form-select form-select-sm" style="max-width:200px"
+                                value="@_opp.Stage"
+                                @onchange="HandleStageQuickEdit">
+                            @foreach (var s in Enum.GetValues<OpportunityStage>())
+                            {
+                                <option value="@s">@StageName(s)</option>
+                            }
+                        </select>
+                        @if (_stageSaving)
+                        {
+                            <span class="text-muted small ms-2">Saving…</span>
+                        }
+                    </dd>
+                    <dt class="col-sm-3">Work Arrangement</dt>
+                    <dd class="col-sm-9">@(_opp.WorkArrangement is null ? "—" : WorkArrangementLabel(_opp.WorkArrangement.Value))</dd>
+                    <dt class="col-sm-3">Compensation</dt>
+                    <dd class="col-sm-9">@(string.IsNullOrWhiteSpace(_opp.CompensationRange) ? "—" : _opp.CompensationRange)</dd>
+                    <dt class="col-sm-3">Posting URL</dt>
+                    <dd class="col-sm-9">
+                        @if (!string.IsNullOrWhiteSpace(_opp.PostingUrl))
+                        {
+                            <a href="@_opp.PostingUrl" target="_blank" rel="noopener noreferrer">@_opp.PostingUrl</a>
+                        }
+                        else { <span>—</span> }
+                    </dd>
+                    <dt class="col-sm-3 text-muted small">Created</dt>
+                    <dd class="col-sm-9 text-muted small">@_opp.CreatedAt.ToLocalTime().ToString("g")</dd>
+                    <dt class="col-sm-3 text-muted small">Updated</dt>
+                    <dd class="col-sm-9 text-muted small">@_opp.UpdatedAt.ToLocalTime().ToString("g")</dd>
+                </dl>
+            }
+            else
+            {
+                <div class="row g-3">
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Role <span class="text-danger">*</span></label>
+                        <input class="form-control" @bind="_editOpp.Role" @bind:event="oninput" />
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label fw-semibold">Organization</label>
+                        <div class="form-control-plaintext">@(_org?.Name ?? "—")</div>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Stage</label>
+                        <select class="form-select" @bind="_editStageStr">
+                            @foreach (var s in Enum.GetValues<OpportunityStage>())
+                            {
+                                <option value="@s">@StageName(s)</option>
+                            }
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Work Arrangement</label>
+                        <select class="form-select" @bind="_editWorkArrangementStr">
+                            <option value="">— Select —</option>
+                            <option value="Remote">Remote</option>
+                            <option value="Hybrid">Hybrid</option>
+                            <option value="OnSite">On-site</option>
+                        </select>
+                    </div>
+                    <div class="col-md-4">
+                        <label class="form-label fw-semibold">Compensation Range</label>
+                        <input class="form-control" @bind="_editOpp.CompensationRange" placeholder="e.g. $120k–$150k" />
+                    </div>
+                    <div class="col-12">
+                        <label class="form-label fw-semibold">Posting URL</label>
+                        <input class="form-control" @bind="_editOpp.PostingUrl" placeholder="https://" />
+                    </div>
+                </div>
+                @if (_editSaveError is not null)
+                {
+                    <div class="alert alert-danger mt-3 mb-0">@_editSaveError</div>
+                }
+            }
+        </div>
+    </div>
+
+    @* ── Role Description ──────────────────────────────────────────────────────── *@
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Role Description</h5>
+            <div class="d-flex gap-2">
+                @if (!_isEditing)
+                {
+                    @if (!string.IsNullOrWhiteSpace(_opp.RoleDescription))
+                    {
+                        @if (_extractingQuals)
+                        {
+                            <span class="text-muted small align-self-center">Extracting…</span>
+                        }
+                        else
+                        {
+                            <button class="btn btn-sm btn-outline-primary"
+                                    @onclick="TryExtractQualificationsAsync">
+                                Extract Qualifications
+                            </button>
+                        }
+                    }
+                    <button class="btn btn-sm btn-link text-muted p-0"
+                            @onclick="() => _showHistoryModal = true">
+                        Show Change History
+                    </button>
+                }
+                else
+                {
+                    <button class="btn btn-sm btn-outline-primary" disabled
+                            title="Not available in Edit mode">
+                        Extract Qualifications
+                    </button>
+                }
+            </div>
+        </div>
+        <div class="card-body">
+            @if (_extractError is not null)
+            {
+                <div class="alert alert-danger mb-3">@_extractError</div>
+            }
+            @if (!_isEditing)
+            {
+                @if (string.IsNullOrWhiteSpace(_opp.RoleDescription))
+                {
+                    <div class="text-muted fst-italic">No role description yet — enter one in Edit mode.</div>
+                }
+                else
+                {
+                    <pre class="mb-0" style="white-space:pre-wrap;font-family:inherit;max-height:300px;overflow-y:auto">@_opp.RoleDescription</pre>
+                }
+            }
+            else
+            {
+                <textarea class="form-control" rows="8" @bind="_editOpp.RoleDescription"
+                          placeholder="Paste or type the role description here…"></textarea>
+            }
+        </div>
+    </div>
+
+    @* ── Qualifications ────────────────────────────────────────────────────────── *@
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">Qualifications</h5>
+        </div>
+        <div class="card-body">
+            <div class="row g-4">
+                @* Required *@
+                <div class="col-md-6">
+                    <h6 class="fw-semibold">Required</h6>
+                    @if (!_isEditing)
+                    {
+                        @if (_opp.RequiredQualifications.Length == 0)
+                        {
+                            <div class="text-muted fst-italic small">No required qualifications yet — use Extract Qualifications or add them manually in Edit mode.</div>
+                        }
+                        else
+                        {
+                            <ul class="mb-0">
+                                @foreach (var q in _opp.RequiredQualifications)
+                                {
+                                    <li>@q</li>
+                                }
+                            </ul>
+                        }
+                    }
+                    else
+                    {
+                        @foreach (var (q, i) in _editRequired.Select((q, i) => (q, i)))
+                        {
+                            <div class="input-group mb-1">
+                                <input class="form-control form-control-sm"
+                                       value="@q"
+                                       @onchange="e => _editRequired[i] = e.Value?.ToString() ?? string.Empty" />
+                                <button class="btn btn-outline-danger btn-sm"
+                                        @onclick="() => _editRequired.RemoveAt(i)">×</button>
+                            </div>
+                        }
+                        <button class="btn btn-outline-secondary btn-sm mt-1"
+                                @onclick="() => _editRequired.Add(string.Empty)">+ Add</button>
+                    }
+                </div>
+                @* Preferred *@
+                <div class="col-md-6">
+                    <h6 class="fw-semibold">Preferred</h6>
+                    @if (!_isEditing)
+                    {
+                        @if (_opp.PreferredQualifications.Length == 0)
+                        {
+                            <div class="text-muted fst-italic small">No preferred qualifications yet — use Extract Qualifications or add them manually in Edit mode.</div>
+                        }
+                        else
+                        {
+                            <ul class="mb-0">
+                                @foreach (var q in _opp.PreferredQualifications)
+                                {
+                                    <li>@q</li>
+                                }
+                            </ul>
+                        }
+                    }
+                    else
+                    {
+                        @foreach (var (q, i) in _editPreferred.Select((q, i) => (q, i)))
+                        {
+                            <div class="input-group mb-1">
+                                <input class="form-control form-control-sm"
+                                       value="@q"
+                                       @onchange="e => _editPreferred[i] = e.Value?.ToString() ?? string.Empty" />
+                                <button class="btn btn-outline-danger btn-sm"
+                                        @onclick="() => _editPreferred.RemoveAt(i)">×</button>
+                            </div>
+                        }
+                        <button class="btn btn-outline-secondary btn-sm mt-1"
+                                @onclick="() => _editPreferred.Add(string.Empty)">+ Add</button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @* ── Correspondence section ───────────────────────────────────────────────────── *@
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Correspondence</h5>
+            @if (!_isEditing)
+            {
+                <div class="dropdown @(_showAddCorrDropdown ? "show" : "")">
+                    <button class="btn btn-sm btn-primary dropdown-toggle" type="button"
+                            @onclick="() => _showAddCorrDropdown = !_showAddCorrDropdown">
+                        Add
+                    </button>
+                    <ul class="dropdown-menu dropdown-menu-end @(_showAddCorrDropdown ? "show" : "")">
+                        @foreach (var ct in Enum.GetValues<CorrespondenceType>())
+                        {
+                            var captured = ct;
+                            <li>
+                                <a class="dropdown-item" href="#" @onclick:preventDefault
+                                   @onclick="() => OpenAddCorrespondence(captured)">
+                                    @CorrTypeLabel(captured)
+                                </a>
+                            </li>
+                        }
+                    </ul>
+                </div>
+            }
+        </div>
+        <div class="card-body p-0">
+            @if (_correspondence.Count == 0)
+            {
+                <div class="px-3 py-3 text-muted">No correspondence yet.</div>
+            }
+            else
+            {
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="ps-3" style="width:140px">Date / Time</th>
+                            <th style="width:180px">Type</th>
+                            <th>Content</th>
+                            <th style="width:160px">Contact</th>
+                            <th class="text-center" style="width:60px">Files</th>
+                            <th style="width:1%"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var corr in _correspondence.OrderByDescending(c => c.OccurredAt))
+                        {
+                            <tr style="cursor:pointer" @onclick="() => OpenEditCorrespondence(corr)">
+                                <td class="ps-3 small text-muted">@corr.OccurredAt.ToLocalTime().ToString("g")</td>
+                                <td class="small">@GetTypeDirectionLabel(corr)</td>
+                                <td class="small text-muted text-truncate" style="max-width:250px">@GetCorrContentPreview(corr)</td>
+                                <td class="small text-muted">@GetCorrContactDisplay(corr)</td>
+                                <td class="text-center small text-muted">
+                                    @(_correspondenceFileCounts.TryGetValue(corr.Id, out var cnt) && cnt > 0 ? cnt.ToString() : "—")
+                                </td>
+                                <td class="pe-2" @onclick:stopPropagation>
+                                    @if (!_isEditing)
+                                    {
+                                        <button class="btn btn-sm btn-outline-danger"
+                                                title="Delete correspondence"
+                                                @onclick="() => _deleteCorrespondenceTarget = corr">
+                                            @TrashIcon
+                                        </button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+
+    @* ── Contacts section ──────────────────────────────────────────────────────── *@
+    <div class="card mb-4">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <h5 class="mb-0">Contacts</h5>
+            @if (!_isEditing)
+            {
+                <div class="d-flex gap-2 align-items-center">
+                    @{
+                        var unassociated = UnassociatedContacts;
+                        var allAssociated = _orgContacts.Count > 0 && unassociated.Count == 0;
+                        var noContacts = _orgContacts.Count == 0;
+                    }
+                    <select class="form-select form-select-sm" style="max-width:220px"
+                            disabled="@(noContacts || allAssociated || _addingContact)"
+                            title="@(noContacts ? "No Contacts in this Organization" : allAssociated ? "No more Contacts in this Organization" : null)"
+                            @onchange="HandleAddContact">
+                        <option value="">Add contact…</option>
+                        @foreach (var c in unassociated)
+                        {
+                            <option value="@c.Id">@c.FullName</option>
+                        }
+                    </select>
+                </div>
+            }
+        </div>
+        <div class="card-body p-0">
+            @if (_contactRoles.Count == 0)
+            {
+                <div class="px-3 py-3 text-muted">No contacts associated with this opportunity yet.</div>
+            }
+            else
+            {
+                <table class="table align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="ps-3">Name</th>
+                            <th>Title</th>
+                            <th>Email</th>
+                            <th>Phone</th>
+                            <th style="min-width:220px">Roles</th>
+                            <th style="width:1%"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var role in _contactRoles)
+                        {
+                            var contact = _orgContacts.FirstOrDefault(c => c.Id == role.ContactId);
+                            if (contact is null) continue;
+                            <tr>
+                                <td class="ps-3 fw-semibold">@contact.FullName</td>
+                                <td class="text-muted small">@(string.IsNullOrWhiteSpace(contact.Title) ? "—" : contact.Title)</td>
+                                <td class="text-muted small">@(string.IsNullOrWhiteSpace(contact.Email) ? "—" : contact.Email)</td>
+                                <td class="text-muted small">@(string.IsNullOrWhiteSpace(contact.Phone) ? "—" : contact.Phone)</td>
+                                <td>
+                                    @if (!_isEditing)
+                                    {
+                                        <TagPicker @key="@($"tag-{role.ContactId}-{_tagPickerKey}")"
+                                                   AvailableOptions="_contactRoleLabels"
+                                                   SelectedValues="role.Roles"
+                                                   AllowCreate="true"
+                                                   OnChanged="vals => HandleRoleTagsChanged(role, vals)" />
+                                    }
+                                </td>
+                                <td class="pe-2">
+                                    @if (!_isEditing)
+                                    {
+                                        <button class="btn btn-sm btn-outline-danger"
+                                                title="Remove @contact.FullName from this opportunity"
+                                                @onclick="() => _removeRoleTarget = role">
+                                            @TrashIcon
+                                        </button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+
+    @* ── E&G Sessions section ──────────────────────────────────────────────────── *@
+    <div class="card mb-4">
+        <div class="card-header">
+            <h5 class="mb-0">E&amp;G Sessions</h5>
+        </div>
+        <div class="card-body p-0">
+            @if (_sessions.Count == 0)
+            {
+                <div class="px-3 py-3 text-muted">No E&amp;G sessions yet.</div>
+            }
+            else
+            {
+                <table class="table table-hover align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th class="ps-3">Date / Time</th>
+                            <th>Resume</th>
+                            <th class="text-center" style="width:100px">Match Score</th>
+                            <th class="text-center" style="width:80px">Artifacts</th>
+                            <th class="text-center" style="width:90px">Field Match</th>
+                            <th style="width:1%"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var session in _sessions)
+                        {
+                            <tr style="cursor:pointer"
+                                @onclick="() => NavigateToSession(session.Id)">
+                                <td class="ps-3 small text-muted">@session.CreatedAt.ToLocalTime().ToString("g")</td>
+                                <td class="small text-muted">@GetResumeDisplay(session)</td>
+                                <td class="text-center small">
+                                    @(string.IsNullOrWhiteSpace(session.MatchScore) ? "—" : session.MatchScore)
+                                </td>
+                                <td class="text-center">
+                                    @if (session.ArtifactsGenerated) { @CheckIcon }
+                                </td>
+                                <td class="text-center">
+                                    @if (GetFieldMatch(session)) { @CheckIcon }
+                                </td>
+                                <td class="pe-2" @onclick:stopPropagation>
+                                    @if (!_isEditing)
+                                    {
+                                        <button class="btn btn-sm btn-outline-danger"
+                                                title="Delete session"
+                                                @onclick="() => _deleteSessionTarget = session">
+                                            @TrashIcon
+                                        </button>
+                                    }
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+        </div>
+    </div>
+}
+
+@* ── Correspondence Add/Edit modal ──────────────────────────────────────────── *@
+@if (_showCorrespondenceModal)
+{
+    <div class="modal d-block" tabindex="-1" role="dialog" aria-modal="true"
+         style="background:rgba(0,0,0,.45)" @onclick="HandleCorrModalBackdropClick">
+        <div class="modal-dialog modal-lg" @onclick:stopPropagation>
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@GetCorrModalTitle()</h5>
+                    <button type="button" class="btn-close" @onclick="HandleCorrModalClose"></button>
+                </div>
+                <div class="modal-body">
+                    @if (_corrSaveError is not null)
+                    {
+                        <div class="alert alert-danger">@_corrSaveError</div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label">Date / Time</label>
+                        <input type="datetime-local" class="form-control"
+                               value="@_modalCorr.OccurredAt.ToLocalTime().ToString("yyyy-MM-ddTHH:mm")"
+                               @onchange="e => _modalCorr.OccurredAt = ParseDateTimeLocal(e.Value?.ToString())" />
+                    </div>
+
+                    @if (TypeHasDirection(_modalCorr.Type))
+                    {
+                        var (inLbl, outLbl) = GetDirectionLabels(_modalCorr.Type);
+                        <div class="mb-3">
+                            <label class="form-label">Direction</label>
+                            <div class="btn-group w-100" role="group">
+                                <input type="radio" class="btn-check" id="corr-dir-in" name="corrdir" autocomplete="off"
+                                       checked="@(_modalCorr.Direction == CorrespondenceDirection.Incoming)"
+                                       @onchange="() => _modalCorr.Direction = CorrespondenceDirection.Incoming" />
+                                <label class="btn btn-outline-primary" for="corr-dir-in">@inLbl</label>
+                                <input type="radio" class="btn-check" id="corr-dir-out" name="corrdir" autocomplete="off"
+                                       checked="@(_modalCorr.Direction == CorrespondenceDirection.Outgoing)"
+                                       @onchange="() => _modalCorr.Direction = CorrespondenceDirection.Outgoing" />
+                                <label class="btn btn-outline-primary" for="corr-dir-out">@outLbl</label>
+                            </div>
+                        </div>
+                    }
+
+                    @if (_modalCorr.Type == CorrespondenceType.Email)
+                    {
+                        <div class="mb-3">
+                            <label class="form-label">Subject</label>
+                            <input class="form-control" @bind="_modalCorr.Subject" />
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label">Contact <span class="text-muted fw-normal small">(optional)</span></label>
+                        <select class="form-select"
+                                value="@(_modalCorr.ContactId ?? "")"
+                                @onchange="e => _modalCorr.ContactId = string.IsNullOrEmpty(e.Value?.ToString()) ? null : e.Value.ToString()">
+                            <option value="">— none —</option>
+                            @if (DanglingContactId is not null)
+                            {
+                                <option value="@DanglingContactId">(deleted)</option>
+                            }
+                            @foreach (var c in _orgContacts.OrderBy(c => c.FullName, StringComparer.OrdinalIgnoreCase))
+                            {
+                                <option value="@c.Id">@c.FullName</option>
+                            }
+                        </select>
+                    </div>
+
+                    @if (_modalCorr.Type == CorrespondenceType.ResumeSubmitted)
+                    {
+                        var noSessions = !_sessions.Any() && DanglingSessionId is null;
+                        <div class="mb-3">
+                            <label class="form-label">Session <span class="text-muted fw-normal small">(optional)</span></label>
+                            <select class="form-select" disabled="@noSessions"
+                                    value="@(_modalCorr.LinkedSessionId ?? "")"
+                                    @onchange="e => _modalCorr.LinkedSessionId = string.IsNullOrEmpty(e.Value?.ToString()) ? null : e.Value.ToString()">
+                                <option value="">— none —</option>
+                                @if (DanglingSessionId is not null)
+                                {
+                                    <option value="@DanglingSessionId">(deleted)</option>
+                                }
+                                @foreach (var s in _sessions.OrderByDescending(s => s.CreatedAt))
+                                {
+                                    <option value="@s.Id">@s.CreatedAt.ToLocalTime().ToString("g") – @s.Role</option>
+                                }
+                            </select>
+                            @if (noSessions)
+                            {
+                                <div class="form-text">No sessions available for this opportunity.</div>
+                            }
+                        </div>
+                        <div class="mb-3">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="corr-coverletter"
+                                       @bind="_modalCorr.CoverLetterSubmitted" />
+                                <label class="form-check-label" for="corr-coverletter">Cover Letter Submitted</label>
+                            </div>
+                        </div>
+                    }
+
+                    <div class="mb-3">
+                        <label class="form-label">Body / Notes</label>
+                        <MarkdownEditor Value="@_modalCorr.Body" ValueChanged="v => _modalCorr.Body = v" Height="200px" />
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label">Attachments</label>
+                        @if (_fileUploadError is not null)
+                        {
+                            <div class="alert alert-warning py-1 px-2 small mb-2">@_fileUploadError</div>
+                        }
+                        <InputFile OnChange="HandleCorrFileSelected" multiple class="form-control form-control-sm mb-2" />
+                        @if (_modalExistingFiles.Count > 0 || _modalNewFiles.Count > 0)
+                        {
+                            <ul class="list-group list-group-flush">
+                                @foreach (var f in _modalExistingFiles)
+                                {
+                                    var ef = f;
+                                    <li class="list-group-item d-flex justify-content-between align-items-center py-1 px-0">
+                                        <span class="small">@ef.FileName <span class="text-muted">(@FormatFileSize(ef.FileSize))</span></span>
+                                        <div class="d-flex gap-1">
+                                            <button class="btn btn-sm btn-outline-secondary" @onclick="() => DownloadExistingFile(ef)">Download</button>
+                                            <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveExistingFile(ef.Id)">Remove</button>
+                                        </div>
+                                    </li>
+                                }
+                                @foreach (var f in _modalNewFiles)
+                                {
+                                    var nf = f;
+                                    <li class="list-group-item d-flex justify-content-between align-items-center py-1 px-0">
+                                        <span class="small text-success">@nf.FileName <span class="text-muted">(@FormatFileSize(nf.FileSize))</span></span>
+                                        <button class="btn btn-sm btn-outline-danger" @onclick="() => RemoveStagedFile(nf)">Remove</button>
+                                    </li>
+                                }
+                            </ul>
+                        }
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-secondary" @onclick="HandleCorrModalClose" disabled="@_savingCorr">Cancel</button>
+                    <button class="btn btn-primary" @onclick="SaveCorrespondenceAsync" disabled="@_savingCorr">
+                        @(_savingCorr ? "Saving…" : "Save")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* ── Extract qualifications confirmation ────────────────────────────────────── *@
+@if (_showExtractConfirm)
+{
+    <div class="modal d-block" tabindex="-1" role="dialog" aria-modal="true"
+         style="background:rgba(0,0,0,.45)">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Extract Qualifications</h5>
+                </div>
+                <div class="modal-body">
+                    The qualifications lists already have content. Extracting will replace them.
+                    Do you want to continue?
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-secondary" @onclick="() => _showExtractConfirm = false">Cancel</button>
+                    <button class="btn btn-primary" @onclick="RunExtractQualificationsAsync">Continue</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* ── Change History modal ────────────────────────────────────────────────────── *@
+@if (_showHistoryModal)
+{
+    <div class="modal d-block" tabindex="-1" role="dialog" aria-modal="true"
+         style="background:rgba(0,0,0,.45)">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Change History</h5>
+                    <button type="button" class="btn-close" @onclick="() => _showHistoryModal = false"></button>
+                </div>
+                <div class="modal-body p-0">
+                    @if (_history.Count == 0)
+                    {
+                        <div class="p-3 text-muted">No change history yet.</div>
+                    }
+                    else
+                    {
+                        <table class="table table-sm mb-0">
+                            <thead>
+                                <tr>
+                                    <th class="ps-3" style="width:160px">When</th>
+                                    <th style="width:160px">Source</th>
+                                    <th>Changed Fields (old values)</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var h in _history.OrderByDescending(h => h.ChangedAt))
+                                {
+                                    <tr>
+                                        <td class="ps-3 small text-muted">@h.ChangedAt.ToLocalTime().ToString("g")</td>
+                                        <td class="small">@HistorySourceLabel(h.Source)</td>
+                                        <td class="small">
+                                            @foreach (var fc in h.Changes)
+                                            {
+                                                <div>
+                                                    <span class="fw-semibold">@fc.FieldName:</span>
+                                                    <span class="text-muted">@fc.OldValue</span>
+                                                </div>
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-secondary" @onclick="() => _showHistoryModal = false">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@* ── Delete confirmations ────────────────────────────────────────────────────── *@
+<ConfirmDeleteModal Show="_removeRoleTarget is not null"
+                    Title="Remove Contact"
+                    Message="@RemoveRoleMessage"
+                    DeleteLabel="Remove"
+                    OnConfirm="ConfirmRemoveRoleAsync"
+                    OnCancel="() => _removeRoleTarget = null" />
+
+<ConfirmDeleteModal Show="_deleteSessionTarget is not null"
+                    Title="Delete Session"
+                    Message="Delete this session? Its generated files will also be deleted. This action cannot be undone."
+                    DeleteLabel="Delete"
+                    OnConfirm="ConfirmDeleteSessionAsync"
+                    OnCancel="() => _deleteSessionTarget = null" />
+
+<ConfirmDeleteModal Show="_deleteCorrespondenceTarget is not null"
+                    Title="Delete Correspondence"
+                    Message="@GetDeleteCorrMessage()"
+                    DeleteLabel="Delete"
+                    OnConfirm="ConfirmDeleteCorrespondenceAsync"
+                    OnCancel="() => _deleteCorrespondenceTarget = null" />
+
+@code {
+    [Parameter] public string Id { get; set; } = "";
+
+    // ── State ─────────────────────────────────────────────────────────────────
+
+    private Opportunity? _opp;
+    private Opportunity _editOpp = new();
+    private Organization? _org;
+    private bool _loading = true;
+    private bool _isEditing;
+    private bool _savingEdit;
+    private string? _editSaveError;
+    private string _editStageStr = "";
+    private string _editWorkArrangementStr = "";
+    private List<string> _editRequired = new();
+    private List<string> _editPreferred = new();
+
+    private bool _stageSaving;
+
+    private List<Contact> _orgContacts = new();
+    private List<ContactOpportunityRole> _contactRoles = new();
+    private List<string> _contactRoleLabels = new();
+    private bool _addingContact;
+    private ContactOpportunityRole? _removeRoleTarget;
+    private int _tagPickerKey;
+
+    private List<SessionRecord> _sessions = new();
+    private List<BaseResume> _baseResumes = new();
+    private Dictionary<string, BaseResume?> _versionToResume = new();
+    private SessionRecord? _deleteSessionTarget;
+
+    private List<Correspondence> _correspondence = new();
+    private Dictionary<string, int> _correspondenceFileCounts = new();
+    private bool _showCorrespondenceModal;
+    private Correspondence? _editCorrespondence;
+    private Correspondence _modalCorr = new();
+    private DateTime _addModeDefaultTime;
+    private List<CorrespondenceFile> _modalExistingFiles = new();
+    private List<CorrespondenceFile> _modalNewFiles = new();
+    private List<string> _modalRemovedFileIds = new();
+    private string? _fileUploadError;
+    private Correspondence? _deleteCorrespondenceTarget;
+    private bool _corrGuardPending;
+    private bool _showAddCorrDropdown;
+    private string? _corrSaveError;
+    private bool _savingCorr;
+
+    private List<OpportunityFieldHistory> _history = new();
+    private bool _showHistoryModal;
+
+    private bool _extractingQuals;
+    private bool _showExtractConfirm;
+    private string? _extractError;
+
+    private bool _showConflictAlert;
+    private string _conflictMessage = "";
+    private bool _conflictShowKeepEditing = true;
+    private bool _conflictIsForCorr;
+
+    private bool _showDeletionAlert;
+    private string _deletionMessage = "";
+    private string _pendingNavigation = "/opportunities";
+
+    private string? _currentId;
+
+    // ── IsDirty ───────────────────────────────────────────────────────────────
+
+    private bool EditModeDirty => _isEditing && _opp is not null && (
+        _editOpp.Role != _opp.Role ||
+        _editOpp.RoleDescription != _opp.RoleDescription ||
+        _editOpp.PostingUrl != _opp.PostingUrl ||
+        _editOpp.CompensationRange != _opp.CompensationRange ||
+        _editStageStr != _opp.Stage.ToString() ||
+        _editWorkArrangementStr != (_opp.WorkArrangement?.ToString() ?? "") ||
+        !_editRequired.SequenceEqual(_opp.RequiredQualifications) ||
+        !_editPreferred.SequenceEqual(_opp.PreferredQualifications));
+
+    private bool CorrModalDirty => _showCorrespondenceModal && IsCorrModalDirty();
+    protected override bool IsDirty => EditModeDirty || CorrModalDirty;
+    protected override string StayLabel  => _corrGuardPending ? "Keep Editing"      : "Stay and continue editing";
+    protected override string LeaveLabel => _corrGuardPending ? "Discard Changes"   : "Discard changes and leave";
+
+    private bool CanSaveEdit => !string.IsNullOrWhiteSpace(_editOpp.Role);
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+
+    private List<Contact> UnassociatedContacts =>
+        _orgContacts
+            .Where(c => !_contactRoles.Any(r => r.ContactId == c.Id))
+            .OrderBy(c => c.FullName, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private string RemoveRoleMessage
+    {
+        get
+        {
+            if (_removeRoleTarget is null) return "";
+            var c = _orgContacts.FirstOrDefault(c => c.Id == _removeRoleTarget.ContactId);
+            return $"Remove {c?.FullName ?? "this contact"} from this opportunity? This action cannot be undone.";
+        }
+    }
+
+    private static string StageName(OpportunityStage stage) => stage switch
+    {
+        OpportunityStage.NotInterested => "Not Interested",
+        OpportunityStage.NotQualified  => "Not Qualified",
+        OpportunityStage.InProgress    => "In Progress",
+        _ => stage.ToString(),
+    };
+
+    private static string WorkArrangementLabel(WorkArrangement wa) => wa switch
+    {
+        WorkArrangement.OnSite => "On-site",
+        _ => wa.ToString(),
+    };
+
+    private static string HistorySourceLabel(HistorySource source) => source switch
+    {
+        HistorySource.DirectEdit            => "Direct Edit",
+        HistorySource.StageQuickEdit        => "Stage Quick-Edit",
+        HistorySource.EvaluateAndGenerate   => "Evaluate & Generate",
+        HistorySource.QualificationExtraction => "Qual. Extraction",
+        _ => source.ToString(),
+    };
+
+    private async Task BuildVersionToResumeMapAsync()
+    {
+        _versionToResume = new();
+        var versionIds = _sessions
+            .Where(s => !string.IsNullOrEmpty(s.BaseResumeVersionId))
+            .Select(s => s.BaseResumeVersionId)
+            .Distinct();
+        foreach (var vid in versionIds)
+        {
+            var ver = await Db.GetBaseResumeVersionAsync(vid);
+            _versionToResume[vid] = ver is null
+                ? null
+                : _baseResumes.FirstOrDefault(r => r.Id == ver.ResumeId);
+        }
+    }
+
+    private string GetResumeDisplay(SessionRecord session)
+    {
+        if (string.IsNullOrEmpty(session.BaseResumeVersionId)) return "—";
+        _versionToResume.TryGetValue(session.BaseResumeVersionId, out var resume);
+        return SessionDisplayHelper.ResolveResumeName(session, resume?.Name);
+    }
+
+    private bool GetFieldMatch(SessionRecord session) =>
+        _opp is not null &&
+        session.Role == _opp.Role &&
+        session.RoleDescription == _opp.RoleDescription;
+
+    private void NavigateToSession(string id) => Nav.NavigateTo("/history/" + id);
+
+    // ── Correspondence helpers ────────────────────────────────────────────────
+
+    private static bool TypeHasDirection(CorrespondenceType t) =>
+        t is CorrespondenceType.Email or CorrespondenceType.PhoneCall or CorrespondenceType.Text;
+
+    private static (string inLabel, string outLabel) GetDirectionLabels(CorrespondenceType t) =>
+        t == CorrespondenceType.PhoneCall ? ("Received", "Made") : ("Received", "Sent");
+
+    private static string CorrTypeLabel(CorrespondenceType t) => t switch
+    {
+        CorrespondenceType.ResumeSubmitted => "Resume Submitted",
+        CorrespondenceType.PhoneCall       => "Phone Call",
+        CorrespondenceType.VideoCall       => "Video Call",
+        _                                  => t.ToString(),
+    };
+
+    private static string GetTypeDirectionLabel(Correspondence corr)
+    {
+        var type = CorrTypeLabel(corr.Type);
+        if (!TypeHasDirection(corr.Type)) return type;
+        var dir = corr.Type == CorrespondenceType.PhoneCall
+            ? (corr.Direction == CorrespondenceDirection.Incoming ? "Received" : "Made")
+            : (corr.Direction == CorrespondenceDirection.Incoming ? "Received" : "Sent");
+        return $"{type} · {dir}";
+    }
+
+    private static string StripMarkdown(string text)
+    {
+        if (string.IsNullOrEmpty(text)) return text;
+        var ml = System.Text.RegularExpressions.RegexOptions.Multiline;
+        Func<string, string, string, string> r =
+            System.Text.RegularExpressions.Regex.Replace;
+        Func<string, string, string, System.Text.RegularExpressions.RegexOptions, string> rm =
+            System.Text.RegularExpressions.Regex.Replace;
+        text = rm(text, @"^#{1,6}\s+", "", ml);
+        text = r(text, @"\*{1,2}([^*\r\n]+)\*{1,2}", "$1");
+        text = r(text, @"_{1,2}([^_\r\n]+)_{1,2}", "$1");
+        text = r(text, @"\[([^\]]+)\]\([^\)]+\)", "$1");
+        text = r(text, @"`{1,3}[^`\r\n]*`{1,3}", "");
+        text = rm(text, @"^[\*\-\+]\s+", "", ml);
+        text = rm(text, @"^\d+\.\s+", "", ml);
+        text = r(text, @"\s+", " ").Trim();
+        return text;
+    }
+
+    private string GetCorrContentPreview(Correspondence corr)
+    {
+        var raw = corr.Type == CorrespondenceType.Email && !string.IsNullOrWhiteSpace(corr.Subject)
+            ? corr.Subject
+            : StripMarkdown(corr.Body);
+        return raw.Length > 120 ? raw[..120] + "…" : raw;
+    }
+
+    private string GetCorrContactDisplay(Correspondence corr)
+    {
+        if (string.IsNullOrEmpty(corr.ContactId)) return "—";
+        var c = _orgContacts.FirstOrDefault(c => c.Id == corr.ContactId);
+        return c?.FullName ?? "(deleted)";
+    }
+
+    private string GetCorrModalTitle() =>
+        _editCorrespondence is null ? $"New {CorrTypeLabel(_modalCorr.Type)}" : $"Edit {CorrTypeLabel(_modalCorr.Type)}";
+
+    private string GetDeleteCorrMessage()
+    {
+        if (_deleteCorrespondenceTarget is null) return "";
+        return $"Delete this {CorrTypeLabel(_deleteCorrespondenceTarget.Type)}? Any attached files will also be deleted. This action cannot be undone.";
+    }
+
+    private static string FormatFileSize(long bytes) => bytes switch
+    {
+        < 1024             => $"{bytes} B",
+        < 1024 * 1024      => $"{bytes / 1024.0:F1} KB",
+        _                  => $"{bytes / (1024.0 * 1024):F1} MB",
+    };
+
+    private static DateTime ParseDateTimeLocal(string? value) =>
+        DateTime.TryParse(value, out var dt)
+            ? DateTime.SpecifyKind(dt, DateTimeKind.Local).ToUniversalTime()
+            : DateTime.UtcNow;
+
+    private string? DanglingContactId
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(_modalCorr.ContactId)) return null;
+            return _orgContacts.Any(c => c.Id == _modalCorr.ContactId) ? null : _modalCorr.ContactId;
+        }
+    }
+
+    private string? DanglingSessionId
+    {
+        get
+        {
+            if (string.IsNullOrEmpty(_modalCorr.LinkedSessionId)) return null;
+            return _sessions.Any(s => s.Id == _modalCorr.LinkedSessionId) ? null : _modalCorr.LinkedSessionId;
+        }
+    }
+
+    private static readonly RenderFragment TrashIcon = builder =>
+    {
+        builder.OpenElement(0, "svg");
+        builder.AddAttribute(1, "xmlns", "http://www.w3.org/2000/svg");
+        builder.AddAttribute(2, "width", "13");
+        builder.AddAttribute(3, "height", "13");
+        builder.AddAttribute(4, "viewBox", "0 0 24 24");
+        builder.AddAttribute(5, "fill", "none");
+        builder.AddAttribute(6, "stroke", "currentColor");
+        builder.AddAttribute(7, "stroke-width", "2");
+        builder.AddAttribute(8, "stroke-linecap", "round");
+        builder.AddAttribute(9, "stroke-linejoin", "round");
+        builder.AddAttribute(10, "aria-hidden", "true");
+        builder.OpenElement(11, "polyline"); builder.AddAttribute(12, "points", "3 6 5 6 21 6"); builder.CloseElement();
+        builder.OpenElement(13, "path"); builder.AddAttribute(14, "d", "M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"); builder.CloseElement();
+        builder.OpenElement(15, "path"); builder.AddAttribute(16, "d", "M10 11v6M14 11v6"); builder.CloseElement();
+        builder.OpenElement(17, "path"); builder.AddAttribute(18, "d", "M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"); builder.CloseElement();
+        builder.CloseElement();
+    };
+
+    private static readonly RenderFragment CheckIcon = builder =>
+    {
+        builder.OpenElement(0, "svg");
+        builder.AddAttribute(1, "xmlns", "http://www.w3.org/2000/svg");
+        builder.AddAttribute(2, "width", "16");
+        builder.AddAttribute(3, "height", "16");
+        builder.AddAttribute(4, "viewBox", "0 0 24 24");
+        builder.AddAttribute(5, "fill", "none");
+        builder.AddAttribute(6, "stroke", "currentColor");
+        builder.AddAttribute(7, "stroke-width", "2.5");
+        builder.AddAttribute(8, "stroke-linecap", "round");
+        builder.AddAttribute(9, "stroke-linejoin", "round");
+        builder.AddAttribute(10, "class", "text-success");
+        builder.AddAttribute(11, "aria-label", "Yes");
+        builder.OpenElement(12, "polyline"); builder.AddAttribute(13, "points", "20 6 9 17 4 12"); builder.CloseElement();
+        builder.CloseElement();
+    };
+
+    // ── Lifecycle ─────────────────────────────────────────────────────────────
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (_currentId == Id) return;
+        _currentId = Id;
+        UnsubscribeEvents();
+        SubscribeEvents();
+        await LoadAsync();
+    }
+
+    public override async ValueTask DisposeAsync()
+    {
+        UnsubscribeEvents();
+        await base.DisposeAsync();
+    }
+
+    private void SubscribeEvents()
+    {
+        DataSync.OnOpportunityChanged             += HandleOppChangedRemote;
+        DataSync.OnOpportunityFieldHistoryChanged += HandleHistoryChanged;
+        DataSync.OnContactChanged                 += HandleContactChanged;
+        DataSync.OnContactOpportunityRoleChanged  += HandleRoleChanged;
+        DataSync.OnOrganizationChanged            += HandleOrgChanged;
+        DataSync.OnSessionChanged                 += HandleSessionChanged;
+        DataSync.OnCorrespondenceChanged          += HandleCorrespondenceChanged;
+        DataSync.OnCorrespondenceFileChanged      += HandleCorrFileChanged;
+    }
+
+    private void UnsubscribeEvents()
+    {
+        DataSync.OnOpportunityChanged             -= HandleOppChangedRemote;
+        DataSync.OnOpportunityFieldHistoryChanged -= HandleHistoryChanged;
+        DataSync.OnContactChanged                 -= HandleContactChanged;
+        DataSync.OnContactOpportunityRoleChanged  -= HandleRoleChanged;
+        DataSync.OnOrganizationChanged            -= HandleOrgChanged;
+        DataSync.OnSessionChanged                 -= HandleSessionChanged;
+        DataSync.OnCorrespondenceChanged          -= HandleCorrespondenceChanged;
+        DataSync.OnCorrespondenceFileChanged      -= HandleCorrFileChanged;
+    }
+
+    // ── Data loading ──────────────────────────────────────────────────────────
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        _opp = await Db.GetOpportunityAsync(Id);
+        if (_opp is null) { _loading = false; return; }
+
+        _org = await Db.GetOrganizationAsync(_opp.OrganizationId);
+        _orgContacts = (await Db.GetContactsByOrganizationAsync(_opp.OrganizationId))
+            .OrderBy(c => c.FullName, StringComparer.OrdinalIgnoreCase).ToList();
+        _contactRoles = await Db.GetRolesByOpportunityAsync(Id);
+        _contactRoleLabels = (await Db.GetLookupValuesAsync("lookupContactRoles"))
+            .Select(v => v.Value).ToList();
+
+        var allSessions = await Db.GetAllSessionsAsync();
+        _sessions = allSessions
+            .Where(s => s.OpportunityId == Id)
+            .OrderByDescending(s => s.CreatedAt).ToList();
+
+        _baseResumes = await Db.GetAllBaseResumesAsync();
+        await BuildVersionToResumeMapAsync();
+
+        _history = await Db.GetHistoryByOpportunityAsync(Id);
+
+        await LoadCorrespondenceAsync();
+
+        _loading = false;
+    }
+
+    // ── Navigate to E&G ──────────────────────────────────────────────────────
+
+    private void NavigateToEvaluate()
+    {
+        if (_opp is null) return;
+        AppState.ContextualOrgId      = _opp.OrganizationId;
+        AppState.ContextualOrgName    = _org?.Name ?? "";
+        AppState.ContextualOppId      = _opp.Id;
+        AppState.ContextualOppRole    = _opp.Role;
+        AppState.ContextualOppRoleDesc = _opp.RoleDescription;
+        Nav.NavigateTo("/evaluate");
+    }
+
+    // ── Edit mode ─────────────────────────────────────────────────────────────
+
+    private void StartEdit()
+    {
+        if (_opp is null) return;
+        _editOpp = new Opportunity
+        {
+            Id = _opp.Id,
+            Version = _opp.Version,
+            OrganizationId = _opp.OrganizationId,
+            Role = _opp.Role,
+            RoleDescription = _opp.RoleDescription,
+            PostingUrl = _opp.PostingUrl,
+            CompensationRange = _opp.CompensationRange,
+            Stage = _opp.Stage,
+            WorkArrangement = _opp.WorkArrangement,
+            RequiredQualifications = _opp.RequiredQualifications.ToArray(),
+            PreferredQualifications = _opp.PreferredQualifications.ToArray(),
+            CreatedAt = _opp.CreatedAt,
+            UpdatedAt = _opp.UpdatedAt,
+        };
+        _editStageStr = _opp.Stage.ToString();
+        _editWorkArrangementStr = _opp.WorkArrangement?.ToString() ?? "";
+        _editRequired = _opp.RequiredQualifications.ToList();
+        _editPreferred = _opp.PreferredQualifications.ToList();
+        _editSaveError = null;
+        _isEditing = true;
+    }
+
+    private void CancelEdit()
+    {
+        _isEditing = false;
+        _editSaveError = null;
+    }
+
+    private async Task SaveEditAsync()
+    {
+        if (!CanSaveEdit || _savingEdit || _opp is null) return;
+        _savingEdit = true;
+        _editSaveError = null;
+
+        var newStage = Enum.TryParse<OpportunityStage>(_editStageStr, out var s) ? s : _opp.Stage;
+        var newWa = _editWorkArrangementStr switch
+        {
+            "Remote" => (WorkArrangement?)WorkArrangement.Remote,
+            "Hybrid" => WorkArrangement.Hybrid,
+            "OnSite" => WorkArrangement.OnSite,
+            _ => null,
+        };
+
+        // Collect field changes (reverse delta — old values)
+        var changes = new List<FieldChange>();
+        if (_editOpp.Role != _opp.Role)
+            changes.Add(new FieldChange { FieldName = "Role", OldValue = _opp.Role });
+        if (newStage != _opp.Stage)
+            changes.Add(new FieldChange { FieldName = "Stage", OldValue = StageName(_opp.Stage) });
+        if (_editOpp.RoleDescription != _opp.RoleDescription)
+            changes.Add(new FieldChange { FieldName = "RoleDescription", OldValue = _opp.RoleDescription });
+        if (newWa != _opp.WorkArrangement)
+            changes.Add(new FieldChange { FieldName = "WorkArrangement", OldValue = _opp.WorkArrangement is null ? "" : WorkArrangementLabel(_opp.WorkArrangement.Value) });
+        if (_editOpp.CompensationRange != _opp.CompensationRange)
+            changes.Add(new FieldChange { FieldName = "CompensationRange", OldValue = _opp.CompensationRange });
+        if (_editOpp.PostingUrl != _opp.PostingUrl)
+            changes.Add(new FieldChange { FieldName = "PostingUrl", OldValue = _opp.PostingUrl });
+        if (!_editRequired.SequenceEqual(_opp.RequiredQualifications))
+            changes.Add(new FieldChange { FieldName = "RequiredQualifications", OldValue = JsonSerializer.Serialize(_opp.RequiredQualifications) });
+        if (!_editPreferred.SequenceEqual(_opp.PreferredQualifications))
+            changes.Add(new FieldChange { FieldName = "PreferredQualifications", OldValue = JsonSerializer.Serialize(_opp.PreferredQualifications) });
+
+        _editOpp.Stage = newStage;
+        _editOpp.WorkArrangement = newWa;
+        _editOpp.RequiredQualifications = _editRequired.Where(q => !string.IsNullOrWhiteSpace(q)).ToArray();
+        _editOpp.PreferredQualifications = _editPreferred.Where(q => !string.IsNullOrWhiteSpace(q)).ToArray();
+        _editOpp.UpdatedAt = DateTime.UtcNow;
+
+        var result = await Db.VersionedWriteAsync("opportunities", _editOpp, new[] { $"opp:{_editOpp.Id}" });
+
+        if (result == VersionedWriteResult.Success)
+        {
+            if (changes.Count > 0)
+            {
+                var histEntry = new OpportunityFieldHistory
+                {
+                    OpportunityId = Id,
+                    Source = HistorySource.DirectEdit,
+                    Changes = changes,
+                };
+                await Db.SaveHistoryEntryAsync(histEntry);
+                await DataSync.BroadcastAsync("opportunityFieldHistory", histEntry.Id, "create");
+            }
+
+            await DataSync.BroadcastAsync("opportunity", Id, "update");
+            _opp = _editOpp;
+            _isEditing = false;
+            _savingEdit = false;
+            _history = await Db.GetHistoryByOpportunityAsync(Id);
+            return;
+        }
+
+        // VersionMismatch — show conflict modal, no Keep Editing
+        _savingEdit = false;
+        _isEditing = false;
+        _conflictShowKeepEditing = false;
+        _conflictMessage = "This opportunity was modified in another tab. Your changes have been discarded. Reload to see the current version.";
+        _showConflictAlert = true;
+    }
+
+    // ── Stage quick-edit ──────────────────────────────────────────────────────
+
+    private async Task HandleStageQuickEdit(ChangeEventArgs e)
+    {
+        if (_opp is null || _stageSaving) return;
+        if (!Enum.TryParse<OpportunityStage>(e.Value?.ToString(), out var newStage)) return;
+        if (newStage == _opp.Stage) return;
+
+        _stageSaving = true;
+        var oldStage = _opp.Stage;
+        _opp.Stage = newStage;
+        _opp.UpdatedAt = DateTime.UtcNow;
+
+        var result = await Db.VersionedWriteAsync("opportunities", _opp, new[] { $"opp:{_opp.Id}" });
+        if (result == VersionedWriteResult.Success)
+        {
+            var histEntry = new OpportunityFieldHistory
+            {
+                OpportunityId = Id,
+                Source = HistorySource.StageQuickEdit,
+                Changes = new List<FieldChange>
+                {
+                    new FieldChange { FieldName = "Stage", OldValue = StageName(oldStage) }
+                },
+            };
+            await Db.SaveHistoryEntryAsync(histEntry);
+            _history = await Db.GetHistoryByOpportunityAsync(Id);
+            await DataSync.BroadcastAsync("opportunity", Id, "update");
+            await DataSync.BroadcastAsync("opportunityFieldHistory", histEntry.Id, "create");
+        }
+        else
+        {
+            // Revert on conflict
+            _opp.Stage = oldStage;
+        }
+
+        _stageSaving = false;
+    }
+
+    // ── AI Qualification Extraction ───────────────────────────────────────────
+
+    private async Task TryExtractQualificationsAsync()
+    {
+        if (_opp is null) return;
+        var hasContent = _opp.RequiredQualifications.Length > 0 || _opp.PreferredQualifications.Length > 0;
+        if (hasContent)
+        {
+            _showExtractConfirm = true;
+        }
+        else
+        {
+            await RunExtractQualificationsAsync();
+        }
+    }
+
+    private async Task RunExtractQualificationsAsync()
+    {
+        if (_opp is null) return;
+        _showExtractConfirm = false;
+        _extractingQuals = true;
+        _extractError = null;
+
+        var settings = await Db.GetSettingsAsync();
+        var apiKey = settings.ProviderApiKeys.GetValueOrDefault(settings.AiProvider) ?? "";
+        if (string.IsNullOrWhiteSpace(apiKey))
+        {
+            _extractError = "No API key configured. Check Settings.";
+            _extractingQuals = false;
+            return;
+        }
+        var provider = Providers.Get(settings.AiProvider);
+        var modelId = settings.ProviderModels.GetValueOrDefault(settings.AiProvider)
+                      ?? provider.DefaultModelId;
+
+        QualificationExtractionResult result;
+        try
+        {
+            result = await provider.ExtractQualificationsAsync(
+                _opp.RoleDescription,
+                modelId,
+                apiKey);
+        }
+        catch (Exception ex)
+        {
+            _extractError = $"AI extraction failed: {ex.Message}";
+            _extractingQuals = false;
+            return;
+        }
+
+        // Build history changes
+        var changes = new List<FieldChange>();
+        if (!result.Required.SequenceEqual(_opp.RequiredQualifications))
+            changes.Add(new FieldChange { FieldName = "RequiredQualifications", OldValue = JsonSerializer.Serialize(_opp.RequiredQualifications) });
+        if (!result.Preferred.SequenceEqual(_opp.PreferredQualifications))
+            changes.Add(new FieldChange { FieldName = "PreferredQualifications", OldValue = JsonSerializer.Serialize(_opp.PreferredQualifications) });
+
+        _opp.RequiredQualifications = result.Required.ToArray();
+        _opp.PreferredQualifications = result.Preferred.ToArray();
+        _opp.UpdatedAt = DateTime.UtcNow;
+
+        var writeResult = await Db.VersionedWriteAsync("opportunities", _opp, new[] { $"opp:{_opp.Id}" });
+        if (writeResult == VersionedWriteResult.Success)
+        {
+            if (changes.Count > 0)
+            {
+                var histEntry = new OpportunityFieldHistory
+                {
+                    OpportunityId = Id,
+                    Source = HistorySource.QualificationExtraction,
+                    Changes = changes,
+                };
+                await Db.SaveHistoryEntryAsync(histEntry);
+                _history = await Db.GetHistoryByOpportunityAsync(Id);
+                await DataSync.BroadcastAsync("opportunityFieldHistory", histEntry.Id, "create");
+            }
+            await DataSync.BroadcastAsync("opportunity", Id, "update");
+        }
+        else
+        {
+            _conflictShowKeepEditing = false;
+            _conflictMessage = "This opportunity was modified in another tab while extracting qualifications. Reload to see the current version.";
+            _showConflictAlert = true;
+        }
+
+        _extractingQuals = false;
+    }
+
+    // ── Contacts / role tags ──────────────────────────────────────────────────
+
+    private async Task HandleAddContact(ChangeEventArgs e)
+    {
+        var contactId = e.Value?.ToString();
+        if (string.IsNullOrEmpty(contactId) || _addingContact || _opp is null) return;
+        _addingContact = true;
+
+        var role = new ContactOpportunityRole
+        {
+            ContactId = contactId,
+            OpportunityId = Id,
+            Roles = Array.Empty<string>(),
+        };
+        await Db.SaveRoleAsync(role);
+        await DataSync.BroadcastAsync("contactOpportunityRole", $"{contactId}:{Id}", "create");
+        _contactRoles = await Db.GetRolesByOpportunityAsync(Id);
+        _tagPickerKey++;
+        _addingContact = false;
+    }
+
+    private async Task HandleRoleTagsChanged(ContactOpportunityRole role, string[] newValues)
+    {
+        // Persist new lookup labels not already in the table
+        var newLabels = newValues.Except(_contactRoleLabels, StringComparer.OrdinalIgnoreCase).ToList();
+        foreach (var label in newLabels)
+        {
+            var lv = new LookupValue { Id = Guid.NewGuid().ToString(), Value = label };
+            await Db.AddLookupValueLockedAsync("lookupContactRoles", lv);
+            _contactRoleLabels.Add(label);
+        }
+
+        role.Roles = newValues;
+        await Db.SaveRoleAsync(role);
+        await DataSync.BroadcastAsync("contactOpportunityRole", $"{role.ContactId}:{Id}", "update");
+    }
+
+    private async Task ConfirmRemoveRoleAsync()
+    {
+        if (_removeRoleTarget is null) return;
+        await Db.DeleteRoleAsync(_removeRoleTarget.ContactId, Id);
+        await DataSync.BroadcastAsync("contactOpportunityRole", $"{_removeRoleTarget.ContactId}:{Id}", "delete");
+        _removeRoleTarget = null;
+        _contactRoles = await Db.GetRolesByOpportunityAsync(Id);
+        _tagPickerKey++;
+    }
+
+    // ── Session delete ────────────────────────────────────────────────────────
+
+    private async Task ConfirmDeleteSessionAsync()
+    {
+        if (_deleteSessionTarget is null) return;
+        var sessionId = _deleteSessionTarget.Id;
+        _deleteSessionTarget = null;
+
+        // Delete generated files then session
+        if (_opp is not null)
+        {
+            var session = _sessions.FirstOrDefault(s => s.Id == sessionId);
+            if (session is not null)
+            {
+                if (session.TailoredResumeFileId is not null)
+                    await Db.DeleteFileAsync(session.TailoredResumeFileId);
+                if (session.CoverLetterFileId is not null)
+                    await Db.DeleteFileAsync(session.CoverLetterFileId);
+            }
+        }
+        await Db.DeleteSessionAsync(sessionId);
+        await DataSync.BroadcastAsync("session", sessionId, "delete");
+        _sessions = _sessions.Where(s => s.Id != sessionId).ToList();
+    }
+
+    // ── Conflict / deletion handlers ──────────────────────────────────────────
+
+    private async Task HandleConflictDiscardAndReload()
+    {
+        _showConflictAlert = false;
+        if (_conflictIsForCorr && _editCorrespondence is not null)
+        {
+            _conflictIsForCorr = false;
+            var freshCorr = await Db.GetCorrespondenceAsync(_editCorrespondence.Id);
+            if (freshCorr is not null)
+                await OpenEditCorrespondence(freshCorr);
+            else
+                _showCorrespondenceModal = false;
+        }
+        else
+        {
+            _isEditing = false;
+            await LoadAsync();
+        }
+    }
+
+    private void HandleConflictKeepEditing()
+    {
+        _showConflictAlert = false;
+        _conflictIsForCorr = false;
+    }
+
+    private void HandleDeletionDismiss()
+    {
+        _showDeletionAlert = false;
+        Nav.NavigateTo(_pendingNavigation);
+    }
+
+    // ── Correspondence modal (M5-2/M5-3) ─────────────────────────────────────
+
+    protected override void OnGuardStay()
+    {
+        if (_corrGuardPending) { _showGuardModal = false; _corrGuardPending = false; }
+        else base.OnGuardStay();
+    }
+
+    protected override void OnGuardLeave()
+    {
+        if (_corrGuardPending) { _showGuardModal = false; _corrGuardPending = false; CloseCorrModal(); }
+        else base.OnGuardLeave();
+    }
+
+    private bool IsCorrModalDirty()
+    {
+        if (_editCorrespondence is null)
+        {
+            return _modalCorr.OccurredAt != _addModeDefaultTime ||
+                   !string.IsNullOrEmpty(_modalCorr.Subject) ||
+                   !string.IsNullOrEmpty(_modalCorr.Body) ||
+                   !string.IsNullOrEmpty(_modalCorr.ContactId) ||
+                   !string.IsNullOrEmpty(_modalCorr.LinkedSessionId) ||
+                   _modalCorr.CoverLetterSubmitted ||
+                   _modalNewFiles.Count > 0;
+        }
+        return _modalCorr.OccurredAt  != _editCorrespondence.OccurredAt ||
+               _modalCorr.Subject     != _editCorrespondence.Subject ||
+               _modalCorr.Body        != _editCorrespondence.Body ||
+               _modalCorr.ContactId   != _editCorrespondence.ContactId ||
+               _modalCorr.LinkedSessionId   != _editCorrespondence.LinkedSessionId ||
+               _modalCorr.Direction         != _editCorrespondence.Direction ||
+               _modalCorr.CoverLetterSubmitted != _editCorrespondence.CoverLetterSubmitted ||
+               _modalNewFiles.Count > 0 ||
+               _modalRemovedFileIds.Count > 0;
+    }
+
+    private void OpenAddCorrespondence(CorrespondenceType type)
+    {
+        _showAddCorrDropdown = false;
+        var now = DateTime.UtcNow;
+        _addModeDefaultTime = now;
+        _editCorrespondence = null;
+        _modalCorr = new Correspondence
+        {
+            OpportunityId = Id,
+            Type = type,
+            OccurredAt = now,
+            Direction = CorrespondenceDirection.Incoming,
+        };
+        _modalExistingFiles = new();
+        _modalNewFiles = new();
+        _modalRemovedFileIds = new();
+        _fileUploadError = null;
+        _corrSaveError = null;
+        _showCorrespondenceModal = true;
+    }
+
+    private async Task OpenEditCorrespondence(Correspondence corr)
+    {
+        _editCorrespondence = corr;
+        _modalCorr = new Correspondence
+        {
+            Id                   = corr.Id,
+            Version              = corr.Version,
+            OpportunityId        = corr.OpportunityId,
+            Type                 = corr.Type,
+            OccurredAt           = corr.OccurredAt,
+            Direction            = corr.Direction,
+            Subject              = corr.Subject,
+            Body                 = corr.Body,
+            ContactId            = corr.ContactId,
+            LinkedSessionId      = corr.LinkedSessionId,
+            CoverLetterSubmitted = corr.CoverLetterSubmitted,
+            CreatedAt            = corr.CreatedAt,
+            UpdatedAt            = corr.UpdatedAt,
+        };
+        _modalExistingFiles = await Db.GetFilesByCorrespondenceAsync(corr.Id);
+        _modalNewFiles = new();
+        _modalRemovedFileIds = new();
+        _fileUploadError = null;
+        _corrSaveError = null;
+        _showCorrespondenceModal = true;
+    }
+
+    private void CloseCorrModal()
+    {
+        _showCorrespondenceModal = false;
+        _editCorrespondence = null;
+        _modalNewFiles = new();
+        _modalRemovedFileIds = new();
+        _fileUploadError = null;
+        _corrSaveError = null;
+    }
+
+    private void HandleCorrModalClose()
+    {
+        if (IsCorrModalDirty()) { _corrGuardPending = true; _showGuardModal = true; }
+        else CloseCorrModal();
+    }
+
+    private void HandleCorrModalBackdropClick() => HandleCorrModalClose();
+
+    private async Task SaveCorrespondenceAsync()
+    {
+        if (_savingCorr) return;
+        _savingCorr = true;
+        _corrSaveError = null;
+
+        _modalCorr.UpdatedAt = DateTime.UtcNow;
+        if (_editCorrespondence is null)
+            _modalCorr.CreatedAt = DateTime.UtcNow;
+
+        if (!TypeHasDirection(_modalCorr.Type))
+            _modalCorr.Direction = CorrespondenceDirection.Incoming;
+
+        var newFiles = _modalNewFiles.Select(f => { f.CorrespondenceId = _modalCorr.Id; return f; }).ToList();
+        var result = await Db.SaveCorrespondenceWithFilesAsync(_modalCorr, newFiles, _modalRemovedFileIds);
+
+        if (result == VersionedWriteResult.VersionMismatch)
+        {
+            _savingCorr = false;
+            _showCorrespondenceModal = false;
+            _corrGuardPending = false;
+            _conflictShowKeepEditing = false;
+            _conflictMessage = "This correspondence entry was modified in another tab. Your changes have been discarded.";
+            _showConflictAlert = true;
+            await LoadCorrespondenceAsync();
+            return;
+        }
+
+        var isNew = _editCorrespondence is null;
+        await DataSync.BroadcastAsync("correspondence", _modalCorr.Id, isNew ? "create" : "update");
+        CloseCorrModal();
+        await LoadCorrespondenceAsync();
+        _savingCorr = false;
+    }
+
+    private async Task HandleCorrFileSelected(InputFileChangeEventArgs e)
+    {
+        _fileUploadError = null;
+        const long maxSize = 5 * 1024 * 1024;
+        foreach (var file in e.GetMultipleFiles(100))
+        {
+            if (file.Size > maxSize)
+            {
+                _fileUploadError = $"File \"{file.Name}\" exceeds the 5 MB limit and was not added.";
+                continue;
+            }
+            using var ms = new System.IO.MemoryStream();
+            await file.OpenReadStream(maxSize).CopyToAsync(ms);
+            _modalNewFiles.Add(new CorrespondenceFile
+            {
+                CorrespondenceId = _modalCorr.Id,
+                FileName         = file.Name,
+                FileSize         = file.Size,
+                FileDataBase64   = Convert.ToBase64String(ms.ToArray()),
+                UploadedAt       = DateTime.UtcNow,
+            });
+        }
+    }
+
+    private void RemoveStagedFile(CorrespondenceFile f) => _modalNewFiles.Remove(f);
+
+    private void RemoveExistingFile(string id)
+    {
+        _modalRemovedFileIds.Add(id);
+        _modalExistingFiles.RemoveAll(f => f.Id == id);
+    }
+
+    private async Task DownloadExistingFile(CorrespondenceFile f) =>
+        await Db.DownloadGenericFileAsync(f.FileName, f.FileDataBase64);
+
+    private async Task ConfirmDeleteCorrespondenceAsync()
+    {
+        if (_deleteCorrespondenceTarget is null) return;
+        var id = _deleteCorrespondenceTarget.Id;
+        _deleteCorrespondenceTarget = null;
+        await Db.DeleteCorrespondenceCascadeAsync(id);
+        await DataSync.BroadcastAsync("correspondence", id, "delete");
+        _correspondence.RemoveAll(c => c.Id == id);
+        _correspondenceFileCounts.Remove(id);
+    }
+
+    private async Task LoadCorrespondenceAsync()
+    {
+        _correspondence = await Db.GetCorrespondenceByOpportunityAsync(Id);
+        _correspondenceFileCounts = new();
+        foreach (var c in _correspondence)
+            _correspondenceFileCounts[c.Id] = await Db.GetCorrespondenceFileCountAsync(c.Id);
+    }
+
+    // ── BroadcastChannel live updates (M4-8) ──────────────────────────────────
+
+    private void HandleOppChangedRemote(string? id, string @event)
+    {
+        if (id != Id) return;
+
+        if (@event == "deleted")
+        {
+            _pendingNavigation = _opp?.OrganizationId is not null
+                ? $"/organizations/{_opp.OrganizationId}"
+                : "/opportunities";
+            var oppRole = _opp?.Role ?? "Unknown";
+            _deletionMessage = _showCorrespondenceModal && _editCorrespondence is not null
+                ? $"Opportunity '{oppRole}' was deleted in another tab. This Correspondence entry no longer exists."
+                : $"Opportunity '{oppRole}' was deleted in another tab.";
+            _showDeletionAlert = true;
+            InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        if (_isEditing)
+        {
+            _conflictShowKeepEditing = true;
+            _conflictMessage = "This record was changed in another tab. Your unsaved changes may conflict.";
+            _showConflictAlert = true;
+            InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+    }
+
+    private void HandleHistoryChanged(string? id, string @event)
+    {
+        InvokeAsync(async () =>
+        {
+            _history = await Db.GetHistoryByOpportunityAsync(Id);
+            StateHasChanged();
+        });
+    }
+
+    private void HandleContactChanged(string? id, string @event)
+    {
+        InvokeAsync(async () =>
+        {
+            if (_opp is null) return;
+            _orgContacts = (await Db.GetContactsByOrganizationAsync(_opp.OrganizationId))
+                .OrderBy(c => c.FullName, StringComparer.OrdinalIgnoreCase).ToList();
+            StateHasChanged();
+        });
+    }
+
+    private void HandleRoleChanged(string? id, string @event)
+    {
+        InvokeAsync(async () =>
+        {
+            _contactRoles = await Db.GetRolesByOpportunityAsync(Id);
+            _tagPickerKey++;
+            StateHasChanged();
+        });
+    }
+
+    private void HandleOrgChanged(string? id, string @event)
+    {
+        if (id != _opp?.OrganizationId) return;
+
+        if (@event == "deleted")
+        {
+            _pendingNavigation = "/organizations";
+            var orgName = _org?.Name ?? "Unknown";
+            if (_showCorrespondenceModal && _editCorrespondence is not null)
+                _deletionMessage = $"Organization '{orgName}' was deleted in another tab. This Correspondence entry no longer exists.";
+            else if (_showCorrespondenceModal)
+                _deletionMessage = $"Organization '{orgName}' was deleted in another tab.";
+            else
+                _deletionMessage = $"Organization '{orgName}' was deleted in another tab. This Opportunity no longer exists.";
+            _showDeletionAlert = true;
+            InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        InvokeAsync(async () =>
+        {
+            _org = await Db.GetOrganizationAsync(_opp!.OrganizationId);
+            StateHasChanged();
+        });
+    }
+
+    private void HandleSessionChanged(string? id, string @event)
+    {
+        InvokeAsync(async () =>
+        {
+            var allSessions = await Db.GetAllSessionsAsync();
+            _sessions = allSessions.Where(s => s.OpportunityId == Id)
+                .OrderByDescending(s => s.CreatedAt).ToList();
+            await BuildVersionToResumeMapAsync();
+            StateHasChanged();
+        });
+    }
+
+    // ── BroadcastChannel live updates (M5-5) ──────────────────────────────────
+
+    private void HandleCorrespondenceChanged(string? id, string @event)
+    {
+        if (_showCorrespondenceModal && id == _editCorrespondence?.Id)
+        {
+            if (@event == "deleted")
+            {
+                CloseCorrModal();
+                _corrGuardPending = false;
+                _deletionMessage = "This correspondence entry was deleted in another tab.";
+                _showDeletionAlert = true;
+                InvokeAsync(StateHasChanged);
+                return;
+            }
+            if (@event == "updated")
+            {
+                _conflictShowKeepEditing = true;
+                _conflictIsForCorr = true;
+                _conflictMessage = "This record was changed in another tab. Your unsaved changes may conflict.";
+                _showConflictAlert = true;
+                InvokeAsync(StateHasChanged);
+                return;
+            }
+        }
+        InvokeAsync(async () => { await LoadCorrespondenceAsync(); StateHasChanged(); });
+    }
+
+    private void HandleCorrFileChanged(string? id, string @event) =>
+        InvokeAsync(async () => { await LoadCorrespondenceAsync(); StateHasChanged(); });
+}
