@@ -2,7 +2,7 @@
 
 A browser-based opportunity management system for structured searches in any sector — jobs, academic positions, contracts, government roles, and more. Track organizations, contacts, and opportunities through every stage of the process. When you are ready to apply, generate tailored application materials using your own AI API key — entirely in your browser, with no data leaving your device.
 
-**[Live Demo](https://dbakuntsev.github.io/simply.job-application/)**
+**[Live Demo](https://dbakuntsev.github.io/simply.job-application/)** · **[Sponsor on GitHub](https://github.com/sponsors/dbakuntsev)**
 
 ---
 
