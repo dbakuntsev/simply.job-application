@@ -145,3 +145,7 @@ pre.text-wrap {
 .sja-files-popover {
     max-width: 460px;
 }
+
+/* ── Sponsor heart icon in navbar ─────────────────────────────────────────── */
+.sja-sponsor-link { color: rgba(255, 255, 255, .6) !important; }
+.sja-sponsor-link:hover { color: #f472b6 !important; }
