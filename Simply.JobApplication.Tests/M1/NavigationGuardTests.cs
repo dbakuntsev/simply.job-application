@@ -115,11 +115,21 @@ public class NavigationGuardModalTests : BunitContext
         var cut = Render<TestGuard>(p => p.Add(x => x.MakeDirty, true));
         var nav = Services.GetRequiredService<NavigationManager>();
 
+        // Subscribe before triggering navigation so we don't miss the event.
+        // FakeNavigationManager calls NotifyLocationChanged() only when navigation is allowed
+        // (i.e. after HandleLocationChanging returns without PreventNavigation).
+        // This gives us a reliable signal that is independent of component re-render timing.
+        var locationChangedTcs = new TaskCompletionSource<string>(TaskCreationOptions.RunContinuationsAsynchronously);
+        nav.LocationChanged += (_, e) => locationChangedTcs.TrySetResult(e.Location);
+
         _ = cut.InvokeAsync(() => nav.NavigateTo("/settings"));
         await cut.WaitForStateAsync(() => cut.FindAll(".modal.d-block").Count > 0, TimeSpan.FromSeconds(2));
         await cut.Find(".btn-outline-secondary").ClickAsync(new());
 
-        Assert.Contains("/settings", nav.Uri);
+        // Wait for LocationChanged to fire — it is only raised when FakeNavigationManager
+        // processes navigation as Succeeded (shouldContinueNavigation = true).
+        var newLocation = await locationChangedTcs.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        Assert.Contains("/settings", newLocation);
     }
 
     [Fact]

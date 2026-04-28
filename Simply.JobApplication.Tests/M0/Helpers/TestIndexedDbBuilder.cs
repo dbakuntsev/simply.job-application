@@ -7,6 +7,7 @@ public class TestIndexedDbBuilder
     public TestIndexedDbBuilder()
     {
         _db.GetSchemaVersionAsync().Returns(Task.FromResult(2));
+        _db.GetSettingsAsync().Returns(Task.FromResult(new AppSettings()));
         _db.GetStoreBytesAsync(Arg.Any<string[]>()).Returns(Task.FromResult(new Dictionary<string, long>()));
 
         _db.GetAllOrganizationsAsync().Returns(Task.FromResult(new List<Organization>()));
@@ -161,6 +162,26 @@ public class TestIndexedDbBuilder
     public TestIndexedDbBuilder WithSessions(params SessionRecord[] sessions)
     {
         _db.GetAllSessionsAsync().Returns(Task.FromResult(sessions.ToList()));
+        foreach (var s in sessions)
+            _db.GetSessionAsync(s.Id).Returns(Task.FromResult<SessionRecord?>(s));
+        return this;
+    }
+
+    public TestIndexedDbBuilder WithOrganizationProjections(params OrganizationProjection[] projs)
+    {
+        _db.GetOrganizationProjectionsAsync().Returns(Task.FromResult(projs.ToList()));
+        return this;
+    }
+
+    public TestIndexedDbBuilder WithOpportunityProjections(params OpportunityProjection[] projs)
+    {
+        _db.GetOpportunityProjectionsAsync().Returns(Task.FromResult(projs.ToList()));
+        return this;
+    }
+
+    public TestIndexedDbBuilder WithSettings(AppSettings settings)
+    {
+        _db.GetSettingsAsync().Returns(Task.FromResult(settings));
         return this;
     }
 

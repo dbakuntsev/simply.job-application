@@ -14,7 +14,13 @@ public class DataSyncFake : IDataSyncService
     public event Action<string?, string>? OnSessionChanged;
     public event Action? OnSessionsCleared;
 
-    public Task BroadcastAsync(string entity, string? id, string @event) => Task.CompletedTask;
+    public List<(string entity, string? id, string @event)> Broadcasts { get; } = new();
+
+    public Task BroadcastAsync(string entity, string? id, string @event)
+    {
+        Broadcasts.Add((entity, id, @event));
+        return Task.CompletedTask;
+    }
 
     public void Raise(string entity, string? id, string @event)
     {
