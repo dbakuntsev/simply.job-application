@@ -1,0 +1,13 @@
+@inherits NavigationGuardBase
+
+<NavigationLock OnBeforeInternalNavigation="HandleLocationChanging" />
+<NavigationGuardModal Show="_showGuardModal"
+                      StayLabel="@StayLabel"
+                      LeaveLabel="@LeaveLabel"
+                      OnStay="() => OnGuardStay()"
+                      OnLeave="() => OnGuardLeave()" />
+
+@code {
+    [Parameter] public bool MakeDirty { get; set; }
+    protected override bool IsDirty => MakeDirty;
+}

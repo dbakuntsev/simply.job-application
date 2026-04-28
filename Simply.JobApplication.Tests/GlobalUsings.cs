@@ -1,0 +1,15 @@
+global using System.Text.Json;
+global using Microsoft.AspNetCore.Components;
+global using Microsoft.AspNetCore.Components.Forms;
+global using Microsoft.Extensions.DependencyInjection;
+global using Microsoft.JSInterop;
+global using Bunit;
+global using Xunit;
+global using NSubstitute;
+global using NSubstitute.ExceptionExtensions;
+global using Simply.JobApplication.Models;
+global using Simply.JobApplication.Services;
+global using Simply.JobApplication.Services.AI;
+global using Simply.JobApplication.Components;
+global using Simply.JobApplication.Pages;
+global using Simply.JobApplication.Tests.M0.Helpers;

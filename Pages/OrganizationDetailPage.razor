@@ -388,7 +388,9 @@ else
                         <label class="form-label fw-semibold">Notes</label>
                         <textarea class="form-control" rows="2" @bind="_contactDraft.Notes"></textarea>
                     </div>
-                    @if (_contactDuplicateWarning)
+                    @if (!string.IsNullOrWhiteSpace(_contactDraft.FullName) &&
+                         _contacts.Any(c => c.Id != _contactDraft.Id &&
+                             c.FullName.Equals(_contactDraft.FullName.Trim(), StringComparison.OrdinalIgnoreCase)))
                     {
                         <div class="alert alert-warning mt-3 mb-0 small">
                             Another contact with this name already exists in this organization.
