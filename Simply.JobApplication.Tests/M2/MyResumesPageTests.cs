@@ -26,7 +26,7 @@ public class MyResumesPageTests : BunitContext
         var cut = Render<MyResumesPage>();
         await cut.WaitForStateAsync(() => !cut.FindAll(".spinner-border").Any());
 
-        Assert.NotEmpty(cut.FindAll("button").Where(b => b.TextContent.Contains("Upload Resume")));
+        Assert.Contains(cut.FindAll("button"), b => b.TextContent.Contains("Upload Resume"));
     }
 
     [Fact]

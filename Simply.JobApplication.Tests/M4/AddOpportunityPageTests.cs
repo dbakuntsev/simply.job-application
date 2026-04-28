@@ -20,8 +20,8 @@ public class AddOpportunityPageTests : BunitContext
         var (cut, _) = await Render();
         Assert.Contains("Acme Corp", cut.Markup);
         // The org name is in a .form-control-plaintext div (not an editable input)
-        Assert.NotEmpty(cut.FindAll(".form-control-plaintext").Where(e =>
-            e.TextContent.Contains("Acme Corp")));
+        Assert.Contains(cut.FindAll(".form-control-plaintext"), e =>
+            e.TextContent.Contains("Acme Corp"));
     }
 
     [Fact]
@@ -59,7 +59,7 @@ public class AddOpportunityPageTests : BunitContext
         {
             var inv = JSInterop.Invocations
                 .Where(i => i.Identifier == "sjaSetBeforeUnload").ToList();
-            Assert.True(inv.Any(i => i.Arguments.Any(a => a is true)));
+            Assert.Contains(inv, i => i.Arguments.Any(a => a is true));
         });
     }
 
@@ -74,7 +74,7 @@ public class AddOpportunityPageTests : BunitContext
             var inv = JSInterop.Invocations
                 .Where(i => i.Identifier == "sjaSetBeforeUnload").ToList();
             if (inv.Any())
-                Assert.True(inv.Last().Arguments.Any(a => a is false));
+                Assert.Contains(inv.Last().Arguments, a => a is false);
         });
     }
 

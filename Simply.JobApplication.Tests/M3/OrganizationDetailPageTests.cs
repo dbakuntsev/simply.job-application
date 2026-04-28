@@ -136,7 +136,7 @@ public class OrganizationDetailPageTests : BunitContext
         await EnterEditMode(cut);
 
         // The "+ Add Contact" button should not be visible during edit mode
-        Assert.Empty(cut.FindAll("button").Where(b => b.TextContent.Contains("Add Contact")));
+        Assert.DoesNotContain(cut.FindAll("button"), b => b.TextContent.Contains("Add Contact"));
     }
 
     [Fact]
@@ -147,7 +147,7 @@ public class OrganizationDetailPageTests : BunitContext
         await EnterEditMode(cut);
 
         // The "+ Add Opportunity" link should not be visible during edit mode
-        Assert.Empty(cut.FindAll("a").Where(a => a.TextContent.Contains("Add Opportunity")));
+        Assert.DoesNotContain(cut.FindAll("a"), a => a.TextContent.Contains("Add Opportunity"));
     }
 
     [Fact]
@@ -164,8 +164,8 @@ public class OrganizationDetailPageTests : BunitContext
         await cut.WaitForStateAsync(() => cut.FindAll(".modal.d-block").Any(m =>
             m.TextContent.Contains("Unsaved Changes")), TimeSpan.FromSeconds(2));
 
-        Assert.NotEmpty(cut.FindAll(".modal.d-block")
-            .Where(m => m.TextContent.Contains("Unsaved Changes")));
+        Assert.Contains(cut.FindAll(".modal.d-block"),
+            m => m.TextContent.Contains("Unsaved Changes"));
     }
 
     // ── M3-4: Contacts card ───────────────────────────────────────────────────

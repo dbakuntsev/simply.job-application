@@ -36,8 +36,8 @@ public class HistoryPageTests : BunitContext
 
         var (cut, _) = await RenderWithSessions(db);
 
-        Assert.NotEmpty(cut.FindAll("a").Where(a =>
-            (a.GetAttribute("href") ?? "").Contains("organizations/o1")));
+        Assert.Contains(cut.FindAll("a"), a =>
+            (a.GetAttribute("href") ?? "").Contains("organizations/o1"));
     }
 
     [Fact]
@@ -53,7 +53,7 @@ public class HistoryPageTests : BunitContext
         var (cut, _) = await RenderWithSessions(db);
 
         Assert.Contains("Freelance Project", cut.Markup);
-        Assert.Empty(cut.FindAll("a").Where(a => a.TextContent.Contains("Freelance Project")));
+        Assert.DoesNotContain(cut.FindAll("a"), a => a.TextContent.Contains("Freelance Project"));
     }
 
     [Fact]
@@ -84,7 +84,7 @@ public class HistoryPageTests : BunitContext
 
         var (cut, _) = await RenderWithSessions(db);
 
-        Assert.NotEmpty(cut.FindAll(".badge").Where(b => b.TextContent.Contains("Good")));
+        Assert.Contains(cut.FindAll(".badge"), b => b.TextContent.Contains("Good"));
     }
 
     [Fact]
@@ -201,8 +201,8 @@ public class HistoryPageTests : BunitContext
 
         var (cut, _) = await RenderWithSessions(db);
 
-        Assert.NotEmpty(cut.FindAll("tbody button.btn-outline-danger")
-            .Where(b => b.TextContent.Contains("Delete")));
+        Assert.Contains(cut.FindAll("tbody button.btn-outline-danger"),
+            b => b.TextContent.Contains("Delete"));
     }
 
     [Fact]
@@ -321,8 +321,8 @@ public class HistoryPageTests : BunitContext
         await cut.Find(".modal .btn-danger").ClickAsync(new());
 
         var ds = (DataSyncFake)mocks.DataSync;
-        Assert.True(ds.Broadcasts.Any(b =>
-            b.entity == "session" && b.id == null && b.@event == "cleared"));
+        Assert.Contains(ds.Broadcasts, b =>
+            b.entity == "session" && b.id == null && b.@event == "cleared");
     }
 
     [Fact]

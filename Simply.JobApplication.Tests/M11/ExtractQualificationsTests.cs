@@ -142,6 +142,6 @@ public class ExtractQualificationsTests
             msg => progressMessages.Add(msg));
 
         Assert.NotEmpty(progressMessages);
-        Assert.True(progressMessages.Any(m => m.Contains("Extracting")));
+        Assert.Contains(progressMessages, m => m.Contains("Extracting"));
     }
 }

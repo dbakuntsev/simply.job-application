@@ -33,9 +33,9 @@ public class HistoryDetailPageTests : BunitContext
 
         var (cut, _) = await RenderSession(session, db);
 
-        Assert.NotEmpty(cut.FindAll("a").Where(a =>
+        Assert.Contains(cut.FindAll("a"), a =>
             (a.GetAttribute("href") ?? "").Contains("organizations/o1") &&
-            a.TextContent.Contains("Acme Corp")));
+            a.TextContent.Contains("Acme Corp"));
     }
 
     [Fact]

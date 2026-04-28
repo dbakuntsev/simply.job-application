@@ -97,7 +97,7 @@ public class NewOrganizationPageTests : BunitContext
         cut.WaitForAssertion(() =>
         {
             var inv = JSInterop.Invocations.Where(i => i.Identifier == "sjaSetBeforeUnload").ToList();
-            Assert.True(inv.Any(i => i.Arguments.Any(a => a is true)));
+            Assert.Contains(inv, i => i.Arguments.Any(a => a is true));
         });
     }
 
@@ -112,7 +112,7 @@ public class NewOrganizationPageTests : BunitContext
             var inv = JSInterop.Invocations.Where(i => i.Identifier == "sjaSetBeforeUnload").ToList();
             // Either no invocations at all, or the last call passed false
             if (inv.Any())
-                Assert.True(inv.Last().Arguments.Any(a => a is false));
+                Assert.Contains(inv.Last().Arguments, a => a is false);
         });
     }
 }

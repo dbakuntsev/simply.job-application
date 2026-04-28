@@ -136,6 +136,6 @@ public class UploadResumeFlowTests : BunitContext
         await cut.WaitForStateAsync(() => cut.FindAll(".modal.d-block").Any(m =>
             m.TextContent.Contains("Unsaved Changes")), TimeSpan.FromSeconds(2));
 
-        Assert.NotEmpty(cut.FindAll(".modal.d-block").Where(m => m.TextContent.Contains("Unsaved Changes")));
+        Assert.Contains(cut.FindAll(".modal.d-block"), m => m.TextContent.Contains("Unsaved Changes"));
     }
 }

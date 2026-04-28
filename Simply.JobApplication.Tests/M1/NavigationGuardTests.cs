@@ -128,7 +128,7 @@ public class NavigationGuardModalTests : BunitContext
 
         // Wait for LocationChanged to fire — it is only raised when FakeNavigationManager
         // processes navigation as Succeeded (shouldContinueNavigation = true).
-        var newLocation = await locationChangedTcs.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var newLocation = await locationChangedTcs.Task.WaitAsync(TimeSpan.FromSeconds(2), Xunit.TestContext.Current.CancellationToken);
         Assert.Contains("/settings", newLocation);
     }
 
@@ -142,12 +142,12 @@ public class NavigationGuardModalTests : BunitContext
         Render<TestGuard>(p => p.Add(x => x.MakeDirty, true));
 
         // Give the after-render cycle time to fire
-        await Task.Delay(50);
+        await Task.Delay(50, Xunit.TestContext.Current.CancellationToken);
 
-        Assert.True(jsInterop.Invocations.Any(i =>
+        Assert.Contains(jsInterop.Invocations, i =>
             i.Identifier == "sjaSetBeforeUnload" &&
             i.Arguments.Count > 0 &&
-            i.Arguments[0] is true));
+            i.Arguments[0] is true);
     }
 
     [Fact]
@@ -158,12 +158,12 @@ public class NavigationGuardModalTests : BunitContext
 
         Render<TestGuard>(p => p.Add(x => x.MakeDirty, false));
 
-        await Task.Delay(50);
+        await Task.Delay(50, Xunit.TestContext.Current.CancellationToken);
 
         // When not dirty, sjaSetBeforeUnload should NOT be called with true
-        Assert.False(jsInterop.Invocations.Any(i =>
+        Assert.DoesNotContain(jsInterop.Invocations, i =>
             i.Identifier == "sjaSetBeforeUnload" &&
             i.Arguments.Count > 0 &&
-            i.Arguments[0] is true));
+            i.Arguments[0] is true);
     }
 }

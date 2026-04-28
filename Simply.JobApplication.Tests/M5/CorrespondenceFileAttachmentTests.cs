@@ -67,7 +67,7 @@ public class CorrespondenceFileAttachmentTests : BunitContext
         {
             Assert.Contains("5 MB limit", cut.Markup);
             // File should not appear in the staged list
-            Assert.Empty(cut.FindAll(".list-group-item").Where(li => li.TextContent.Contains("huge.pdf")));
+            Assert.DoesNotContain(cut.FindAll(".list-group-item"), li => li.TextContent.Contains("huge.pdf"));
         });
     }
 

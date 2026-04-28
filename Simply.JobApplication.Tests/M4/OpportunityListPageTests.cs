@@ -47,9 +47,9 @@ public class OpportunityListPageTests : BunitContext
         var (cut, _) = await Render(db);
 
         // Organization name shown as a link to org detail
-        Assert.NotEmpty(cut.FindAll("a").Where(a =>
+        Assert.Contains(cut.FindAll("a"), a =>
             a.TextContent.Contains("Acme Corp") &&
-            (a.GetAttribute("href") ?? "").Contains("/organizations/o1")));
+            (a.GetAttribute("href") ?? "").Contains("/organizations/o1"));
     }
 
     [Fact]
@@ -60,10 +60,10 @@ public class OpportunityListPageTests : BunitContext
         var (cut, _) = await Render(db);
 
         // No "Add" buttons and no delete buttons
-        Assert.Empty(cut.FindAll("button").Where(b => b.TextContent.Contains("Add")));
-        Assert.Empty(cut.FindAll("button").Where(b =>
+        Assert.DoesNotContain(cut.FindAll("button"), b => b.TextContent.Contains("Add"));
+        Assert.DoesNotContain(cut.FindAll("button"), b =>
             (b.ClassName ?? "").Contains("btn-danger") ||
-            (b.ClassName ?? "").Contains("btn-outline-danger")));
+            (b.ClassName ?? "").Contains("btn-outline-danger"));
     }
 
     [Fact]

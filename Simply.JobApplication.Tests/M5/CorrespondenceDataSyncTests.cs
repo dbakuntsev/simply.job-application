@@ -49,8 +49,8 @@ public class CorrespondenceDataSyncTests : BunitContext
             TimeSpan.FromSeconds(2));
         Assert.Contains("deleted in another tab", cut.Markup);
         // The correspondence edit modal should be closed
-        Assert.Empty(cut.FindAll(".modal.d-block")
-            .Where(m => m.TextContent.Contains("Edit Email")));
+        Assert.DoesNotContain(cut.FindAll(".modal.d-block"),
+            m => m.TextContent.Contains("Edit Email"));
     }
 
     [Fact]

@@ -58,8 +58,8 @@ public class OpportunityDetailPageTests : BunitContext
         var opp = MakeOpp();
         var (cut, _) = await Render(opp);
 
-        Assert.NotEmpty(cut.FindAll("a").Where(a =>
-            (a.GetAttribute("href") ?? "").Contains("jobs.example.com")));
+        Assert.Contains(cut.FindAll("a"), a =>
+            (a.GetAttribute("href") ?? "").Contains("jobs.example.com"));
     }
 
     [Fact]
@@ -68,9 +68,8 @@ public class OpportunityDetailPageTests : BunitContext
         var opp = MakeOpp();
         var (cut, _) = await Render(opp);
 
-        Assert.NotEmpty(cut.FindAll("button").Where(b => b.TextContent.Trim() == "Edit"));
-        Assert.NotEmpty(cut.FindAll("button")
-            .Where(b => b.TextContent.Contains("Evaluate")));
+        Assert.Contains(cut.FindAll("button"), b => b.TextContent.Trim() == "Edit");
+        Assert.Contains(cut.FindAll("button"), b => b.TextContent.Contains("Evaluate"));
     }
 
     [Fact]
@@ -132,9 +131,9 @@ public class OpportunityDetailPageTests : BunitContext
         await EnterEditMode(cut);
 
         // The correspondence "Add" dropdown button should be hidden in edit mode
-        Assert.Empty(cut.FindAll("button").Where(b =>
+        Assert.DoesNotContain(cut.FindAll("button"), b =>
             b.ClassName?.Contains("dropdown-toggle") == true &&
-            b.TextContent.Trim() == "Add"));
+            b.TextContent.Trim() == "Add");
     }
 
     [Fact]
@@ -144,7 +143,7 @@ public class OpportunityDetailPageTests : BunitContext
         var (cut, _) = await Render(opp);
         await EnterEditMode(cut);
 
-        Assert.Empty(cut.FindAll("button").Where(b => b.TextContent.Contains("Change History")));
+        Assert.DoesNotContain(cut.FindAll("button"), b => b.TextContent.Contains("Change History"));
     }
 
     [Fact]
@@ -154,7 +153,7 @@ public class OpportunityDetailPageTests : BunitContext
         var (cut, _) = await Render(opp);
         await EnterEditMode(cut);
 
-        Assert.Empty(cut.FindAll("button").Where(b => b.TextContent.Contains("Evaluate")));
+        Assert.DoesNotContain(cut.FindAll("button"), b => b.TextContent.Contains("Evaluate"));
     }
 
     [Fact]
@@ -171,8 +170,8 @@ public class OpportunityDetailPageTests : BunitContext
         await cut.WaitForStateAsync(() => cut.FindAll(".modal.d-block").Any(m =>
             m.TextContent.Contains("Unsaved Changes")), TimeSpan.FromSeconds(2));
 
-        Assert.NotEmpty(cut.FindAll(".modal.d-block")
-            .Where(m => m.TextContent.Contains("Unsaved Changes")));
+        Assert.Contains(cut.FindAll(".modal.d-block"),
+            m => m.TextContent.Contains("Unsaved Changes"));
     }
 
     // ── M4-5: Role Description section ────────────────────────────────────────
@@ -205,8 +204,8 @@ public class OpportunityDetailPageTests : BunitContext
         var (cut, _) = await Render(opp);
 
         // In view mode with empty description, no Extract Qualifications button visible
-        Assert.Empty(cut.FindAll("button:not([disabled])").Where(b =>
-            b.TextContent.Contains("Extract Qualifications")));
+        Assert.DoesNotContain(cut.FindAll("button:not([disabled])"), b =>
+            b.TextContent.Contains("Extract Qualifications"));
     }
 
     [Fact]
@@ -216,9 +215,9 @@ public class OpportunityDetailPageTests : BunitContext
         opp.RoleDescription = "We need a senior developer.";
         var (cut, _) = await Render(opp);
 
-        Assert.NotEmpty(cut.FindAll("button").Where(b =>
+        Assert.Contains(cut.FindAll("button"), b =>
             b.TextContent.Contains("Extract Qualifications") &&
-            b.GetAttribute("disabled") is null));
+            b.GetAttribute("disabled") is null);
     }
 
     [Fact]
@@ -330,7 +329,7 @@ public class OpportunityDetailPageTests : BunitContext
         await EnterEditMode(cut);
 
         // Add dropdown (the btn-primary "Add" for correspondence) should be hidden
-        Assert.Empty(cut.FindAll("button.btn-primary").Where(b => b.TextContent.Trim() == "Add"));
+        Assert.DoesNotContain(cut.FindAll("button.btn-primary"), b => b.TextContent.Trim() == "Add");
     }
 
     // ── M5-2: Correspondence modal ────────────────────────────────────────────
