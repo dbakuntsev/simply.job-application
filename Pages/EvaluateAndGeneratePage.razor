@@ -1,4 +1,4 @@
-@page "/evaluate"
+﻿@page "/evaluate"
 @inherits NavigationGuardBase
 @inject IIndexedDbService Db
 @inject IDocxService Docx
@@ -44,7 +44,7 @@
     </button>
 </div>
 
-<!-- ── Pre-evaluate deletion banners (M6-9) ──────────────────────────────── -->
+<!-- ── Pre-evaluate deletion banners ──────────────────────────────── -->
 @if (_showPreEvalOrgDeletedBanner)
 {
     <div class="alert alert-warning alert-dismissible mt-2" role="alert">
@@ -60,7 +60,7 @@
     </div>
 }
 
-<!-- ── Unsaved Changes Banner (M6-4) ─────────────────────────────────────── -->
+<!-- ── Unsaved Changes Banner ─────────────────────────────────────── -->
 @if (_showUnsavedChangesBanner)
 {
     <div class="alert alert-warning d-flex flex-wrap gap-2 justify-content-between align-items-center mt-2" role="alert">
@@ -80,7 +80,7 @@
     </div>
     <div class="sja-swimlane-body">
 
-        <!-- ── Entity Selection (M6-2) ───────────────────────────────────── -->
+        <!-- ── Entity Selection ───────────────────────────────────── -->
         <div class="card mb-3">
             <div class="card-body">
                 <div class="row g-2">
@@ -169,7 +169,7 @@
 
         <!-- ── Job Description + Resume row ──────────────────────────────── -->
         <div class="row g-3">
-            <!-- Role & Role Description card (M6-3) -->
+            <!-- Role & Role Description card -->
             <div class="col-12 col-lg-7">
                 <div class="card h-100">
                     <div class="card-header d-flex justify-content-between align-items-center">
@@ -204,7 +204,7 @@
                 </div>
             </div>
 
-            <!-- Resume card (M6-1) -->
+            <!-- Resume card -->
             <div class="col-12 col-lg-5">
                 <div class="card h-100">
                     <div class="card-header">Resume</div>
@@ -606,7 +606,7 @@
 <!-- MODALS                                                                -->
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 
-<!-- ── Resume Picker Modal (M6-1) ────────────────────────────────────── -->
+<!-- ── Resume Picker Modal ────────────────────────────────────── -->
 @if (_showResumePicker)
 {
     <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4);z-index:1055"
@@ -671,7 +671,7 @@
                       OnLeave="() => OnGuardLeave()" />
 <NavigationLock OnBeforeInternalNavigation="HandleLocationChanging" />
 
-<!-- ── New + Banner Modal (M6-7) ─────────────────────────────────────── -->
+<!-- ── New + Banner Modal ─────────────────────────────────────── -->
 @if (_showNewWithBannerModal)
 {
     <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4);z-index:1055" role="dialog" aria-modal="true">
@@ -693,7 +693,7 @@
     </div>
 }
 
-<!-- ── Save Opportunity Modal (M6-5) ──────────────────────────────────── -->
+<!-- ── Save Opportunity Modal ──────────────────────────────────── -->
 @if (_showSaveOppModal)
 {
     <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4);z-index:1055" role="dialog" aria-modal="true" aria-label="Save Opportunity">
@@ -834,7 +834,7 @@
     </div>
 }
 
-<!-- ── Remote Change Notice Modal (M6-9) ──────────────────────────────── -->
+<!-- ── Remote Change Notice Modal ──────────────────────────────── -->
 @if (_showRemoteChangeNoticeModal)
 {
     <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4);z-index:1055" role="dialog" aria-modal="true">
@@ -854,7 +854,7 @@
     </div>
 }
 
-<!-- ── Remote Conflict Modal (M6-9) ───────────────────────────────────── -->
+<!-- ── Remote Conflict Modal ───────────────────────────────────── -->
 @if (_showRemoteConflictModal)
 {
     <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4);z-index:1055" role="dialog" aria-modal="true">
@@ -895,7 +895,7 @@
     </div>
 }
 
-<!-- ── Remote Deletion Modal (M6-9) ───────────────────────────────────── -->
+<!-- ── Remote Deletion Modal ───────────────────────────────────── -->
 @if (_showRemoteDeletionModal)
 {
     <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4);z-index:1055" role="dialog" aria-modal="true">
@@ -915,7 +915,7 @@
     </div>
 }
 
-<!-- ── Session Deleted Modal (M6-9) ───────────────────────────────────── -->
+<!-- ── Session Deleted Modal ───────────────────────────────────── -->
 @if (_showSessionDeletedModal)
 {
     <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4);z-index:1055" role="dialog" aria-modal="true">
@@ -1002,13 +1002,13 @@
     readonly List<SuggestedKeyword> _confirmedKeywords = new();
     string _customKeywords = "";
 
-    // ── Unsaved changes banner (M6-4) ─────────────────────────────────────────
+    // ── Unsaved changes banner ─────────────────────────────────────────
     bool _showUnsavedChangesBanner;
 
-    // ── New + Banner modal (M6-7) ─────────────────────────────────────────────
+    // ── New + Banner modal ─────────────────────────────────────────────
     bool _showNewWithBannerModal;
 
-    // ── Save Opportunity modal (M6-5) ─────────────────────────────────────────
+    // ── Save Opportunity modal ─────────────────────────────────────────
     bool _showSaveOppModal;
     int _saveOppStep;
     string _saveOppOrgName = "";
@@ -1024,7 +1024,7 @@
     bool _saveOppSaving;
     string? _saveOppError;
 
-    // ── Remote event modals (M6-9) ────────────────────────────────────────────
+    // ── Remote event modals ────────────────────────────────────────────
     bool _showRemoteChangeNoticeModal;
     string? _remoteChangeNoticeMessage;
     bool _showRemoteConflictModal;
@@ -1038,7 +1038,7 @@
     bool _showSessionDeletedModal;
     string? _sessionDeletedMessage;
 
-    // ── Pre-eval deletion banners (M6-9) ─────────────────────────────────────
+    // ── Pre-eval deletion banners ─────────────────────────────────────
     bool _showPreEvalOrgDeletedBanner;
     bool _showPreEvalOppDeletedBanner;
 
@@ -1148,7 +1148,7 @@
         _ => ""
     };
 
-    // ── Org combobox handlers (M6-2) ──────────────────────────────────────────
+    // ── Org combobox handlers ──────────────────────────────────────────
 
     async Task OnOrgTextChanged()
     {
@@ -1261,7 +1261,7 @@
         DiscardEvaluation();
     }
 
-    // ── Opportunity dropdown handlers (M6-2) ──────────────────────────────────
+    // ── Opportunity dropdown handlers ──────────────────────────────────
 
     async Task OnOppChanged(ChangeEventArgs e)
     {
@@ -1303,7 +1303,7 @@
         _showUnsavedChangesBanner = false;
     }
 
-    // ── Role field handlers (M6-3) ────────────────────────────────────────────
+    // ── Role field handlers ────────────────────────────────────────────
 
     void OnRoleAfterBind()
     {
@@ -1350,7 +1350,7 @@
         RecalculateUnsavedChangesBanner();
     }
 
-    // ── Resume handlers (M6-1) ────────────────────────────────────────────────
+    // ── Resume handlers ────────────────────────────────────────────────
 
     void OpenResumePicker() => _showResumePicker = true;
 
@@ -1670,7 +1670,7 @@
         await Db.SaveSessionAsync(session);
     }
 
-    // ── Update Opportunity (M6-4) ──────────────────────────────────────────────
+    // ── Update Opportunity ──────────────────────────────────────────────
 
     async Task UpdateOpportunityAsync()
     {
@@ -1710,7 +1710,7 @@
         RecalculateUnsavedChangesBanner();
     }
 
-    // ── New button (M6-7) ─────────────────────────────────────────────────────
+    // ── New button ─────────────────────────────────────────────────────
 
     async Task NewSession()
     {
@@ -1779,7 +1779,7 @@
         await ScrollToAsync("lane-input");
     }
 
-    // ── Save Opportunity modal (M6-5) ─────────────────────────────────────────
+    // ── Save Opportunity modal ─────────────────────────────────────────
 
     void OpenSaveOppModal()
     {
@@ -1978,7 +1978,7 @@
         RecalculateUnsavedChangesBanner();
     }
 
-    // ── Remote conflict modal (M6-9) ──────────────────────────────────────────
+    // ── Remote conflict modal ──────────────────────────────────────────
 
     void HandleRemoteConflictResetToRemote()
     {
@@ -2029,7 +2029,7 @@
         }
     }
 
-    // ── State preservation (M6-6) ─────────────────────────────────────────────
+    // ── State preservation ─────────────────────────────────────────────
 
     void SavePreEvaluateState()
     {
@@ -2149,7 +2149,7 @@
         RecalculateUnsavedChangesBanner();
     }
 
-    // ── Remote event handlers (M6-9, M6-10) ──────────────────────────────────
+    // ── Remote event handlers ──────────────────────────────────
 
     private void HandleOrganizationChanged(string? id, string @event)
     {

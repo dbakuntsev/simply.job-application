@@ -2,7 +2,7 @@ namespace Simply.JobApplication.Services;
 
 public class AppStateService
 {
-    // ── Pre-Evaluate state preservation (M6-6) ────────────────────────────────
+    // ── Pre-Evaluate state preservation ──────────────────────────────────────
     // Saved on navigation away when no session has been written this page session.
     // Restored on return to E&G page (unless contextual nav overrides).
     public string? PreservedOrgText { get; set; }
@@ -30,7 +30,7 @@ public class AppStateService
         PreservedResumeId = null;
     }
 
-    // ── Contextual navigation (from Opportunity Detail "E&G" button) (M6-6) ──
+    // ── Contextual navigation (from Opportunity Detail "E&G" button) ─────────
     // When set, E&G page overrides any preserved pre-evaluate state with these values.
     public string? ContextualOrgId { get; set; }
     public string? ContextualOrgName { get; set; }
