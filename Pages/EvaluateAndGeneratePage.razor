@@ -1211,7 +1211,7 @@
         RecalculateUnsavedChangesBanner();
     }
 
-    void OnOrgBlur()
+    async Task OnOrgBlur()
     {
         _showOrgDropdown = false;
         if (string.IsNullOrWhiteSpace(_orgText) || _linkedOrgId is not null) return;
@@ -1223,7 +1223,7 @@
             _orgText = exactMatch.Name;
             _linkedOrgId = exactMatch.Id;
             _linkedOrgName = exactMatch.Name;
-            _ = LoadOpportunitiesAsync(exactMatch.Id);
+            await LoadOpportunitiesAsync(exactMatch.Id);
         }
     }
 
@@ -1646,7 +1646,7 @@
         var session = new SessionRecord
         {
             Id                              = _sessionId!,
-            Version                         = existing?.Version ?? 1,
+            Version                         = (existing?.Version ?? 0) + 1,
             CreatedAt                       = existing?.CreatedAt ?? DateTime.UtcNow,
             OrganizationId                  = _linkedOrgId,
             OrganizationNameSnapshot        = _linkedOrgName ?? _orgText,
@@ -1693,17 +1693,19 @@
         var result = await Db.VersionedWriteAsync("opportunities", opp, new[] { $"org:{opp.OrganizationId}", $"opp:{opp.Id}" });
         if (result == VersionedWriteResult.Success)
         {
-            await Db.SaveHistoryEntryAsync(new OpportunityFieldHistory
+            var histEntry = new OpportunityFieldHistory
             {
                 Id            = Guid.NewGuid().ToString(),
                 OpportunityId = opp.Id,
                 ChangedAt     = DateTime.UtcNow,
                 Source        = HistorySource.EvaluateAndGenerate,
                 Changes       = changes,
-            });
+            };
+            await Db.SaveHistoryEntryAsync(histEntry);
             _linkedOppRole = _role;
             _linkedOppRoleDesc = _roleDescription;
             await DataSync.BroadcastAsync("opportunity", opp.Id, "updated");
+            await DataSync.BroadcastAsync("opportunityFieldHistory", histEntry.Id, "create");
         }
         RecalculateUnsavedChangesBanner();
     }
@@ -1999,7 +2001,7 @@
             Nav.NavigateTo(_remoteDeletionNavTarget);
     }
 
-    void HandleSessionDeletedDismiss()
+    async Task HandleSessionDeletedDismiss()
     {
         _showSessionDeletedModal = false;
         var isAdHoc = _linkedOrgId is null;
@@ -2007,7 +2009,7 @@
 
         if (isAdHoc)
         {
-            _ = ResetFormAsync();
+            await ResetFormAsync();
         }
         else
         {
