@@ -909,16 +909,14 @@ else
     }
 
     // ── BroadcastChannel live updates (M2-8) ─────────────────────────────────
-    private async void OnBaseResumeChanged(string? id, string evt)
+    private void OnBaseResumeChanged(string? id, string evt)
     {
-        try { await InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); }); }
-        catch { }
+        _ = InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
     }
 
-    private async void OnBaseResumeVersionChanged(string? id, string evt)
+    private void OnBaseResumeVersionChanged(string? id, string evt)
     {
-        try { await InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); }); }
-        catch { }
+        _ = InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
     }
 
     // ── Utilities ─────────────────────────────────────────────────────────────
