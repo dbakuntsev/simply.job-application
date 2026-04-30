@@ -97,4 +97,7 @@ public interface IIndexedDbService
     Task<VersionedWriteResult> SaveCorrespondenceWithFilesAsync(Correspondence corr, List<CorrespondenceFile> add, List<string> removeIds);
     Task<int> GetCorrespondenceFileCountAsync(string corrId);
     Task DownloadGenericFileAsync(string fileName, string base64Data);
+
+    Task<string> ExportDataAsync();
+    Task ImportDataAsync(string base64Data, bool isGzip);
 }

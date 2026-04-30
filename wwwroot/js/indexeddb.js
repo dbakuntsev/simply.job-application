@@ -783,6 +783,100 @@ export function downloadFile(fileName, base64Data) {
     URL.revokeObjectURL(url);
 }
 
+// ── Export / Import ───────────────────────────────────────────────────────────
+
+const _backupStores = [
+    'sessions', 'files',
+    'baseResumes', 'baseResumeVersions',
+    'organizations', 'contacts', 'contactOpportunityRoles', 'lookupIndustries', 'lookupContactRoles',
+    'opportunities', 'opportunityFieldHistory',
+    'correspondence', 'correspondenceFiles',
+];
+
+export async function exportAllData() {
+    const db = await openDb();
+    const payload = { schemaVersion: DB_VERSION, exportedAt: new Date().toISOString(), stores: {} };
+
+    await new Promise((resolve, reject) => {
+        const t = db.transaction(_backupStores, 'readonly');
+        t.onerror = () => reject(t.error);
+        let pending = _backupStores.length;
+        for (const name of _backupStores) {
+            const req = t.objectStore(name).getAll();
+            req.onsuccess = () => {
+                payload.stores[name] = req.result ?? [];
+                if (--pending === 0) resolve();
+            };
+            req.onerror = () => reject(req.error);
+        }
+    });
+
+    const encoded = new TextEncoder().encode(JSON.stringify(payload));
+    const cs = new CompressionStream('gzip');
+    const writer = cs.writable.getWriter();
+    writer.write(encoded);
+    writer.close();
+
+    const chunks = [];
+    const reader = cs.readable.getReader();
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+    }
+    const total = chunks.reduce((s, c) => s + c.length, 0);
+    const compressed = new Uint8Array(total);
+    let pos = 0;
+    for (const c of chunks) { compressed.set(c, pos); pos += c.length; }
+
+    let b64 = '';
+    const CHUNK = 8192;
+    for (let i = 0; i < compressed.length; i += CHUNK)
+        b64 += String.fromCharCode(...compressed.subarray(i, i + CHUNK));
+    return btoa(b64);
+}
+
+export async function importAllData(base64Data, isGzip) {
+    const binaryStr = atob(base64Data);
+    let bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+
+    if (isGzip) {
+        const ds = new DecompressionStream('gzip');
+        const writer = ds.writable.getWriter();
+        writer.write(bytes);
+        writer.close();
+
+        const chunks = [];
+        const reader = ds.readable.getReader();
+        for (;;) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            chunks.push(value);
+        }
+        const total = chunks.reduce((s, c) => s + c.length, 0);
+        const out = new Uint8Array(total);
+        let p = 0;
+        for (const c of chunks) { out.set(c, p); p += c.length; }
+        bytes = out;
+    }
+
+    const payload = JSON.parse(new TextDecoder().decode(bytes));
+    const storeNames = Object.keys(payload.stores).filter(n => _backupStores.includes(n));
+
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+        const t = db.transaction(storeNames, 'readwrite');
+        t.onerror = () => reject(t.error);
+        t.oncomplete = () => resolve();
+        for (const name of storeNames) {
+            const store = t.objectStore(name);
+            store.clear();
+            for (const record of payload.stores[name]) store.put(record);
+        }
+    });
+}
+
 export function downloadBlob(fileName, base64Data) {
     const bytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
     const blob = new Blob([bytes], {

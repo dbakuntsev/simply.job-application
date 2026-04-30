@@ -16,7 +16,7 @@ public class IndexedDbService : IIndexedDbService, IAsyncDisposable
     };
 
     // Version token is replaced at build time by the InjectDependencyVersion MSBuild target.
-    private const string _moduleUrl = "./js/indexeddb.js?v=472BFE53DA3ADC2CEE356CF5F56E11EC22363D07A9466F42FC81040125DACBCC";
+    private const string _moduleUrl = "./js/indexeddb.js?v=3A752EE2D9F32DF222468DD95CC68EB08A60109D8D66B3300FC2A45DF5015FAC";
 
     public IndexedDbService(IJSRuntime js) => _js = js;
 
@@ -601,6 +601,20 @@ public class IndexedDbService : IIndexedDbService, IAsyncDisposable
         if (string.IsNullOrEmpty(json)) return new Dictionary<string, long>();
         return JsonSerializer.Deserialize<Dictionary<string, long>>(json, _jsonOpts)
                ?? new Dictionary<string, long>();
+    }
+
+    // ── Export / Import ───────────────────────────────────────────────────────
+
+    public async Task<string> ExportDataAsync()
+    {
+        var m = await ModuleAsync();
+        return await m.InvokeAsync<string>("exportAllData");
+    }
+
+    public async Task ImportDataAsync(string base64Data, bool isGzip)
+    {
+        var m = await ModuleAsync();
+        await m.InvokeVoidAsync("importAllData", base64Data, isGzip);
     }
 
     public async ValueTask DisposeAsync()
