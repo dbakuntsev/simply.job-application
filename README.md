@@ -44,6 +44,7 @@ All data is stored in your browser's IndexedDB. The only external calls are to y
 - Cross-tab live updates via BroadcastChannel — all open tabs stay in sync
 - Cascade deletes handled in single IndexedDB transactions
 - Navigation guards on all edit forms — unsaved changes are never silently lost
+- Full data export as a compressed backup (.json.gz); import to restore or migrate to another browser or device
 
 ### Privacy
 - All data stored in browser IndexedDB only — nothing persisted server-side
@@ -89,6 +90,7 @@ Requires [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
 | Resumes, evaluation results, generated files | Browser IndexedDB only |
 | AI provider API key | Browser local storage only |
 | AI prompts and resume content | Sent directly to your chosen AI provider using your key, subject to that provider's data policy |
+| Exported backup files | Downloaded to your local filesystem — never transmitted anywhere |
 
 ---
 
@@ -119,7 +121,7 @@ Pages/
   HistoryPage.razor              Session history list
   HistoryDetailPage.razor        Session detail view
   MyResumesPage.razor            Resume library with version management
-  SettingsPage.razor             API key, model, and storage configuration
+  SettingsPage.razor             API key, model, storage, and data export/import
 
 Components/
   MarkdownEditor.razor           Monaco-based markdown editor
