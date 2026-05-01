@@ -46,6 +46,17 @@ jobs:
           $html  = $html -replace '<base href="/" />', "<base href=`"/$repo/`" />"
           [IO.File]::WriteAllText($file, $html, [Text.Encoding]::UTF8)
 
+      # Stamp the release tag into the manifest so Windows Apps list shows the
+      # correct version.  Strips a leading 'v' (v1.2.3 → 1.2.3).
+      - name: Stamp version into manifest
+        shell: pwsh
+        run: |
+          $version = "${{ github.event.release.tag_name }}" -replace '^v', ''
+          $file    = "./publish/wwwroot/manifest.webmanifest"
+          $content = Get-Content $file -Raw -Encoding UTF8
+          $content = $content -replace '"version":\s*"[^"]*"', ('"version": "' + $version + '"')
+          [IO.File]::WriteAllText($file, $content, [Text.Encoding]::UTF8)
+
       # Jekyll (the default Pages processor) silently drops folders whose names
       # start with an underscore — which includes _framework where the Blazor
       # runtime lives.  An empty .nojekyll file disables Jekyll entirely.

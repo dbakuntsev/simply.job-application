@@ -4,9 +4,14 @@
     <TargetFramework>net8.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <ServiceWorkerAssetsManifest>service-worker-assets.js</ServiceWorkerAssetsManifest>
   </PropertyGroup>
 
   <!-- Exclude the nested test project from the main project's implicit glob -->
+  <ItemGroup>
+    <ServiceWorker Include="wwwroot\service-worker.js" PublishedContent="wwwroot\service-worker.published.js" />
+  </ItemGroup>
+
   <ItemGroup>
     <Compile Remove="Simply.JobApplication.Tests\**" />
     <Content Remove="Simply.JobApplication.Tests\**" />

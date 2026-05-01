@@ -149,3 +149,10 @@ pre.text-wrap {
 /* ── Sponsor heart icon in navbar ─────────────────────────────────────────── */
 .sja-sponsor-link { color: rgba(255, 255, 255, .6) !important; }
 .sja-sponsor-link:hover { color: #f472b6 !important; }
+
+/* ── PWA update banner ────────────────────────────────────────────────────── */
+.pwa-update-banner {
+    background: #0a1628;
+    color: #fff;
+    border-bottom: 1px solid rgba(43, 232, 212, 0.4);
+}

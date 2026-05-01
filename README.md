@@ -13,6 +13,7 @@ Simply Opportunity Tracker combines a full opportunity pipeline with an AI-power
 - **Pipeline management** — Organizations → Contacts → Opportunities → Correspondence, tracked from first contact to final decision.
 - **Evaluate & Generate** — Score your fit against any role, identify strengths and gaps, then generate a tailored resume, cover letter, and why-apply summary.
 - **Ad-hoc mode** — Use Evaluate & Generate as a standalone tool without creating organization or opportunity records first.
+- **Installable PWA** — Install as a desktop or mobile app for offline access and a native app experience.
 
 All data is stored in your browser's IndexedDB. The only external calls are to your chosen AI provider using your own key.
 
@@ -32,12 +33,18 @@ All data is stored in your browser's IndexedDB. The only external calls are to y
 - Tailored resume exported as DOCX — hyperlinks and formatting preserved
 - Two-paragraph cover letter (DOCX) and concise why-apply summary
 - Pre-fill from a linked Opportunity, or run in ad-hoc mode with free-text input
-- Session history retained indefinitely; browse all past sessions from the History page
+- Session history retained indefinitely; browse all past sessions from the History sub-menu
 
 ### My Resumes
 - Upload and manage named resumes with full version history
 - Side-by-side diff viewer to compare any two versions
 - Restore any prior version; auto-select latest version in Evaluate & Generate
+
+### Progressive Web App (PWA)
+- Install as a desktop or mobile app directly from the browser — no app store required
+- Full offline support: all pipeline and history features work without a network connection (AI generation requires a live connection to your AI provider)
+- Automatic update notifications: a banner appears when a new version is available; reload applies the update instantly
+- Downloads in standalone mode use the File System Access API (`showSaveFilePicker`) when available, with a blob-URL fallback and toast notification
 
 ### Data Integrity
 - Optimistic locking with version conflict detection across browser tabs
@@ -48,7 +55,7 @@ All data is stored in your browser's IndexedDB. The only external calls are to y
 
 ### Privacy
 - All data stored in browser IndexedDB only — nothing persisted server-side
-- Configurable AI provider (currently only OpenAI is supported)
+- Configurable AI provider (currently OpenAI)
 - API key stored in browser local storage only
 
 ---
@@ -69,6 +76,13 @@ All data is stored in your browser's IndexedDB. The only external calls are to y
 5. Open the Opportunity and click **Evaluate & Generate**
 
 Or skip straight to **Evaluate & Generate** for a quick ad-hoc session.
+
+### Installing as a Desktop App
+
+The app can be installed as a PWA from any Chromium-based browser (Chrome, Edge, Arc) or Safari on iOS/macOS:
+
+- **Chrome / Edge**: click the install icon (⊕) in the address bar, or use the install button on the page
+- **Safari on iOS**: tap Share → Add to Home Screen
 
 ### Running Locally
 
@@ -102,6 +116,7 @@ Requires [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0).
 - [BlazorMonaco](https://github.com/serdarciplak/BlazorMonaco) — markdown editor and diff viewer
 - [OpenAI Responses API](https://platform.openai.com/docs/api-reference/responses) with server-sent events streaming
 - Browser IndexedDB for local persistence; BroadcastChannel for cross-tab sync; Web Locks for write serialization
+- Service Worker (production-only) for offline caching and PWA update flow
 - GitHub Actions for release packaging and GitHub Pages deployment
 
 ---
@@ -124,6 +139,7 @@ Pages/
   SettingsPage.razor             API key, model, storage, and data export/import
 
 Components/
+  PwaUpdateBanner.razor          Dismissible banner shown when a new app version is waiting
   MarkdownEditor.razor           Monaco-based markdown editor
   TagPicker.razor                Select2-based tag picker for role labels
   NavigationGuardModal.razor     Unsaved-changes confirmation modal
@@ -136,10 +152,17 @@ Services/
   IndexedDbService.cs            All IndexedDB reads and writes
   DataSyncService.cs             BroadcastChannel cross-tab notifications
   DocxService.cs                 DOCX ↔ Markdown extraction and generation
+  PwaService.cs                  PWA state: install prompt, standalone detection, update detection
   AppStartupService.cs           DB migration, lookup seeding, startup checks
   AI/
     IAiProvider.cs               Provider interface
     OpenAi/OpenAiProvider.cs     OpenAI implementation
+
+wwwroot/
+  service-worker.js              Dev stub (no-op install/activate)
+  service-worker.published.js    Production SW: precache, offline fallback, update flow
+  manifest.webmanifest           PWA manifest (version stamped from GitHub release tag at deploy)
+  js/pwa.js                      Install prompt capture, standalone detection, SW update signalling
 ```
 
 ---

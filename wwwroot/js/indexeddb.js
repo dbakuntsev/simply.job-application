@@ -772,8 +772,45 @@ export async function getStoreBytesAsync(storeNames) {
 
 // ── Misc ──────────────────────────────────────────────────────────────────────
 
-export function downloadFile(fileName, base64Data) {
+function _isStandalone() {
+    return window.matchMedia('(display-mode: standalone)').matches || !!window.navigator.standalone;
+}
+
+function _showDownloadToast(fileName) {
+    const el = document.createElement('div');
+    el.style.cssText = [
+        'position:fixed', 'top:70px', 'left:50%', 'transform:translateX(-50%)',
+        'background:#0a1628', 'color:#fff', 'padding:12px 20px', 'border-radius:8px',
+        'z-index:9999', 'font-size:14px', 'box-shadow:0 4px 16px rgba(0,0,0,0.5)',
+        'max-width:380px', 'width:calc(100% - 32px)', 'text-align:center',
+        'transition:opacity 0.4s ease'
+    ].join(';');
+    el.textContent = `"${fileName}" is downloading — check your Downloads folder.`;
+    document.body.appendChild(el);
+    setTimeout(() => { el.style.opacity = '0'; setTimeout(() => el.remove(), 400); }, 4000);
+}
+
+async function _saveWithPicker(bytes, fileName, mime, extensions) {
+    const handle = await window.showSaveFilePicker({
+        suggestedName: fileName,
+        types: [{ description: 'File', accept: { [mime]: extensions } }]
+    });
+    const writable = await handle.createWritable();
+    await writable.write(bytes);
+    await writable.close();
+}
+
+export async function downloadFile(fileName, base64Data) {
     const bytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
+    const standalone = _isStandalone();
+
+    if (standalone && 'showSaveFilePicker' in window) {
+        const ext = '.' + fileName.split('.').pop().toLowerCase();
+        const mime = ext === '.gz' ? 'application/gzip' : 'application/octet-stream';
+        try { await _saveWithPicker(bytes, fileName, mime, [ext]); return; }
+        catch (e) { if (e.name === 'AbortError') return; }
+    }
+
     const blob = new Blob([bytes], { type: 'application/octet-stream' });
     const url = URL.createObjectURL(blob);
     const a = Object.assign(document.createElement('a'), { href: url, download: fileName });
@@ -781,6 +818,7 @@ export function downloadFile(fileName, base64Data) {
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    if (standalone) _showDownloadToast(fileName);
 }
 
 // ── Export / Import ───────────────────────────────────────────────────────────
@@ -877,15 +915,22 @@ export async function importAllData(base64Data, isGzip) {
     });
 }
 
-export function downloadBlob(fileName, base64Data) {
+export async function downloadBlob(fileName, base64Data) {
     const bytes = Uint8Array.from(atob(base64Data), c => c.charCodeAt(0));
-    const blob = new Blob([bytes], {
-        type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
-    });
+    const docxMime = 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    const standalone = _isStandalone();
+
+    if (standalone && 'showSaveFilePicker' in window) {
+        try { await _saveWithPicker(bytes, fileName, docxMime, ['.docx']); return; }
+        catch (e) { if (e.name === 'AbortError') return; }
+    }
+
+    const blob = new Blob([bytes], { type: docxMime });
     const url = URL.createObjectURL(blob);
     const a = Object.assign(document.createElement('a'), { href: url, download: fileName });
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
+    if (standalone) _showDownloadToast(fileName);
 }

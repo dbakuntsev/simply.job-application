@@ -3,10 +3,19 @@
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Simply Job Application</title>
+    <title>Simply Opportunity Tracker</title>
     <base href="/" />
+
+    <!-- PWA -->
+    <link rel="manifest" href="manifest.webmanifest" />
+    <meta name="theme-color" content="#0a1628" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Simply OT" />
+    <link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+
     <link rel="stylesheet" href="css/bootstrap.min.css" />
-    <link rel="stylesheet" href="css/app.css?v=28DA19C355FE05C7531CECD32D20028DF167594299E0B45CA9A1D6153578E3CF" />
+    <link rel="stylesheet" href="css/app.css?v=7661CE1F1917B1DFFFB5AD293392DF9675E1CDBEE2735D15C6ADDDD1596EBF4F" />
     <link rel="stylesheet" href="_content/Radzen.Blazor/css/default.css" />
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/select2/4.0.13/css/select2.min.css" integrity="sha512-nMNlpuaDPrqlEls3IX/Q56H36qvBASwb3ipuo3MxeWbsQB1881ox0cRv7UPTgBlriqoynt35KjEwgGUeUXIPnw==" crossorigin="anonymous" />
     <script>
@@ -20,6 +29,19 @@
                     l.pathname.slice(0, -1) + decoded + l.hash);
             }
         }(window.location));
+
+        // Capture beforeinstallprompt early — before Blazor and pwa.js load.
+        // pwa.js reads window.__pwaInstallPrompt and registers __pwaInstallPromptCallback.
+        window.__pwaInstallPrompt = null;
+        window.addEventListener('beforeinstallprompt', function (e) {
+            e.preventDefault();
+            window.__pwaInstallPrompt = e;
+            if (window.__pwaInstallPromptCallback) window.__pwaInstallPromptCallback();
+        });
+        window.addEventListener('appinstalled', function () {
+            window.__pwaInstallPrompt = null;
+            if (window.__pwaInstalledCallback) window.__pwaInstalledCallback();
+        });
     </script>
 </head>
 <body>
@@ -60,5 +82,12 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.0/min/vs/loader.min.js" integrity="sha512-ZG31AN9z/CQD1YDDAK4RUAvogwbJHv6bHrumrnMLzdCrVu4HeAqrUX7Jsal/cbUwXGfaMUNmQU04tQ8XXl5Znw==" crossorigin="anonymous"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.52.0/min/vs/editor/editor.main.js" integrity="sha512-Cd0FcDNMbrE3B7q3TuC3rK7HXtHENbHyR+O+tN4sDlHL/V/M34lHkHak0Vg8Ymg3/Bxt+R88RGBgD3t3OaTzUQ==" crossorigin="anonymous"></script>
     <script src="_framework/blazor.webassembly.js"></script>
+    <script>
+        // Register service worker for PWA support (production only — the dev stub is a no-op).
+        if ('serviceWorker' in navigator) {
+            navigator.serviceWorker.register('service-worker.js')
+                .catch(function (err) { console.warn('[PWA] Service worker registration failed:', err); });
+        }
+    </script>
 </body>
 </html>

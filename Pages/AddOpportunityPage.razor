@@ -1,10 +1,10 @@
-@page "/organizations/{OrgId}/opportunities/new"
+﻿@page "/organizations/{OrgId}/opportunities/new"
 @inherits NavigationGuardBase
 @inject IIndexedDbService Db
 @inject IDataSyncService DataSync
 @inject NavigationManager Nav
 
-<PageTitle>New Opportunity — Simply Job Application</PageTitle>
+<PageTitle>New Opportunity — Simply Opportunity Tracker</PageTitle>
 
 <NavigationLock OnBeforeInternalNavigation="HandleLocationChanging" />
 <NavigationGuardModal Show="_showGuardModal" StayLabel="@StayLabel" LeaveLabel="@LeaveLabel"

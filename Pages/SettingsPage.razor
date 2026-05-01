@@ -1,9 +1,9 @@
-@page "/settings"
+﻿@page "/settings"
 @inherits NavigationGuardBase
 @inject IIndexedDbService Db
 @inject IAiProviderFactory Providers
 
-<PageTitle>Settings — Simply Job Application</PageTitle>
+<PageTitle>Settings — Simply Opportunity Tracker</PageTitle>
 
 <NavigationLock OnBeforeInternalNavigation="HandleLocationChanging" />
 <NavigationGuardModal Show="_showGuardModal" StayLabel="@StayLabel" LeaveLabel="@LeaveLabel"
