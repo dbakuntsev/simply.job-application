@@ -50,7 +50,7 @@ else
                     var orgName = OrgName(opp.OrganizationId);
                     <tr style="cursor:pointer" @onclick="() => NavigateToOpp(opp.Id)">
                         <td>
-                            <a href="/organizations/@opp.OrganizationId" @onclick:stopPropagation>
+                            <a href="organizations/@opp.OrganizationId" @onclick:stopPropagation>
                                 @Highlight(orgName)
                             </a>
                         </td>
@@ -158,5 +158,5 @@ else
         _ => wa.ToString(),
     };
 
-    private void NavigateToOpp(string id) => Nav.NavigateTo("/opportunities/" + id);
+    private void NavigateToOpp(string id) => Nav.NavigateTo("opportunities/" + id);
 }

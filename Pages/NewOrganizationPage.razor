@@ -12,7 +12,7 @@
 
 <nav aria-label="breadcrumb" class="mb-3">
     <ol class="breadcrumb">
-        <li class="breadcrumb-item"><a href="/organizations">Organizations</a></li>
+        <li class="breadcrumb-item"><a href="organizations">Organizations</a></li>
         <li class="breadcrumb-item active">New Organization</li>
     </ol>
 </nav>
@@ -121,7 +121,7 @@
     private void Cancel()
     {
         _saved = true;
-        Nav.NavigateTo("/organizations");
+        Nav.NavigateTo("organizations");
     }
 
     private void ValidateName()
@@ -148,7 +148,7 @@
             await Db.SaveOrganizationAsync(_org);
             await DataSync.BroadcastAsync("organization", _org.Id, "created");
             _saved = true;
-            Nav.NavigateTo($"/organizations/{_org.Id}");
+            Nav.NavigateTo($"organizations/{_org.Id}");
         }
         catch (Exception ex)
         {

@@ -9,7 +9,7 @@
 
 <div class="d-flex justify-content-between align-items-center mb-4">
     <h4 class="mb-0">Organizations</h4>
-    <button class="btn btn-primary" @onclick='() => Nav.NavigateTo("/organizations/new")'>
+    <button class="btn btn-primary" @onclick='() => Nav.NavigateTo("organizations/new")'>
         + New Organization
     </button>
 </div>
@@ -22,7 +22,7 @@ else if (_orgs.Count == 0)
 {
     <div class="alert alert-info d-flex align-items-center gap-3">
         <span>No organizations yet — add one to get started</span>
-        <button class="btn btn-primary btn-sm" @onclick='() => Nav.NavigateTo("/organizations/new")'>
+        <button class="btn btn-primary btn-sm" @onclick='() => Nav.NavigateTo("organizations/new")'>
             New Organization
         </button>
     </div>
@@ -56,7 +56,7 @@ else
             <tbody>
                 @foreach (var org in filtered)
                 {
-                    <tr style="cursor:pointer" @onclick='() => Nav.NavigateTo($"/organizations/{org.Id}")'>
+                    <tr style="cursor:pointer" @onclick='() => Nav.NavigateTo($"organizations/{org.Id}")'>
                         <td class="fw-semibold">@HighlightMatch(org.Name, _filter)</td>
                         <td>@HighlightMatch(org.Industry, _filter)</td>
                         <td>@HighlightMatch(org.Size, _filter)</td>

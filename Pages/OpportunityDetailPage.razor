@@ -35,11 +35,11 @@ else
 {
     <nav aria-label="breadcrumb" class="mb-3">
         <ol class="breadcrumb">
-            <li class="breadcrumb-item"><a href="/organizations">Organizations</a></li>
+            <li class="breadcrumb-item"><a href="organizations">Organizations</a></li>
             @if (_org is not null)
             {
                 <li class="breadcrumb-item">
-                    <a href="/organizations/@_opp.OrganizationId">@_org.Name</a>
+                    <a href="organizations/@_opp.OrganizationId">@_org.Name</a>
                 </li>
             }
             <li class="breadcrumb-item active">@_opp.Role</li>
@@ -76,7 +76,7 @@ else
                     <dd class="col-sm-9">
                         @if (_org is not null)
                         {
-                            <a href="/organizations/@_opp.OrganizationId">@_org.Name</a>
+                            <a href="organizations/@_opp.OrganizationId">@_org.Name</a>
                         }
                         else { <span>—</span> }
                     </dd>
@@ -912,7 +912,7 @@ else
         session.Role == _opp.Role &&
         session.RoleDescription == _opp.RoleDescription;
 
-    private void NavigateToSession(string id) => Nav.NavigateTo("/history/" + id);
+    private void NavigateToSession(string id) => Nav.NavigateTo("history/" + id);
 
     // ── Correspondence helpers ────────────────────────────────────────────────
 
@@ -1134,7 +1134,7 @@ else
         AppState.ContextualOppId      = _opp.Id;
         AppState.ContextualOppRole    = _opp.Role;
         AppState.ContextualOppRoleDesc = _opp.RoleDescription;
-        Nav.NavigateTo("/evaluate");
+        Nav.NavigateTo("evaluate");
     }
 
     // ── Edit mode ─────────────────────────────────────────────────────────────
