@@ -22,7 +22,7 @@
                                           CssClass="position-absolute top-0 start-0 end-0 bottom-0" />
                 </div>
                 <div class="modal-footer py-2">
-                    <span class="text-muted small me-auto">Left: selected version &nbsp;|&nbsp; Right: latest version</span>
+                    <span class="text-muted small me-auto">@FooterLabel</span>
                     <div class="form-check form-switch align-self-center me-3 mb-0">
                         <input class="form-check-input" type="checkbox" id="diff-wrap-toggle"
                                @bind="_wordWrap" @bind:after="ApplyWordWrapAsync" />
@@ -39,6 +39,7 @@
     [Parameter] public bool Show { get; set; }
     [Parameter] public string OriginalText { get; set; } = "";
     [Parameter] public string ModifiedText { get; set; } = "";
+    [Parameter] public string FooterLabel { get; set; } = "Left: selected version | Right: latest version";
     [Parameter] public EventCallback OnClose { get; set; }
 
     private StandaloneDiffEditor? _editor;

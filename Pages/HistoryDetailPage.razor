@@ -1,6 +1,7 @@
 ﻿@page "/history/{Id}"
 @implements IAsyncDisposable
 @inject IIndexedDbService Db
+@inject IDocxService Docx
 @inject IDataSyncService DataSync
 @inject NavigationManager Nav
 @inject IJSRuntime JS
@@ -146,10 +147,19 @@ else
                                     <p class="text-muted small mb-0">Tailored Resume</p>
                                     <div class="d-flex justify-content-between align-items-center">
                                         <span class="text-success">✓ Generated</span>
-                                        <button class="btn btn-sm btn-outline-primary ms-2"
-                                                @onclick="DownloadTailoredResumeAsync">
-                                            Download DOCX
-                                        </button>
+                                        <div class="d-flex gap-2 ms-2">
+                                            @if (_resumeVersion is not null)
+                                            {
+                                                <button class="btn btn-sm btn-outline-secondary"
+                                                        @onclick="StartCompareAsync">
+                                                    Compare
+                                                </button>
+                                            }
+                                            <button class="btn btn-sm btn-outline-primary"
+                                                    @onclick="DownloadTailoredResumeAsync">
+                                                Download DOCX
+                                            </button>
+                                        </div>
                                     </div>
                                 </div>
                             }
@@ -277,6 +287,12 @@ else
     }
 }
 
+<ResumeDiffModal Show="@_showDiff"
+                 OriginalText="@_diffOriginal"
+                 ModifiedText="@_diffModified"
+                 FooterLabel="@_diffFooterLabel"
+                 OnClose="@(() => _showDiff = false)" />
+
 <ConfirmDeleteModal Show="@_showDeleteModal"
                     Title="Delete Session"
                     Message="Delete this session and its generated files? This action cannot be undone."
@@ -302,6 +318,10 @@ else
     bool _loading = true;
     bool _showDeleteModal;
     bool _showDeletionAlert;
+    bool _showDiff;
+    string _diffOriginal = "";
+    string _diffModified = "";
+    string _diffFooterLabel = "";
     string _deletionMessage = "";
     string? _error;
 
@@ -360,6 +380,18 @@ else
         await Db.DeleteSessionAsync(_session.Id);
         await DataSync.BroadcastAsync("session", _session.Id, "deleted");
         Nav.NavigateTo("history");
+    }
+
+    private async Task StartCompareAsync()
+    {
+        if (_resumeVersion is null || _session?.TailoredResumeFileId is null) return;
+        var tailored = await Db.GetFileAsync(_session.TailoredResumeFileId);
+        if (tailored is null) { _error = "Tailored resume file no longer in storage."; return; }
+
+        _diffOriginal = Docx.ExtractTextAsMarkdown(Convert.FromBase64String(_resumeVersion.FileDataBase64));
+        _diffModified = Docx.ExtractTextAsMarkdown(Convert.FromBase64String(tailored.DataBase64));
+        _diffFooterLabel = $"Left: {_session.BaseResumeNameSnapshot} v{_session.BaseResumeVersionNumberSnapshot}  |  Right: Tailored Resume";
+        _showDiff = true;
     }
 
     private async Task DownloadBaseResumeAsync()

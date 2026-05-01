@@ -550,9 +550,14 @@
                             <span>Tailored Resume</span>
                             @if (_tailoredResumeFileId is not null)
                             {
-                                <button class="btn btn-sm btn-primary" @onclick="DownloadTailoredResume">
-                                    Download DOCX
-                                </button>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-sm btn-outline-secondary" @onclick="@(() => _showDiff = true)">
+                                        Compare
+                                    </button>
+                                    <button class="btn btn-sm btn-primary" @onclick="DownloadTailoredResume">
+                                        Download DOCX
+                                    </button>
+                                </div>
                             }
                         </div>
                         <div class="card-body text-muted small">
@@ -605,6 +610,13 @@
 <!-- ══════════════════════════════════════════════════════════════════════ -->
 <!-- MODALS                                                                -->
 <!-- ══════════════════════════════════════════════════════════════════════ -->
+
+<!-- ── Resume Diff Modal ──────────────────────────────────────── -->
+<ResumeDiffModal Show="@_showDiff"
+                 OriginalText="@(_resumeMarkdown ?? "")"
+                 ModifiedText="@(_materials?.ResumeMarkdown ?? "")"
+                 FooterLabel="@($"Left: {_selectedResumeName} v{_selectedVersionNumber}  |  Right: Tailored Resume")"
+                 OnClose="@(() => _showDiff = false)" />
 
 <!-- ── Resume Picker Modal ────────────────────────────────────── -->
 @if (_showResumePicker)
@@ -995,6 +1007,7 @@
     byte[]? _resumeBytes;
     string? _resumeMarkdown;
     string? _sessionId;
+    bool _showDiff;
     string? _pendingDeleteTailoredFileId;
     string? _pendingDeleteCoverLetterFileId;
 
