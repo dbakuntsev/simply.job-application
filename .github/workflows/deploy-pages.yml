@@ -57,6 +57,29 @@ jobs:
           $content = $content -replace '"version":\s*"[^"]*"', ('"version": "' + $version + '"')
           [IO.File]::WriteAllText($file, $content, [Text.Encoding]::UTF8)
 
+      # dotnet publish computes SHA-256 hashes for every asset and writes them
+      # into service-worker-assets.js.  The two steps above modify index.html
+      # and manifest.webmanifest AFTER those hashes are computed, so the hashes
+      # are now stale.  The production SW passes each hash as an SRI integrity
+      # value when pre-caching; a mismatch causes a hard install failure.
+      # Re-compute and patch just the two affected entries here.
+      - name: Patch SW asset hashes for modified files
+        shell: pwsh
+        run: |
+          function Update-SwHash($assetsJs, $url, $filePath) {
+              $bytes  = [IO.File]::ReadAllBytes($filePath)
+              $hash   = [Security.Cryptography.SHA256]::Create().ComputeHash($bytes)
+              $sri    = 'sha256-' + [Convert]::ToBase64String($hash)
+              $js     = Get-Content $assetsJs -Raw -Encoding UTF8
+              $escaped = [Regex]::Escape($url)
+              # Matches the hash value immediately before the url key for this asset.
+              $js     = $js -replace "(?<=""hash"":"")[^""]*(?="",""url"":""$escaped"")", $sri
+              [IO.File]::WriteAllText($assetsJs, $js, [Text.Encoding]::UTF8)
+          }
+          $base = './publish/wwwroot'
+          Update-SwHash "$base/service-worker-assets.js" 'index.html'           "$base/index.html"
+          Update-SwHash "$base/service-worker-assets.js" 'manifest.webmanifest' "$base/manifest.webmanifest"
+
       # Jekyll (the default Pages processor) silently drops folders whose names
       # start with an underscore — which includes _framework where the Blazor
       # runtime lives.  An empty .nojekyll file disables Jekyll entirely.
