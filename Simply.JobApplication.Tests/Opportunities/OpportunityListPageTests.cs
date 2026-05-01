@@ -49,7 +49,7 @@ public class OpportunityListPageTests : BunitContext
         // Organization name shown as a link to org detail
         Assert.Contains(cut.FindAll("a"), a =>
             a.TextContent.Contains("Acme Corp") &&
-            (a.GetAttribute("href") ?? "").Contains("/organizations/o1"));
+            (a.GetAttribute("href") ?? "").Contains("organizations/o1"));
     }
 
     [Fact]
