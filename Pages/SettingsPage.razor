@@ -175,6 +175,90 @@
     </div>
 }
 
+@if (_showValidationModal && _validationResult is not null)
+{
+    var hasErrors   = _validationResult.HasErrors;
+    var hasWarnings = _validationResult.HasWarnings;
+    var errCount    = _validationResult.Errors.Count;
+    var warnCount   = _validationResult.Warnings.Count;
+    var summary = (hasErrors, hasWarnings) switch {
+        (true,  true)  => $"Found {errCount} error{(errCount  == 1 ? "" : "s")} and {warnCount} warning{(warnCount == 1 ? "" : "s")} in the backup file.",
+        (true,  false) => $"Found {errCount} error{(errCount  == 1 ? "" : "s")} in the backup file.",
+        _              => $"Found {warnCount} warning{(warnCount == 1 ? "" : "s")} in the backup file."
+    };
+
+    <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4);z-index:1055">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(hasErrors ? "Backup Validation Issues" : "Backup Validation Warnings")</h5>
+                    <button class="btn-close" @onclick="CancelValidationAsync"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="text-muted small mb-3">@summary</p>
+
+                    @if (hasErrors)
+                    {
+                        <div class="mb-3">
+                            <button class="btn btn-link p-0 fw-semibold text-danger text-decoration-none"
+                                    @onclick="() => _errorsExpanded = !_errorsExpanded">
+                                @(_errorsExpanded ? "▾" : "▸") Errors (@errCount)
+                            </button>
+                            @if (_errorsExpanded)
+                            {
+                                <ul class="mt-2 mb-0 small" style="max-height:15rem;overflow-y:auto">
+                                    @foreach (var msg in _validationResult.Errors)
+                                    {
+                                        <li class="text-danger-emphasis font-monospace">@msg</li>
+                                    }
+                                </ul>
+                            }
+                        </div>
+                    }
+
+                    @if (hasWarnings)
+                    {
+                        <div class="@(hasErrors ? "mb-0" : "mb-3")">
+                            <button class="btn btn-link p-0 fw-semibold text-warning-emphasis text-decoration-none"
+                                    @onclick="() => _warningsExpanded = !_warningsExpanded">
+                                @(_warningsExpanded ? "▾" : "▸") Warnings (@warnCount)
+                            </button>
+                            @if (_warningsExpanded)
+                            {
+                                <ul class="mt-2 mb-0 small" style="max-height:15rem;overflow-y:auto">
+                                    @foreach (var msg in _validationResult.Warnings)
+                                    {
+                                        <li class="font-monospace">@msg</li>
+                                    }
+                                </ul>
+                            }
+                        </div>
+                    }
+
+                    @if (hasErrors)
+                    {
+                        <div class="alert alert-danger mb-0 mt-3">
+                            <strong>Warning:</strong> Importing a backup with errors may cause runtime failures,
+                            missing records, or data corruption. Proceed only if you understand and accept these risks.
+                        </div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CancelValidationAsync">Cancel</button>
+                    @if (hasErrors)
+                    {
+                        <button class="btn btn-danger" @onclick="ConfirmValidation">Import Anyway</button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-primary" @onclick="ConfirmValidation">Import</button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
 @if (_confirmImport)
 {
     <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4);z-index:1055">
@@ -182,7 +266,7 @@
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title">Import Backup</h5>
-                    <button class="btn-close" @onclick="CancelImport"></button>
+                    <button class="btn-close" @onclick="CancelImportAsync"></button>
                 </div>
                 <div class="modal-body">
                     <p class="fw-semibold text-danger mb-2">This will replace all existing data.</p>
@@ -191,7 +275,7 @@
                         the contents of the backup. Your settings will not be affected.</p>
                 </div>
                 <div class="modal-footer">
-                    <button class="btn btn-secondary" @onclick="CancelImport">Cancel</button>
+                    <button class="btn btn-secondary" @onclick="CancelImportAsync">Cancel</button>
                     <button class="btn btn-danger" @onclick="PerformImportAsync">Yes, import and replace</button>
                 </div>
             </div>
@@ -219,9 +303,12 @@
 
     bool _exporting;
     bool _confirmImport;
-    byte[]? _importBytes;
-    bool _importIsGzip;
     int _importInputKey;
+
+    BackupValidationResult? _validationResult;
+    bool _showValidationModal;
+    bool _errorsExpanded;
+    bool _warningsExpanded;
 
     IReadOnlyList<AiModel> _models = Array.Empty<AiModel>();
     AppSettings _settings = new();
@@ -369,43 +456,78 @@
 
     async Task HandleImportFileSelected(InputFileChangeEventArgs e)
     {
-        _error = null;
-        _importBytes = null;
+        _error           = null;
+        _validationResult = null;
         try
         {
             using var ms = new MemoryStream();
             await e.File.OpenReadStream(maxAllowedSize: 100 * 1024 * 1024).CopyToAsync(ms);
-            _importBytes = ms.ToArray();
-            _importIsGzip = _importBytes.Length >= 2 && _importBytes[0] == 0x1f && _importBytes[1] == 0x8b;
-            _confirmImport = true;
+            var bytes   = ms.ToArray();
+            var isGzip  = bytes.Length >= 2 && bytes[0] == 0x1f && bytes[1] == 0x8b;
+            var base64  = Convert.ToBase64String(bytes);
+
+            // Throws for fatal errors (parse failure, unsupported/future schema version).
+            // Returns { Errors, Warnings } for content validation issues.
+            var result = await Db.ValidateBackupAsync(base64, isGzip);
+
+            if (result.HasIssues)
+            {
+                _validationResult  = result;
+                _errorsExpanded    = result.HasErrors;
+                _warningsExpanded  = !result.HasErrors && result.HasWarnings;
+                _showValidationModal = true;
+            }
+            else
+            {
+                _confirmImport = true;
+            }
         }
         catch (Exception ex)
         {
-            _error = $"Failed to read file: {ex.Message}";
+            _error = $"Failed to validate file: {ex.Message}";
+            await Db.ClearPendingImportAsync();
+            _importInputKey++;
         }
     }
 
-    void CancelImport()
+    // Called from the validation modal Cancel button / X button.
+    async Task CancelValidationAsync()
+    {
+        _showValidationModal = false;
+        _validationResult    = null;
+        await Db.ClearPendingImportAsync();
+        _importInputKey++;
+    }
+
+    // Called from the validation modal "Import" / "Import Anyway" button.
+    void ConfirmValidation()
+    {
+        _showValidationModal = false;
+        _validationResult    = null;
+        _confirmImport       = true;
+    }
+
+    // Called from the overwrite-confirmation modal Cancel button / X button.
+    async Task CancelImportAsync()
     {
         _confirmImport = false;
-        _importBytes = null;
+        await Db.ClearPendingImportAsync();
         _importInputKey++;
     }
 
     async Task PerformImportAsync()
     {
-        if (_importBytes is null) return;
         _confirmImport = false;
-        _error = null;
+        _error         = null;
         try
         {
-            var base64 = Convert.ToBase64String(_importBytes);
-            await Db.ImportDataAsync(base64, _importIsGzip);
+            await Db.ImportMigratedDataAsync();
             await JS.InvokeVoidAsync("eval", "location.reload()");
         }
         catch (Exception ex)
         {
             _error = $"Import failed: {ex.Message}";
+            await Db.ClearPendingImportAsync();
             _importInputKey++;
         }
     }

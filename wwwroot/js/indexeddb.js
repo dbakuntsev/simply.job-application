@@ -62,17 +62,20 @@ async function openDb() {
             // ── Version 3: postingUrl (string) → postingUrls (array) ─────────
             if (e.oldVersion < 3) {
                 const store = e.target.transaction.objectStore('opportunities');
-                const req = store.openCursor();
-                req.onsuccess = ev => {
+                store.openCursor().onsuccess = ev => {
                     const cursor = ev.target.result;
                     if (!cursor) return;
                     const opp = cursor.value;
                     if (!Array.isArray(opp.postingUrls)) {
                         opp.postingUrls = (opp.postingUrl && opp.postingUrl.trim()) ? [opp.postingUrl] : [];
                         delete opp.postingUrl;
-                        cursor.update(opp);
+                        // Wait for the update to complete before advancing — calling cursor.continue()
+                        // immediately after cursor.update() (without awaiting onsuccess) causes the
+                        // write to be silently dropped in Chromium-based engines.
+                        cursor.update(opp).onsuccess = () => cursor.continue();
+                    } else {
+                        cursor.continue();
                     }
-                    cursor.continue();
                 };
             }
         };
@@ -848,6 +851,16 @@ const _backupStores = [
     'correspondence', 'correspondenceFiles',
 ];
 
+// Pending migrated payload cached between validateBackup() and importMigratedData()
+let _pendingImport = null;
+
+const _VALID_OPP_STAGES        = ['Open','NotInterested','NotQualified','Applied','Interview',
+                                   'InProgress','Offer','Accepted','Rejected','Withdrawn'];
+const _VALID_WORK_ARRANGEMENTS = ['Remote','Hybrid','OnSite'];
+const _VALID_CORR_TYPES        = ['ResumeSubmitted','Email','PhoneCall','VideoCall','Text','Interview','Other'];
+const _VALID_CORR_DIRS         = ['Incoming','Outgoing'];
+const _VALID_HIST_SRCS         = ['DirectEdit','StageQuickEdit','EvaluateAndGenerate','QualificationExtraction'];
+
 export async function exportAllData() {
     const db = await openDb();
     const payload = { schemaVersion: DB_VERSION, exportedAt: new Date().toISOString(), stores: {} };
@@ -930,6 +943,313 @@ export async function importAllData(base64Data, isGzip) {
             for (const record of payload.stores[name]) store.put(record);
         }
     });
+}
+
+// ── Backup Validation ─────────────────────────────────────────────────────────
+
+// ── Private validation helpers ────────────────────────────────────────────────
+
+function _bvIsStr(v)    { return typeof v === 'string' && v.trim() !== ''; }
+function _bvIdent(r, i) { return _bvIsStr(r.id) ? r.id : `index:${i}`; }
+function _bvIdSet(recs) { return new Set(recs.map(r => r.id).filter(v => _bvIsStr(v))); }
+
+function _bvReqStr(out, store, id, r, ...fields) {
+    for (const f of fields)
+        if (!_bvIsStr(r[f]))
+            out.push(`${store}[${id}]: missing required field '${f}'`);
+}
+
+function _bvReqNum(out, store, id, r, ...fields) {
+    for (const f of fields)
+        if (typeof r[f] !== 'number')
+            out.push(`${store}[${id}]: missing required field '${f}'`);
+}
+
+function _bvReqArr(out, store, id, r, ...fields) {
+    for (const f of fields)
+        if (!Array.isArray(r[f]))
+            out.push(`${store}[${id}]: missing required field '${f}' (expected array)`);
+}
+
+function _bvFkErr(errors, store, id, field, value, ids, target) {
+    if (_bvIsStr(value) && !ids.has(value))
+        errors.push(`${store}[${id}]: ${field} '${value}' not found in ${target}`);
+}
+
+function _bvFkWarn(warnings, store, id, field, value, ids, target) {
+    if (_bvIsStr(value) && !ids.has(value))
+        warnings.push(`${store}[${id}]: ${field} '${value}' not found in ${target}`);
+}
+
+function _bvEnum(out, store, id, field, value, valid, nullable) {
+    if (nullable && value == null) return;
+    // Enums are stored as integers by default (C# System.Text.Json without JsonStringEnumConverter).
+    // Accept both numeric index (0-based) and string name.
+    const ok = typeof value === 'number'
+        ? Number.isInteger(value) && value >= 0 && value < valid.length
+        : valid.includes(value);
+    if (!ok) out.push(`${store}[${id}]: invalid ${field} '${value}'`);
+}
+
+function _bvUniqIds(out, store, recs) {
+    const seen = new Set();
+    for (let i = 0; i < recs.length; i++) {
+        const r = recs[i];
+        if (!_bvIsStr(r.id)) continue;
+        if (seen.has(r.id)) out.push(`${store}: duplicate id '${r.id}'`);
+        else seen.add(r.id);
+    }
+}
+
+function _bvValidateLookup(recs, store, errors, warnings) {
+    _bvUniqIds(errors, store, recs);
+    const seenVals = new Set();
+    for (let i = 0; i < recs.length; i++) {
+        const r = recs[i], id = _bvIdent(r, i);
+        _bvReqStr(errors, store, id, r, 'id', 'value');
+        if (_bvIsStr(r.value)) {
+            const norm = r.value.trim().toLowerCase();
+            if (seenVals.has(norm)) warnings.push(`${store}[${id}]: duplicate value '${r.value}'`);
+            else seenVals.add(norm);
+        }
+    }
+}
+
+function _bvValidateAll(stores, errors, warnings) {
+    const orgIds  = _bvIdSet(stores.organizations);
+    const conIds  = _bvIdSet(stores.contacts);
+    const oppIds  = _bvIdSet(stores.opportunities);
+    const corrIds = _bvIdSet(stores.correspondence);
+    const resIds  = _bvIdSet(stores.baseResumes);
+    const revIds  = _bvIdSet(stores.baseResumeVersions);
+    const sessIds = _bvIdSet(stores.sessions);
+    const fileIds = _bvIdSet(stores.files);
+
+    // ── organizations ─────────────────────────────────────────────────────────
+    _bvUniqIds(errors, 'organizations', stores.organizations);
+    for (let i = 0; i < stores.organizations.length; i++) {
+        const r = stores.organizations[i], id = _bvIdent(r, i);
+        _bvReqStr(errors, 'organizations', id, r, 'id', 'name', 'createdAt', 'updatedAt');
+    }
+
+    // ── contacts ──────────────────────────────────────────────────────────────
+    _bvUniqIds(errors, 'contacts', stores.contacts);
+    for (let i = 0; i < stores.contacts.length; i++) {
+        const r = stores.contacts[i], id = _bvIdent(r, i);
+        _bvReqStr(errors, 'contacts', id, r, 'id', 'organizationId', 'fullName', 'createdAt', 'updatedAt');
+        _bvFkErr(errors, 'contacts', id, 'organizationId', r.organizationId, orgIds, 'organizations');
+    }
+
+    // ── contactOpportunityRoles ───────────────────────────────────────────────
+    {
+        const seenKeys = new Set();
+        for (let i = 0; i < stores.contactOpportunityRoles.length; i++) {
+            const r = stores.contactOpportunityRoles[i], id = `index:${i}`;
+            if (!_bvIsStr(r.contactId))     errors.push(`contactOpportunityRoles[${id}]: missing required field 'contactId'`);
+            if (!_bvIsStr(r.opportunityId)) errors.push(`contactOpportunityRoles[${id}]: missing required field 'opportunityId'`);
+            if (!Array.isArray(r.roles))    errors.push(`contactOpportunityRoles[${id}]: missing required field 'roles' (expected array)`);
+            if (_bvIsStr(r.contactId) && _bvIsStr(r.opportunityId)) {
+                const key = `${r.contactId}|${r.opportunityId}`;
+                if (seenKeys.has(key)) errors.push(`contactOpportunityRoles: duplicate key [${r.contactId}, ${r.opportunityId}]`);
+                else seenKeys.add(key);
+                _bvFkErr(errors, 'contactOpportunityRoles', id, 'contactId',    r.contactId,    conIds, 'contacts');
+                _bvFkErr(errors, 'contactOpportunityRoles', id, 'opportunityId', r.opportunityId, oppIds, 'opportunities');
+            }
+        }
+    }
+
+    // ── opportunities ─────────────────────────────────────────────────────────
+    _bvUniqIds(errors, 'opportunities', stores.opportunities);
+    for (let i = 0; i < stores.opportunities.length; i++) {
+        const r = stores.opportunities[i], id = _bvIdent(r, i);
+        _bvReqStr(errors, 'opportunities', id, r, 'id', 'organizationId', 'role', 'roleDescription', 'createdAt', 'updatedAt');
+        _bvReqArr(errors, 'opportunities', id, r, 'postingUrls', 'requiredQualifications', 'preferredQualifications');
+        _bvFkErr(errors, 'opportunities', id, 'organizationId', r.organizationId, orgIds, 'organizations');
+        _bvEnum(errors, 'opportunities', id, 'stage',           r.stage,           _VALID_OPP_STAGES,        false);
+        _bvEnum(errors, 'opportunities', id, 'workArrangement', r.workArrangement, _VALID_WORK_ARRANGEMENTS, true);
+    }
+
+    // ── opportunityFieldHistory ───────────────────────────────────────────────
+    _bvUniqIds(errors, 'opportunityFieldHistory', stores.opportunityFieldHistory);
+    for (let i = 0; i < stores.opportunityFieldHistory.length; i++) {
+        const r = stores.opportunityFieldHistory[i], id = _bvIdent(r, i);
+        _bvReqStr(errors, 'opportunityFieldHistory', id, r, 'id', 'opportunityId', 'changedAt');
+        _bvReqArr(errors, 'opportunityFieldHistory', id, r, 'changes');
+        _bvFkErr(errors, 'opportunityFieldHistory', id, 'opportunityId', r.opportunityId, oppIds, 'opportunities');
+        _bvEnum(errors, 'opportunityFieldHistory', id, 'source', r.source, _VALID_HIST_SRCS, false);
+    }
+
+    // ── correspondence ────────────────────────────────────────────────────────
+    _bvUniqIds(errors, 'correspondence', stores.correspondence);
+    for (let i = 0; i < stores.correspondence.length; i++) {
+        const r = stores.correspondence[i], id = _bvIdent(r, i);
+        _bvReqStr(errors, 'correspondence', id, r, 'id', 'opportunityId', 'occurredAt', 'createdAt', 'updatedAt');
+        _bvFkErr(errors,  'correspondence', id, 'opportunityId',   r.opportunityId,   oppIds, 'opportunities');
+        _bvFkWarn(warnings, 'correspondence', id, 'contactId',      r.contactId,       conIds, 'contacts');
+        _bvFkWarn(warnings, 'correspondence', id, 'linkedSessionId', r.linkedSessionId, sessIds, 'sessions');
+        _bvEnum(errors, 'correspondence', id, 'type',      r.type,      _VALID_CORR_TYPES, false);
+        _bvEnum(errors, 'correspondence', id, 'direction', r.direction, _VALID_CORR_DIRS,  false);
+    }
+
+    // ── correspondenceFiles ───────────────────────────────────────────────────
+    _bvUniqIds(errors, 'correspondenceFiles', stores.correspondenceFiles);
+    for (let i = 0; i < stores.correspondenceFiles.length; i++) {
+        const r = stores.correspondenceFiles[i], id = _bvIdent(r, i);
+        _bvReqStr(errors, 'correspondenceFiles', id, r, 'id', 'correspondenceId', 'fileName', 'uploadedAt');
+        _bvReqNum(errors, 'correspondenceFiles', id, r, 'fileSize');
+        if (!_bvIsStr(r.fileDataBase64))
+            errors.push(`correspondenceFiles[${id}]: missing required field 'fileDataBase64'`);
+        _bvFkErr(errors, 'correspondenceFiles', id, 'correspondenceId', r.correspondenceId, corrIds, 'correspondence');
+    }
+
+    // ── baseResumes ───────────────────────────────────────────────────────────
+    _bvUniqIds(errors, 'baseResumes', stores.baseResumes);
+    for (let i = 0; i < stores.baseResumes.length; i++) {
+        const r = stores.baseResumes[i], id = _bvIdent(r, i);
+        _bvReqStr(errors, 'baseResumes', id, r, 'id', 'name', 'createdAt', 'updatedAt');
+    }
+
+    // ── baseResumeVersions ────────────────────────────────────────────────────
+    _bvUniqIds(errors, 'baseResumeVersions', stores.baseResumeVersions);
+    for (let i = 0; i < stores.baseResumeVersions.length; i++) {
+        const r = stores.baseResumeVersions[i], id = _bvIdent(r, i);
+        _bvReqStr(errors, 'baseResumeVersions', id, r, 'id', 'resumeId', 'fileName', 'uploadedAt');
+        _bvReqNum(errors, 'baseResumeVersions', id, r, 'versionNumber');
+        if (!_bvIsStr(r.fileDataBase64))
+            errors.push(`baseResumeVersions[${id}]: missing required field 'fileDataBase64'`);
+        _bvFkErr(errors, 'baseResumeVersions', id, 'resumeId', r.resumeId, resIds, 'baseResumes');
+    }
+
+    // ── sessions ──────────────────────────────────────────────────────────────
+    _bvUniqIds(errors, 'sessions', stores.sessions);
+    for (let i = 0; i < stores.sessions.length; i++) {
+        const r = stores.sessions[i], id = _bvIdent(r, i);
+        _bvReqStr(errors, 'sessions', id, r, 'id', 'createdAt');
+        // baseResumeVersionId: required field, but can dangle by design → missing = error, dangling = warning
+        if (!_bvIsStr(r.baseResumeVersionId))
+            errors.push(`sessions[${id}]: missing required field 'baseResumeVersionId'`);
+        else
+            _bvFkWarn(warnings, 'sessions', id, 'baseResumeVersionId', r.baseResumeVersionId, revIds, 'baseResumeVersions');
+        // nullable FKs that are errors when set and not found (cascade-delete guarantees consistency)
+        _bvFkErr(errors, 'sessions', id, 'organizationId', r.organizationId, orgIds, 'organizations');
+        _bvFkErr(errors, 'sessions', id, 'opportunityId',  r.opportunityId,  oppIds, 'opportunities');
+        // nullable FKs that are warnings when set and not found (files may be independently removed)
+        _bvFkWarn(warnings, 'sessions', id, 'tailoredResumeFileId', r.tailoredResumeFileId, fileIds, 'files');
+        _bvFkWarn(warnings, 'sessions', id, 'coverLetterFileId',    r.coverLetterFileId,    fileIds, 'files');
+    }
+
+    // ── files ─────────────────────────────────────────────────────────────────
+    _bvUniqIds(errors, 'files', stores.files);
+    for (let i = 0; i < stores.files.length; i++) {
+        const r = stores.files[i], id = _bvIdent(r, i);
+        _bvReqStr(errors, 'files', id, r, 'id', 'name', 'lastUsedAt');
+        if (!_bvIsStr(r.dataBase64))
+            errors.push(`files[${id}]: missing required field 'dataBase64'`);
+    }
+
+    // ── lookup tables ─────────────────────────────────────────────────────────
+    _bvValidateLookup(stores.lookupIndustries,  'lookupIndustries',  errors, warnings);
+    _bvValidateLookup(stores.lookupContactRoles, 'lookupContactRoles', errors, warnings);
+}
+
+// ── Decode / decompress shared helper ─────────────────────────────────────────
+
+async function _bvDecode(base64Data, isGzip) {
+    const binaryStr = atob(base64Data);
+    let bytes = new Uint8Array(binaryStr.length);
+    for (let i = 0; i < binaryStr.length; i++) bytes[i] = binaryStr.charCodeAt(i);
+
+    if (!isGzip) return bytes;
+
+    const ds = new DecompressionStream('gzip');
+    const writer = ds.writable.getWriter();
+    writer.write(bytes);
+    writer.close();
+
+    const chunks = [];
+    const reader = ds.readable.getReader();
+    for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        chunks.push(value);
+    }
+    const total = chunks.reduce((s, c) => s + c.length, 0);
+    const out = new Uint8Array(total);
+    let p = 0;
+    for (const c of chunks) { out.set(c, p); p += c.length; }
+    return out;
+}
+
+// ── Public: validate, import migrated, clear ──────────────────────────────────
+
+export async function validateBackup(base64Data, isGzip) {
+    _pendingImport = null;
+
+    const bytes = await _bvDecode(base64Data, isGzip);
+
+    let payload;
+    try { payload = JSON.parse(new TextDecoder().decode(bytes)); }
+    catch (e) { throw new Error(`Failed to parse backup file: ${e.message}`); }
+
+    if (!payload || typeof payload !== 'object')
+        throw new Error('Backup file does not contain a valid JSON object.');
+
+    const sv = payload.schemaVersion;
+    if (sv === undefined || sv === null || typeof sv !== 'number' || !Number.isInteger(sv))
+        throw new Error('Backup file has no valid schemaVersion field.');
+    if (sv < 2)
+        throw new Error(`Schema version ${sv} is not supported. Only version 2 or later can be imported.`);
+    if (sv > DB_VERSION)
+        throw new Error(`Backup was created by a newer version of the app (schema version ${sv}, current: ${DB_VERSION}). Please update the app before importing.`);
+
+    // Build store map; any store absent from the backup is treated as empty.
+    const stores = {};
+    for (const name of _backupStores)
+        stores[name] = Array.isArray(payload.stores?.[name])
+            ? payload.stores[name].map(r => ({ ...r }))
+            : [];
+
+    // Migration adapter: v2 → v3 (postingUrl string → postingUrls array)
+    if (sv < 3) {
+        for (const opp of stores.opportunities) {
+            if (typeof opp.postingUrl === 'string') {
+                opp.postingUrls = opp.postingUrl ? [opp.postingUrl] : [];
+            } else if (!Array.isArray(opp.postingUrls)) {
+                opp.postingUrls = [];
+            }
+            delete opp.postingUrl;
+        }
+    }
+
+    // Cache the migrated payload for use by importMigratedData()
+    _pendingImport = { schemaVersion: DB_VERSION, stores };
+
+    const errors = [], warnings = [];
+    _bvValidateAll(stores, errors, warnings);
+    return { errors, warnings };
+}
+
+export async function importMigratedData() {
+    if (!_pendingImport) throw new Error('No pending import data. Please re-select the backup file.');
+    const payload = _pendingImport;
+    _pendingImport = null;
+
+    const storeNames = Object.keys(payload.stores).filter(n => _backupStores.includes(n));
+    const db = await openDb();
+    return new Promise((resolve, reject) => {
+        const t = db.transaction(storeNames, 'readwrite');
+        t.onerror   = () => reject(t.error);
+        t.oncomplete = () => resolve();
+        for (const name of storeNames) {
+            const store = t.objectStore(name);
+            store.clear();
+            for (const record of payload.stores[name]) store.put(record);
+        }
+    });
+}
+
+export function clearPendingImport() {
+    _pendingImport = null;
 }
 
 export async function downloadBlob(fileName, base64Data) {

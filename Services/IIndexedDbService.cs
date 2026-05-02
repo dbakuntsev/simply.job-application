@@ -100,4 +100,8 @@ public interface IIndexedDbService
 
     Task<string> ExportDataAsync();
     Task ImportDataAsync(string base64Data, bool isGzip);
+
+    Task<BackupValidationResult> ValidateBackupAsync(string base64Data, bool isGzip);
+    Task ImportMigratedDataAsync();
+    Task ClearPendingImportAsync();
 }
