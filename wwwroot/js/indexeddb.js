@@ -1,5 +1,5 @@
 const DB_NAME = 'SimplyJobApplication';
-const DB_VERSION = 2;
+const DB_VERSION = 3;
 
 let _db = null;
 
@@ -57,6 +57,23 @@ async function openDb() {
 
                 db.createObjectStore('lookupIndustries', { keyPath: 'id' });
                 db.createObjectStore('lookupContactRoles', { keyPath: 'id' });
+            }
+
+            // ── Version 3: postingUrl (string) → postingUrls (array) ─────────
+            if (e.oldVersion < 3) {
+                const store = e.target.transaction.objectStore('opportunities');
+                const req = store.openCursor();
+                req.onsuccess = ev => {
+                    const cursor = ev.target.result;
+                    if (!cursor) return;
+                    const opp = cursor.value;
+                    if (!Array.isArray(opp.postingUrls)) {
+                        opp.postingUrls = (opp.postingUrl && opp.postingUrl.trim()) ? [opp.postingUrl] : [];
+                        delete opp.postingUrl;
+                        cursor.update(opp);
+                    }
+                    cursor.continue();
+                };
             }
         };
         req.onsuccess = e => { _db = e.target.result; resolve(_db); };

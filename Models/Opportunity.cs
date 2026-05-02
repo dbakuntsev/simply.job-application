@@ -28,7 +28,7 @@ public class Opportunity : IVersioned
     public string OrganizationId { get; set; } = "";
     public string Role { get; set; } = "";
     public string RoleDescription { get; set; } = "";
-    public string PostingUrl { get; set; } = "";
+    public List<string> PostingUrls { get; set; } = new();
     public string CompensationRange { get; set; } = "";
     public WorkArrangement? WorkArrangement { get; set; }
     public OpportunityStage Stage { get; set; } = OpportunityStage.Open;

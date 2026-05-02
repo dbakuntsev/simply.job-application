@@ -16,7 +16,7 @@ public class IndexedDbService : IIndexedDbService, IAsyncDisposable
     };
 
     // Version token is replaced at build time by the InjectDependencyVersion MSBuild target.
-    private const string _moduleUrl = "./js/indexeddb.js?v=86845F83570A941550BE0F7995358C49056D793E1DFC1358D121876BF7403226";
+    private const string _moduleUrl = "./js/indexeddb.js?v=E2E9B1ED88C3F3469A131C92D20B5050CEA3ACC8FC30A647B4939419A92C2236";
 
     public IndexedDbService(IJSRuntime js) => _js = js;
 

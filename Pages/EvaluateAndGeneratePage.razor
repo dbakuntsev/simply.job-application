@@ -1963,7 +1963,7 @@
                 OrganizationId    = resolvedOrgId,
                 Role              = _role,
                 RoleDescription   = _roleDescription,
-                PostingUrl        = _saveOppPostingUrl,
+                PostingUrls       = string.IsNullOrWhiteSpace(_saveOppPostingUrl) ? new() : new List<string> { _saveOppPostingUrl },
                 CompensationRange = _saveOppCompensationRange,
                 WorkArrangement   = _saveOppWorkArrangement,
                 Stage             = OpportunityStage.Open,

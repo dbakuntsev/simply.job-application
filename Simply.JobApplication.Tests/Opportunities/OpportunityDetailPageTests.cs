@@ -9,7 +9,7 @@ public class OpportunityDetailPageTests : BunitContext
         {
             Id = id, OrganizationId = orgId, Role = "Senior Dev",
             Stage = OpportunityStage.Open,
-            PostingUrl = "https://jobs.example.com",
+            PostingUrls = new List<string> { "https://jobs.example.com" },
             CompensationRange = "$120k–$150k",
             WorkArrangement = WorkArrangement.Remote,
             CreatedAt = new DateTime(2024, 3, 1, 0, 0, 0, DateTimeKind.Utc),

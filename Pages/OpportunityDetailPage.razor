@@ -101,9 +101,13 @@ else
                     <dd class="col-sm-9">@(string.IsNullOrWhiteSpace(_opp.CompensationRange) ? "—" : _opp.CompensationRange)</dd>
                     <dt class="col-sm-3">Posting URL</dt>
                     <dd class="col-sm-9">
-                        @if (!string.IsNullOrWhiteSpace(_opp.PostingUrl))
+                        @if (_opp.PostingUrls.Count > 0)
                         {
-                            <a href="@_opp.PostingUrl" target="_blank" rel="noopener noreferrer">@_opp.PostingUrl</a>
+                            @foreach (var url in _opp.PostingUrls)
+                            {
+                                <a href="@url" title="@url" target="_blank" rel="noopener noreferrer"
+                                   style="display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">@url</a>
+                            }
                         }
                         else { <span>—</span> }
                     </dd>
@@ -148,7 +152,17 @@ else
                     </div>
                     <div class="col-12">
                         <label class="form-label fw-semibold">Posting URL</label>
-                        <input class="form-control" @bind="_editOpp.PostingUrl" placeholder="https://" />
+                        @for (int i = 0; i < _editUrls.Count; i++)
+                        {
+                            var idx = i;
+                            <div class="d-flex gap-2 mb-2">
+                                <input class="form-control" @bind="_editUrls[idx]" placeholder="https://" />
+                                <button type="button" class="btn btn-outline-danger btn-sm px-2"
+                                        @onclick="() => _editUrls.RemoveAt(idx)">×</button>
+                            </div>
+                        }
+                        <button type="button" class="btn btn-outline-secondary btn-sm"
+                                @onclick="() => _editUrls.Add(string.Empty)">+ Add URL</button>
                     </div>
                 </div>
                 @if (_editSaveError is not null)
@@ -719,7 +733,20 @@ else
                                             {
                                                 <div>
                                                     <span class="fw-semibold">@fc.FieldName:</span>
-                                                    <span class="text-muted">@fc.OldValue</span>
+                                                    @if (fc.OldValue?.StartsWith("[") == true)
+                                                    {
+                                                        var items = JsonSerializer.Deserialize<List<string>>(fc.OldValue);
+                                                        <ul class="mb-0 ps-3">
+                                                            @foreach (var item in items ?? new())
+                                                            {
+                                                                <li class="text-muted">@item</li>
+                                                            }
+                                                        </ul>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="text-muted">@fc.OldValue</span>
+                                                    }
                                                 </div>
                                             }
                                         </td>
@@ -773,6 +800,7 @@ else
     private string? _editSaveError;
     private string _editStageStr = "";
     private string _editWorkArrangementStr = "";
+    private List<string> _editUrls = new();
     private List<string> _editRequired = new();
     private List<string> _editPreferred = new();
 
@@ -829,7 +857,7 @@ else
     private bool EditModeDirty => _isEditing && _opp is not null && (
         _editOpp.Role != _opp.Role ||
         _editOpp.RoleDescription != _opp.RoleDescription ||
-        _editOpp.PostingUrl != _opp.PostingUrl ||
+        !_editUrls.Where(u => !string.IsNullOrWhiteSpace(u)).SequenceEqual(_opp.PostingUrls) ||
         _editOpp.CompensationRange != _opp.CompensationRange ||
         _editStageStr != _opp.Stage.ToString() ||
         _editWorkArrangementStr != (_opp.WorkArrangement?.ToString() ?? "") ||
@@ -1149,7 +1177,7 @@ else
             OrganizationId = _opp.OrganizationId,
             Role = _opp.Role,
             RoleDescription = _opp.RoleDescription,
-            PostingUrl = _opp.PostingUrl,
+            PostingUrls = new List<string>(_opp.PostingUrls),
             CompensationRange = _opp.CompensationRange,
             Stage = _opp.Stage,
             WorkArrangement = _opp.WorkArrangement,
@@ -1160,6 +1188,7 @@ else
         };
         _editStageStr = _opp.Stage.ToString();
         _editWorkArrangementStr = _opp.WorkArrangement?.ToString() ?? "";
+        _editUrls = _opp.PostingUrls.Count > 0 ? new List<string>(_opp.PostingUrls) : new List<string> { "" };
         _editRequired = _opp.RequiredQualifications.ToList();
         _editPreferred = _opp.PreferredQualifications.ToList();
         _editSaveError = null;
@@ -1199,8 +1228,9 @@ else
             changes.Add(new FieldChange { FieldName = "WorkArrangement", OldValue = _opp.WorkArrangement is null ? "" : WorkArrangementLabel(_opp.WorkArrangement.Value) });
         if (_editOpp.CompensationRange != _opp.CompensationRange)
             changes.Add(new FieldChange { FieldName = "CompensationRange", OldValue = _opp.CompensationRange });
-        if (_editOpp.PostingUrl != _opp.PostingUrl)
-            changes.Add(new FieldChange { FieldName = "PostingUrl", OldValue = _opp.PostingUrl });
+        var cleanedUrls = _editUrls.Where(u => !string.IsNullOrWhiteSpace(u)).ToList();
+        if (!cleanedUrls.SequenceEqual(_opp.PostingUrls))
+            changes.Add(new FieldChange { FieldName = "PostingUrls", OldValue = JsonSerializer.Serialize(_opp.PostingUrls) });
         if (!_editRequired.SequenceEqual(_opp.RequiredQualifications))
             changes.Add(new FieldChange { FieldName = "RequiredQualifications", OldValue = JsonSerializer.Serialize(_opp.RequiredQualifications) });
         if (!_editPreferred.SequenceEqual(_opp.PreferredQualifications))
@@ -1208,6 +1238,7 @@ else
 
         _editOpp.Stage = newStage;
         _editOpp.WorkArrangement = newWa;
+        _editOpp.PostingUrls = cleanedUrls;
         _editOpp.RequiredQualifications = _editRequired.Where(q => !string.IsNullOrWhiteSpace(q)).ToArray();
         _editOpp.PreferredQualifications = _editPreferred.Where(q => !string.IsNullOrWhiteSpace(q)).ToArray();
         _editOpp.UpdatedAt = DateTime.UtcNow;

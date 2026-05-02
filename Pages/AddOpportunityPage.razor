@@ -69,7 +69,17 @@ else
                 </div>
                 <div class="col-12">
                     <label class="form-label fw-semibold">Posting URL</label>
-                    <input class="form-control" @bind="_opp.PostingUrl" placeholder="https://" />
+                    @for (int i = 0; i < _urls.Count; i++)
+                    {
+                        var idx = i;
+                        <div class="d-flex gap-2 mb-2">
+                            <input class="form-control" @bind="_urls[idx]" placeholder="https://" />
+                            <button type="button" class="btn btn-outline-danger btn-sm px-2"
+                                    @onclick="() => _urls.RemoveAt(idx)">×</button>
+                        </div>
+                    }
+                    <button type="button" class="btn btn-outline-secondary btn-sm"
+                            @onclick="() => _urls.Add(string.Empty)">+ Add URL</button>
                 </div>
                 <div class="col-12">
                     <label class="form-label fw-semibold">Role Description</label>
@@ -100,6 +110,7 @@ else
     private Organization? _org;
     private readonly Opportunity _opp = new();
     private string _workArrangementStr = "";
+    private List<string> _urls = new() { "" };
     private bool _loading = true;
     private bool _saving;
     private bool _saved;
@@ -113,7 +124,7 @@ else
         !_saved && (
         !string.IsNullOrWhiteSpace(_opp.Role) ||
         !string.IsNullOrWhiteSpace(_opp.RoleDescription) ||
-        !string.IsNullOrWhiteSpace(_opp.PostingUrl) ||
+        _urls.Any(u => !string.IsNullOrWhiteSpace(u)) ||
         !string.IsNullOrWhiteSpace(_opp.CompensationRange) ||
         !string.IsNullOrWhiteSpace(_workArrangementStr));
 
@@ -158,6 +169,7 @@ else
             "OnSite" => WorkArrangement.OnSite,
             _ => null,
         };
+        _opp.PostingUrls = _urls.Where(u => !string.IsNullOrWhiteSpace(u)).ToList();
         _opp.CreatedAt = DateTime.UtcNow;
         _opp.UpdatedAt = DateTime.UtcNow;
 
