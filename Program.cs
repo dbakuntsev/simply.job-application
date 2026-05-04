@@ -16,6 +16,7 @@ builder.Services.AddScoped<IDocxService, DocxService>();
 builder.Services.AddScoped<AppStateService>();
 builder.Services.AddScoped<AppStartupService>();
 builder.Services.AddScoped<IAiProviderFactory, AiProviderFactory>();
+builder.Services.AddScoped<IDemoDataService, DemoDataService>();
 builder.Services.AddScoped<IPwaService, PwaService>();
 builder.Services.AddScoped(_ => new HttpClient { Timeout = TimeSpan.FromMinutes(10) });
 

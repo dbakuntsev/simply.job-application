@@ -2,6 +2,7 @@
 @inherits NavigationGuardBase
 @inject IIndexedDbService Db
 @inject IAiProviderFactory Providers
+@inject IDemoDataService Demo
 
 <PageTitle>Settings — Simply Opportunity Tracker</PageTitle>
 
@@ -129,9 +130,14 @@
 
         <div class="d-flex gap-2 mt-3">
             <button class="btn btn-primary" @onclick="SaveAsync">Save</button>
-            <button class="btn btn-outline-danger ms-auto" @onclick="() => _confirmClear = true">
-                Clear Storage
-            </button>
+            <div class="ms-auto d-flex gap-2">
+                <button class="btn btn-outline-secondary" @onclick="LoadDemoDataAsync" disabled="@_loadingDemo">
+                    @(_loadingDemo ? "Loading…" : "Load Demo Data")
+                </button>
+                <button class="btn btn-outline-danger" @onclick="() => _confirmClear = true">
+                    Clear Storage
+                </button>
+            </div>
         </div>
 
         @if (_saved)
@@ -169,6 +175,28 @@
                 <div class="modal-footer">
                     <button class="btn btn-secondary" @onclick="() => _confirmClear = false">Cancel</button>
                     <button class="btn btn-danger" @onclick="ClearStorageAsync">Yes, delete everything</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@if (_confirmDemoLoad)
+{
+    <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4)">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Load Demo Data</h5>
+                    <button class="btn-close" @onclick="() => _confirmDemoLoad = false"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="fw-semibold text-danger mb-2">This will permanently delete all existing data.</p>
+                    <p class="mb-0">All current records will be replaced with demo data. Your settings (API key, model, preferences) will not be affected.</p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="() => _confirmDemoLoad = false">Cancel</button>
+                    <button class="btn btn-primary" @onclick="ConfirmLoadDemoDataAsync">Yes, load demo data</button>
                 </div>
             </div>
         </div>
@@ -299,6 +327,8 @@
 
     bool _saved;
     bool _confirmClear;
+    bool _confirmDemoLoad;
+    bool _loadingDemo;
     string? _error;
 
     bool _exporting;
@@ -513,6 +543,41 @@
         _confirmImport = false;
         await Db.ClearPendingImportAsync();
         _importInputKey++;
+    }
+
+    async Task LoadDemoDataAsync()
+    {
+        _error = null;
+        var isEmpty = await Demo.IsDatabaseEmptyAsync();
+        if (isEmpty)
+        {
+            await ConfirmLoadDemoDataAsync();
+        }
+        else
+        {
+            _confirmDemoLoad = true;
+        }
+    }
+
+    async Task ConfirmLoadDemoDataAsync()
+    {
+        _confirmDemoLoad = false;
+        _loadingDemo = true;
+        _error = null;
+        try
+        {
+            await Demo.LoadDemoDataAsync();
+            await LoadStorageUsageAsync();
+            _saved = true;
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to load demo data: {ex.Message}";
+        }
+        finally
+        {
+            _loadingDemo = false;
+        }
     }
 
     async Task PerformImportAsync()
