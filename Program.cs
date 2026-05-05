@@ -15,6 +15,7 @@ builder.Services.AddSingleton<IDataSyncService, DataSyncService>();
 builder.Services.AddScoped<IDocxService, DocxService>();
 builder.Services.AddScoped<AppStateService>();
 builder.Services.AddScoped<AppStartupService>();
+builder.Services.AddScoped<AppToastService>();
 builder.Services.AddScoped<IAiProviderFactory, AiProviderFactory>();
 builder.Services.AddScoped<IDemoDataService, DemoDataService>();
 builder.Services.AddScoped<IPwaService, PwaService>();

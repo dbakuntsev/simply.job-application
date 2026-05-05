@@ -1,0 +1,84 @@
+@inject AppToastService Toasts
+@implements IDisposable
+
+<div class="toast-container position-fixed top-0 end-0 p-3" style="z-index:1080">
+    @foreach (var toast in Toasts.Messages)
+    {
+        <div class="toast show sja-toast mb-2 border-0 shadow" role="status" aria-live="polite">
+            <div class="d-flex align-items-start">
+                <div class="toast-body pe-2">
+                    <span class="sja-toast-dot bg-@toast.Kind"></span>
+                    @toast.Message
+                </div>
+                <button type="button"
+                        class="btn-close me-2 mt-2"
+                        aria-label="Close"
+                        @onclick="() => Dismiss(toast.Id)"></button>
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .sja-toast {
+        width: min(24rem, calc(100vw - 2rem));
+        background: #fff;
+    }
+
+    .sja-toast .toast-body {
+        display: flex;
+        align-items: flex-start;
+        gap: .55rem;
+        color: #212529;
+        font-weight: 500;
+        line-height: 1.35;
+    }
+
+    .sja-toast-dot {
+        width: .55rem;
+        height: .55rem;
+        border-radius: 50%;
+        flex: 0 0 .55rem;
+        margin-top: .35rem;
+    }
+</style>
+
+@code {
+    private readonly HashSet<Guid> _timersStarted = new();
+
+    protected override void OnInitialized()
+    {
+        Toasts.Changed += OnToastsChanged;
+        StartDismissTimers();
+    }
+
+    private void OnToastsChanged()
+    {
+        StartDismissTimers();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void StartDismissTimers()
+    {
+        foreach (var toast in Toasts.Messages)
+        {
+            StartDismissTimer(toast.Id);
+        }
+    }
+
+    private void StartDismissTimer(Guid id)
+    {
+        if (!_timersStarted.Add(id)) return;
+        _ = DismissAfterDelayAsync(id);
+    }
+
+    private async Task DismissAfterDelayAsync(Guid id)
+    {
+        await Task.Delay(TimeSpan.FromSeconds(5));
+        Toasts.Dismiss(id);
+    }
+
+    private void Dismiss(Guid id) => Toasts.Dismiss(id);
+
+    public void Dispose() => Toasts.Changed -= OnToastsChanged;
+}

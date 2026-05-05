@@ -3,6 +3,7 @@
 @implements IDisposable
 
 <PwaUpdateBanner />
+<AppToastHost />
 
 <div class="d-flex flex-column min-vh-100">
     <nav class="navbar navbar-expand-md bg-primary" data-bs-theme="dark">
@@ -63,7 +64,7 @@
                     @if (Pwa.IsInstallable && !Pwa.IsStandalone)
                     {
                         <li class="nav-item ms-1">
-                            <button class="btn btn-sm btn-success rounded-3 p-1"
+                            <button class="btn btn-sm btn-link nav-link"
                                     @onclick="InstallAsync"
                                     title="Install app"
                                     aria-label="Install app">

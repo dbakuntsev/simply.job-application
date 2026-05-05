@@ -6,7 +6,8 @@ public record AppServiceMocks(
     IIndexedDbService Db,
     DataSyncFake DataSync,
     IDocxService Docx,
-    IAiProviderFactory AiFactory);
+    IAiProviderFactory AiFactory,
+    IDemoDataService Demo);
 
 public static class BunitContextExtensions
 {
@@ -22,15 +23,18 @@ public static class BunitContextExtensions
         var dataSync   = new DataSyncFake();
         var docxMock   = Substitute.For<IDocxService>();
         var aiFactory  = Substitute.For<IAiProviderFactory>();
+        var demoMock   = Substitute.For<IDemoDataService>();
 
         ctx.Services.AddSingleton(dbMock);
         ctx.Services.AddSingleton<IDataSyncService>(dataSync);
         ctx.Services.AddSingleton(docxMock);
         ctx.Services.AddSingleton(aiFactory);
+        ctx.Services.AddSingleton(demoMock);
         ctx.Services.AddSingleton<HttpClient>();
         ctx.Services.AddSingleton<AppStateService>();
+        ctx.Services.AddSingleton<AppToastService>();
         ctx.Services.AddRadzenComponents();
 
-        return new AppServiceMocks(dbMock, dataSync, docxMock, aiFactory);
+        return new AppServiceMocks(dbMock, dataSync, docxMock, aiFactory, demoMock);
     }
 }

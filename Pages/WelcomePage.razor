@@ -2,441 +2,330 @@
 @page "/welcome"
 @layout Layout.WelcomeLayout
 @inject NavigationManager Nav
-@inject Simply.JobApplication.Services.IIndexedDbService Db
-@inject Simply.JobApplication.Services.IPwaService Pwa
+@inject IIndexedDbService Db
+@inject IDemoDataService Demo
+@inject IPwaService Pwa
+@inject AppToastService Toasts
 @implements IDisposable
 
-<PageTitle>Welcome — Simply Opportunity Tracker</PageTitle>
+<PageTitle>Welcome - Simply Opportunity Tracker</PageTitle>
 
 @if (_ready)
 {
-<!-- ══ HERO ═══════════════════════════════════════════════════════════════════ -->
-<section class="wlc-hero">
-    <div class="container text-center py-5 px-4">
-        <span class="badge rounded-pill text-bg-primary wlc-badge mb-4">
-            FREE / FOSS &nbsp;·&nbsp; Bring Your Own AI Key &nbsp;·&nbsp; 100% Private
-        </span>
-        <h1 class="display-4 fw-bold mb-3 lh-sm">
-            Opportunity<br>
-            <span class="wlc-accent">Tracker.</span>
-        </h1>
-        <p class="lead text-muted mx-auto mb-5" style="max-width:580px">
-            Track your opportunity pipeline from first contact to final decision,
-            and generate tailored application materials — entirely in your browser.
-        </p>
-        <div class="d-flex justify-content-center gap-3 flex-wrap">
-            <a href="organizations" class="btn btn-primary btn-lg px-5">Get Started</a>
-            <a href="evaluate" class="btn btn-outline-secondary btn-lg px-4">Evaluate &amp; Generate</a>
-            @if (Pwa.IsInstallable && !Pwa.IsStandalone)
-            {
-                <button class="btn btn-success btn-lg px-4 d-inline-flex align-items-center gap-2"
-                        @onclick="InstallAsync">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 16 16"
-                         fill="currentColor" aria-hidden="true">
-                        <path d="M.5 9.9a.5.5 0 0 1 .5.5v2.5a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-2.5a.5.5 0 0 1 1 0v2.5a2 2 0 0 1-2 2H2a2 2 0 0 1-2-2v-2.5a.5.5 0 0 1 .5-.5"/>
-                        <path d="M7.646 11.854a.5.5 0 0 0 .708 0l3-3a.5.5 0 0 0-.708-.708L8.5 10.293V1.5a.5.5 0 0 0-1 0v8.793L5.354 8.146a.5.5 0 1 0-.708.708z"/>
-                    </svg>
-                    Install App
-                </button>
-            }
-            <a href="https://github.com/dbakuntsev/simply.job-application" target="_blank" rel="noopener noreferrer"
-               class="btn btn-secondary btn-lg px-4 d-inline-flex align-items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-                     fill="currentColor" aria-hidden="true">
-                    <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
-                </svg>
-                GitHub
-            </a>
-            <a href="https://github.com/sponsors/dbakuntsev" target="_blank" rel="noopener noreferrer"
-               class="btn btn-outline-danger btn-lg px-4 d-inline-flex align-items-center gap-2">
-                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                     fill="currentColor" aria-hidden="true">
-                    <path d="M12 21.593c-.525-.47-10.55-9.065-10.55-14.366 0-3.437 2.776-6.227 6.191-6.227 1.66 0 3.21.672 4.36 1.865 1.148-1.193 2.698-1.865 4.358-1.865 3.416 0 6.191 2.79 6.191 6.227 0 5.301-10.025 13.896-10.55 14.366z"/>
-                </svg>
-                Sponsor
-            </a>
-        </div>
-    </div>
-</section>
-
-<!-- ══ TWO PATHS ═══════════════════════════════════════════════════════════════ -->
-<section class="py-5">
-    <div class="container">
-        <div class="text-center mb-5">
-            <p class="wlc-section-eyebrow">Choose your path</p>
-            <h2 class="fw-bold mb-0">Two ways to use the app</h2>
-        </div>
-
-        <div class="row g-4">
-            <div class="col-12 col-md-6">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body p-4 p-lg-5">
-                        <h5 class="fw-bold mb-4">
-                            <span class="wlc-path-icon wlc-path-primary me-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-                                     fill="none" stroke="currentColor" stroke-width="2"
-                                     stroke-linecap="round" stroke-linejoin="round">
-                                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-                                    <line x1="8" y1="21" x2="16" y2="21"/>
-                                    <line x1="12" y1="17" x2="12" y2="21"/>
-                                </svg>
-                            </span>
-                            Manage Your Pipeline
-                        </h5>
-                        <div class="d-flex flex-column gap-4">
-                            <div class="d-flex gap-3 align-items-start">
-                                <div class="wlc-num-circle flex-shrink-0">1</div>
-                                <div>
-                                    <h6 class="fw-bold mb-1">Add Organizations &amp; Opportunities</h6>
-                                    <p class="text-muted mb-0">Build your pipeline with the organizations you are targeting. Add each role as an Opportunity with its stage, description, and qualifications.</p>
-                                </div>
-                            </div>
-                            <div class="d-flex gap-3 align-items-start">
-                                <div class="wlc-num-circle flex-shrink-0">2</div>
-                                <div>
-                                    <h6 class="fw-bold mb-1">Track Contacts &amp; Correspondence</h6>
-                                    <p class="text-muted mb-0">Log key contacts at each organization and record every email, call, interview, and submission against the relevant opportunity.</p>
-                                </div>
-                            </div>
-                            <div class="d-flex gap-3 align-items-start">
-                                <div class="wlc-num-circle flex-shrink-0">3</div>
-                                <div>
-                                    <h6 class="fw-bold mb-1">Evaluate &amp; Generate</h6>
-                                    <p class="text-muted mb-0">Launch Evaluate &amp; Generate from any Opportunity to score your fit and produce tailored application materials ready to submit.</p>
-                                </div>
-                            </div>
-                        </div>
-                        <a href="organizations" class="btn btn-primary mt-4">Start with Organizations</a>
+    <section class="wlc-hero">
+        <div class="container py-5 px-4">
+            <div class="row justify-content-center text-center">
+                <div class="col-12 col-xl-9">
+                    <div class="wlc-trust-strip text-bg-primary mx-auto mb-4">
+                        100% private · Bring your own AI key · Works offline (PWA)
                     </div>
+
+                    <h1 class="display-4 fw-bold mb-3 lh-sm">
+                        Private Opportunity Tracker with Built-in AI
+                    </h1>
+
+                    <p class="lead text-muted mx-auto mb-4" style="max-width:720px">
+                        Manage your pipeline and generate tailored resumes and cover letters - all in your browser.
+                        No accounts. No data leaves your machine.
+                    </p>
+
+                    <div class="d-flex justify-content-center gap-3 flex-wrap mb-3">
+                        <button class="btn btn-primary btn-lg px-5"
+                                @onclick="TryDemoAsync"
+                                disabled="@_busy">
+                            @(_busyAction == WelcomeAction.TryDemo ? "Loading..." : "Try Demo")
+                        </button>
+                        <button class="btn btn-outline-primary btn-lg px-4"
+                                @onclick="StartFromScratchAsync"
+                                disabled="@_busy">
+                            Start from Scratch
+                        </button>
+                        <button class="btn btn-outline-secondary btn-lg px-4"
+                                @onclick="GoToEvaluate">
+                            Evaluate &amp; Generate
+                        </button>
+                    </div>
+
+                    <div class="d-flex justify-content-center align-items-center gap-3 flex-wrap wlc-tertiary">
+                        @if (Pwa.IsInstallable && !Pwa.IsStandalone)
+                        {
+                            <button class="btn btn-link p-0 wlc-tertiary-link"
+                                    @onclick="InstallAsync">
+                                Install App
+                            </button>
+                            <span class="text-muted">·</span>
+                        }
+                        <a href="https://github.com/dbakuntsev/simply.job-application"
+                           target="_blank"
+                           rel="noopener noreferrer">GitHub</a>
+                        <span class="text-muted">·</span>
+                        <a href="https://github.com/sponsors/dbakuntsev"
+                           target="_blank"
+                           rel="noopener noreferrer">Sponsor</a>
+                    </div>
+
+                    @if (_error is not null)
+                    {
+                        <div class="alert alert-danger mt-4 mb-0 text-start mx-auto" style="max-width:720px">
+                            @_error
+                        </div>
+                    }
                 </div>
             </div>
+        </div>
+    </section>
 
-            <div class="col-12 col-md-6">
-                <div class="card border-0 shadow-sm h-100">
-                    <div class="card-body p-4 p-lg-5">
-                        <h5 class="fw-bold mb-4">
-                            <span class="wlc-path-icon wlc-path-secondary me-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"
-                                     fill="none" stroke="currentColor" stroke-width="2"
-                                     stroke-linecap="round" stroke-linejoin="round">
-                                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
-                                </svg>
-                            </span>
-                            Ad-hoc Evaluate &amp; Generate
-                        </h5>
-                        <div class="d-flex flex-column gap-4">
-                            <div class="d-flex gap-3 align-items-start">
-                                <div class="wlc-num-circle wlc-num-secondary flex-shrink-0">1</div>
+    <section class="py-5">
+        <div class="container">
+            <div class="text-center mb-5">
+                <p class="wlc-section-eyebrow">Choose your path</p>
+                <h2 class="fw-bold mb-0">Two ways to use the app</h2>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-12 col-md-6">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-body p-4 p-lg-5">
+                            <h5 class="fw-bold mb-4">
+                                <span class="wlc-path-icon wlc-path-primary me-2">1</span>
+                                Manage Your Pipeline
+                            </h5>
+                            <div class="d-flex flex-column gap-4">
                                 <div>
-                                    <h6 class="fw-bold mb-1">Upload Your Resume</h6>
-                                    <p class="text-muted mb-0">Add your resume to My Resumes. It is stored in your browser and reused across sessions — no need to re-upload each time.</p>
+                                    <h6 class="fw-bold mb-1">Organizations, Contacts, Opportunities</h6>
+                                    <p class="text-muted mb-0">
+                                        Track target organizations, people, roles, stages, compensation, and requirements in a browser-only database.
+                                    </p>
+                                </div>
+                                <div>
+                                    <h6 class="fw-bold mb-1">Correspondence History</h6>
+                                    <p class="text-muted mb-0">
+                                        Log submissions, emails, calls, interviews, files, and follow-ups against the right opportunity.
+                                    </p>
+                                </div>
+                                <div>
+                                    <h6 class="fw-bold mb-1">Demo or Clean Start</h6>
+                                    <p class="text-muted mb-0">
+                                        Explore a populated sample pipeline, or begin with an empty workspace and build your own.
+                                    </p>
                                 </div>
                             </div>
-                            <div class="d-flex gap-3 align-items-start">
-                                <div class="wlc-num-circle wlc-num-secondary flex-shrink-0">2</div>
-                                <div>
-                                    <h6 class="fw-bold mb-1">Describe the Role</h6>
-                                    <p class="text-muted mb-0">Enter an organization name and paste the role description. No need to create an Organization or Opportunity record first.</p>
-                                </div>
-                            </div>
-                            <div class="d-flex gap-3 align-items-start">
-                                <div class="wlc-num-circle wlc-num-secondary flex-shrink-0">3</div>
-                                <div>
-                                    <h6 class="fw-bold mb-1">Score, Generate &amp; Download</h6>
-                                    <p class="text-muted mb-0">Evaluate your match, review strengths and gaps, then generate a tailored resume, cover letter, and why-apply summary.</p>
-                                </div>
-                            </div>
+                            <button class="btn btn-primary mt-4" @onclick="TryDemoAsync" disabled="@_busy">
+                                Try Demo
+                            </button>
                         </div>
-                        <a href="evaluate" class="btn btn-outline-primary mt-4">Go to Evaluate &amp; Generate</a>
+                    </div>
+                </div>
+
+                <div class="col-12 col-md-6">
+                    <div class="card border-0 shadow-sm h-100">
+                        <div class="card-body p-4 p-lg-5">
+                            <h5 class="fw-bold mb-4">
+                                <span class="wlc-path-icon wlc-path-secondary me-2">2</span>
+                                Evaluate &amp; Generate
+                            </h5>
+                            <div class="d-flex flex-column gap-4">
+                                <div>
+                                    <h6 class="fw-bold mb-1">Bring Your Own Resume</h6>
+                                    <p class="text-muted mb-0">
+                                        Upload a base resume and reuse it across evaluation sessions without sending it to this app's servers.
+                                    </p>
+                                </div>
+                                <div>
+                                    <h6 class="fw-bold mb-1">Paste a Role Description</h6>
+                                    <p class="text-muted mb-0">
+                                        Score fit, identify gaps, and collect ATS keywords from the opportunity you care about.
+                                    </p>
+                                </div>
+                                <div>
+                                    <h6 class="fw-bold mb-1">Generate Application Materials</h6>
+                                    <p class="text-muted mb-0">
+                                        Produce tailored resumes, cover letters, and why-apply summaries using your own AI provider key.
+                                    </p>
+                                </div>
+                            </div>
+                            <button class="btn btn-outline-primary mt-4" @onclick="GoToEvaluate">
+                                Go to Evaluate &amp; Generate
+                            </button>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
-    </div>
-</section>
+    </section>
 
-<!-- ══ FEATURES ════════════════════════════════════════════════════════════════ -->
-<section class="wlc-alt-bg py-5">
-    <div class="container">
-        <div class="text-center mb-5">
-            <p class="wlc-section-eyebrow">What you get</p>
-            <h2 class="fw-bold mb-0">Everything in one place</h2>
+    <section class="wlc-alt-bg py-5">
+        <div class="container">
+            <div class="text-center mb-5">
+                <p class="wlc-section-eyebrow">What you get</p>
+                <h2 class="fw-bold mb-0">Everything in one private workspace</h2>
+            </div>
+
+            <div class="row g-4">
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <div class="card border-0 h-100">
+                        <div class="card-body p-4">
+                            <h6 class="fw-bold mb-1">Opportunity Pipeline</h6>
+                            <p class="text-muted mb-0">Track stages, requirements, compensation, posting URLs, and decision history.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <div class="card border-0 h-100">
+                        <div class="card-body p-4">
+                            <h6 class="fw-bold mb-1">Contacts &amp; Correspondence</h6>
+                            <p class="text-muted mb-0">Keep recruiters, hiring managers, messages, calls, interviews, and files together.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <div class="card border-0 h-100">
+                        <div class="card-body p-4">
+                            <h6 class="fw-bold mb-1">Resume Library</h6>
+                            <p class="text-muted mb-0">Store base resumes, version them, and compare versions before generating.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <div class="card border-0 h-100">
+                        <div class="card-body p-4">
+                            <h6 class="fw-bold mb-1">AI Match Scoring</h6>
+                            <p class="text-muted mb-0">Review strengths, gaps, suggested keywords, and fit summaries for each role.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <div class="card border-0 h-100">
+                        <div class="card-body p-4">
+                            <h6 class="fw-bold mb-1">Generated Materials</h6>
+                            <p class="text-muted mb-0">Download tailored resumes and cover letters from saved generation sessions.</p>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12 col-sm-6 col-lg-4">
+                    <div class="card border-0 h-100">
+                        <div class="card-body p-4">
+                            <h6 class="fw-bold mb-1">Local-first Storage</h6>
+                            <p class="text-muted mb-0">IndexedDB keeps your data on your device, with offline support through the PWA.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
+    </section>
 
-        <div class="row g-4">
-            <div class="col-12 col-sm-6 col-lg-4">
-                <div class="card border-0 h-100">
-                    <div class="card-body p-4">
-                        <div class="wlc-feature-icon text-primary mb-3">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"
-                                 fill="none" stroke="currentColor" stroke-width="2"
-                                 stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>
-                                <polyline points="9 22 9 12 15 12 15 22"/>
-                            </svg>
-                        </div>
-                        <h6 class="fw-bold mb-1">Organizations &amp; Contacts</h6>
-                        <p class="text-muted mb-0">
-                            Maintain a searchable list of target organizations and key contacts. Track roles, titles, and email threads in one view.
-                        </p>
-                    </div>
+    <section class="wlc-dark-bg py-5">
+        <div class="container text-center">
+            <h3 class="fw-bold text-white mb-3">Your data stays in your browser</h3>
+            <p class="mb-4 mx-auto" style="max-width:640px;color:rgba(255,255,255,.75)">
+                Organizations, contacts, opportunities, correspondence, resumes, and generated materials are stored in IndexedDB.
+                The only external calls are to your chosen AI provider using your own API key.
+            </p>
+            <button class="btn btn-light btn-lg px-5 fw-semibold" @onclick="StartFromScratchAsync" disabled="@_busy">
+                Start from Scratch
+            </button>
+        </div>
+    </section>
+}
+
+@if (_confirmDemoLoad)
+{
+    <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4)">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Load Demo Data</h5>
+                    <button class="btn-close" @onclick="CancelDemoLoad"></button>
                 </div>
-            </div>
-
-            <div class="col-12 col-sm-6 col-lg-4">
-                <div class="card border-0 h-100">
-                    <div class="card-body p-4">
-                        <div class="wlc-feature-icon text-primary mb-3">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"
-                                 fill="none" stroke="currentColor" stroke-width="2"
-                                 stroke-linecap="round" stroke-linejoin="round">
-                                <rect x="2" y="7" width="20" height="14" rx="2" ry="2"/>
-                                <path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>
-                            </svg>
-                        </div>
-                        <h6 class="fw-bold mb-1">Opportunity Pipeline</h6>
-                        <p class="text-muted mb-0">
-                            Track every role from discovery to final decision. Manage stage, work arrangement, compensation, and required qualifications.
-                        </p>
-                    </div>
+                <div class="modal-body">
+                    <p class="fw-semibold text-danger mb-2">This will permanently delete all existing data.</p>
+                    <p class="mb-0">All current records will be replaced with demo data. Your settings (API key, model, preferences) will not be affected.</p>
                 </div>
-            </div>
-
-            <div class="col-12 col-sm-6 col-lg-4">
-                <div class="card border-0 h-100">
-                    <div class="card-body p-4">
-                        <div class="wlc-feature-icon text-success mb-3">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"
-                                 fill="none" stroke="currentColor" stroke-width="2"
-                                 stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-                            </svg>
-                        </div>
-                        <h6 class="fw-bold mb-1">Correspondence Log</h6>
-                        <p class="text-muted mb-0">
-                            Log emails, phone calls, video calls, interviews, and submissions. Attach files and link contacts to each entry.
-                        </p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-12 col-sm-6 col-lg-4">
-                <div class="card border-0 h-100">
-                    <div class="card-body p-4">
-                        <div class="wlc-feature-icon text-primary mb-3">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"
-                                 fill="none" stroke="currentColor" stroke-width="2"
-                                 stroke-linecap="round" stroke-linejoin="round">
-                                <line x1="18" y1="20" x2="18" y2="10"/>
-                                <line x1="12" y1="20" x2="12" y2="4"/>
-                                <line x1="6"  y1="20" x2="6"  y2="14"/>
-                            </svg>
-                        </div>
-                        <h6 class="fw-bold mb-1">AI Match Scoring</h6>
-                        <p class="text-muted mb-0">
-                            A match score (Poor / Fair / Good / Excellent) with clear strengths, gaps, and ATS keyword suggestions so you know exactly where you stand.
-                        </p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-12 col-sm-6 col-lg-4">
-                <div class="card border-0 h-100">
-                    <div class="card-body p-4">
-                        <div class="wlc-feature-icon text-success mb-3">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"
-                                 fill="none" stroke="currentColor" stroke-width="2"
-                                 stroke-linecap="round" stroke-linejoin="round">
-                                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
-                                <polyline points="14 2 14 8 20 8"/>
-                                <line x1="16" y1="13" x2="8" y2="13"/>
-                                <line x1="16" y1="17" x2="8" y2="17"/>
-                            </svg>
-                        </div>
-                        <h6 class="fw-bold mb-1">Tailored Application Materials</h6>
-                        <p class="text-muted mb-0">
-                            A tailored resume (DOCX with hyperlinks preserved), a two-paragraph cover letter, and a concise why-apply summary — ready to download.
-                        </p>
-                    </div>
-                </div>
-            </div>
-
-            <div class="col-12 col-sm-6 col-lg-4">
-                <div class="card border-0 h-100">
-                    <div class="card-body p-4">
-                        <div class="wlc-feature-icon text-primary mb-3">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24"
-                                 fill="none" stroke="currentColor" stroke-width="2"
-                                 stroke-linecap="round" stroke-linejoin="round">
-                                <polygon points="12 2 2 7 12 12 22 7 12 2"/>
-                                <polyline points="2 17 12 22 22 17"/>
-                                <polyline points="2 12 12 17 22 12"/>
-                            </svg>
-                        </div>
-                        <h6 class="fw-bold mb-1">Versioned Resume Library</h6>
-                        <p class="text-muted mb-0">
-                            Upload and version your resumes. Compare any two versions side by side and pick the right base document for each role.
-                        </p>
-                    </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CancelDemoLoad">Cancel</button>
+                    <button class="btn btn-primary" @onclick="ConfirmLoadDemoDataAsync" disabled="@_busy">
+                        @(_busyAction == WelcomeAction.TryDemo ? "Loading..." : "Yes, load demo data")
+                    </button>
                 </div>
             </div>
         </div>
     </div>
-</section>
+}
 
-<!-- ══ WHO IT'S FOR ════════════════════════════════════════════════════════════ -->
-<section class="py-5">
-    <div class="container">
-        <div class="row align-items-center g-5">
-            <div class="col-12 col-lg-4">
-                <p class="wlc-section-eyebrow">Who it's for</p>
-                <h2 class="fw-bold mb-3">Built for structured opportunity searches</h2>
-                <p class="text-muted mb-4">
-                    Whether you are pursuing roles in industry, academia, government, or contracting,
-                    Simply Opportunity Tracker gives you a clear view of your pipeline at every stage.
-                </p>
-                <a href="organizations" class="btn btn-primary px-4">Get Started</a>
-            </div>
-
-            <div class="col-12 col-lg-8">
-                <div class="row g-3">
-                    <div class="col-12 col-sm-6">
-                        <div class="wlc-check-item">
-                            <span class="wlc-check-icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                                     fill="none" stroke="currentColor" stroke-width="3"
-                                     stroke-linecap="round" stroke-linejoin="round">
-                                    <polyline points="20 6 9 17 4 12"/>
-                                </svg>
-                            </span>
-                            <span class="text-muted">Job seekers applying to multiple roles who need
-                                position-specific materials without rewriting from scratch.</span>
-                        </div>
-                    </div>
-                    <div class="col-12 col-sm-6">
-                        <div class="wlc-check-item">
-                            <span class="wlc-check-icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                                     fill="none" stroke="currentColor" stroke-width="3"
-                                     stroke-linecap="round" stroke-linejoin="round">
-                                    <polyline points="20 6 9 17 4 12"/>
-                                </svg>
-                            </span>
-                            <span class="text-muted">Academics pursuing faculty positions, fellowships,
-                                post-docs, or research grants across multiple institutions.</span>
-                        </div>
-                    </div>
-                    <div class="col-12 col-sm-6">
-                        <div class="wlc-check-item">
-                            <span class="wlc-check-icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                                     fill="none" stroke="currentColor" stroke-width="3"
-                                     stroke-linecap="round" stroke-linejoin="round">
-                                    <polyline points="20 6 9 17 4 12"/>
-                                </svg>
-                            </span>
-                            <span class="text-muted">Contractors and consultants tracking multiple bids,
-                                proposals, or client opportunities simultaneously.</span>
-                        </div>
-                    </div>
-                    <div class="col-12 col-sm-6">
-                        <div class="wlc-check-item">
-                            <span class="wlc-check-icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                                     fill="none" stroke="currentColor" stroke-width="3"
-                                     stroke-linecap="round" stroke-linejoin="round">
-                                    <polyline points="20 6 9 17 4 12"/>
-                                </svg>
-                            </span>
-                            <span class="text-muted">Professionals in government, non-profit, or specialized
-                                sectors where roles have distinct requirements and longer cycles.</span>
-                        </div>
-                    </div>
-                    <div class="col-12 col-sm-6">
-                        <div class="wlc-check-item">
-                            <span class="wlc-check-icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                                     fill="none" stroke="currentColor" stroke-width="3"
-                                     stroke-linecap="round" stroke-linejoin="round">
-                                    <polyline points="20 6 9 17 4 12"/>
-                                </svg>
-                            </span>
-                            <span class="text-muted">Privacy-conscious users who want AI assistance
-                                without uploading their resume to a third-party service.</span>
-                        </div>
-                    </div>
-                    <div class="col-12 col-sm-6">
-                        <div class="wlc-check-item">
-                            <span class="wlc-check-icon">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                                     fill="none" stroke="currentColor" stroke-width="3"
-                                     stroke-linecap="round" stroke-linejoin="round">
-                                    <polyline points="20 6 9 17 4 12"/>
-                                </svg>
-                            </span>
-                            <span class="text-muted">Anyone managing a structured opportunity search
-                                who needs one place to track everything and lose nothing.</span>
-                        </div>
-                    </div>
+@if (_showStartChoice)
+{
+    <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4)">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Start from Scratch</h5>
+                    <button class="btn-close" @onclick="CancelStartChoice"></button>
+                </div>
+                <div class="modal-body">
+                    <p class="mb-0">The database is not empty. Would you like to clear it before continuing?</p>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-secondary" @onclick="CancelStartChoice">Cancel</button>
+                    <button class="btn btn-outline-primary" @onclick="KeepDataAndContinue">Keep Data</button>
+                    <button class="btn btn-danger" @onclick="ClearDataAndContinueAsync" disabled="@_busy">
+                        @(_busyAction == WelcomeAction.ClearData ? "Clearing..." : "Clear Data")
+                    </button>
                 </div>
             </div>
         </div>
     </div>
-</section>
-
-<!-- ══ PRIVACY TRUST BLOCK ════════════════════════════════════════════════════ -->
-<section class="wlc-dark-bg py-5">
-    <div class="container text-center">
-        <div class="wlc-icon-circle wlc-icon-light mx-auto mb-4">
-            <svg xmlns="http://www.w3.org/2000/svg" width="26" height="26" viewBox="0 0 24 24"
-                 fill="none" stroke="currentColor" stroke-width="2"
-                 stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-            </svg>
-        </div>
-        <h3 class="fw-bold text-white mb-3">Your data stays in your browser</h3>
-        <p class="mb-5 mx-auto" style="max-width:580px;color:rgba(255,255,255,.75)">
-            Organizations, contacts, opportunities, correspondence, resumes, and all generated materials
-            are stored exclusively in your browser's IndexedDB. Nothing is sent to any server operated
-            by this application. The only external calls are to your chosen AI provider using your own
-            API key, subject to that provider's data handling policies.
-        </p>
-        <a href="organizations" class="btn btn-light btn-lg px-5 fw-semibold">Get Started</a>
-    </div>
-</section>
 }
 
 <style>
-    /* ── Hero ─────────────────────────────────────────────────────────────────── */
     .wlc-hero {
         border-bottom: 1px solid #dee2e6;
+        background:
+            linear-gradient(135deg, rgba(var(--bs-primary-rgb), .08), rgba(var(--bs-success-rgb), .08)),
+            #fff;
     }
 
-    /* ── Section backgrounds ──────────────────────────────────────────────────── */
-    .wlc-alt-bg  { background: #f8f9fa; }
-    .wlc-dark-bg { background: #2c3e50; }
-
-    /* ── Focus ring suppression (Blazor FocusOnNavigate programmatic focus) ─────── */
     h1:focus { outline: none; }
 
-    /* ── Badge / eyebrow ──────────────────────────────────────────────────────── */
-    .wlc-badge {
-        font-size: 1rem;
-        letter-spacing: .07em;
+    .wlc-trust-strip {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: .45rem .85rem;
+        border: 1px solid rgba(var(--bs-primary-rgb), .2);
+        border-radius: 999px;
+        background: rgba(255, 255, 255, .8);
+        color: #334155;
+        font-size: .92rem;
+        font-weight: 600;
     }
 
-    .wlc-accent { color: var(--bs-primary); }
+    .wlc-tertiary,
+    .wlc-tertiary a,
+    .wlc-tertiary-link {
+        color: #495057;
+        font-weight: 600;
+        text-decoration: none;
+        font-size: 1rem;
+    }
+
+    .wlc-tertiary a:hover,
+    .wlc-tertiary-link:hover {
+        color: var(--bs-primary);
+        text-decoration: underline;
+    }
+
+    .wlc-alt-bg { background: #f8f9fa; }
+    .wlc-dark-bg { background: #2c3e50; }
 
     .wlc-section-eyebrow {
         font-size: .8rem;
-        font-weight: 600;
+        font-weight: 700;
         text-transform: uppercase;
         letter-spacing: .1em;
         color: var(--bs-primary);
         margin-bottom: .25rem;
     }
 
-    /* ── Path header icons ────────────────────────────────────────────────────── */
     .wlc-path-icon {
         display: inline-flex;
         align-items: center;
@@ -445,88 +334,146 @@
         height: 2rem;
         border-radius: 6px;
         vertical-align: middle;
-    }
-    .wlc-path-primary  { background: rgba(var(--bs-primary-rgb), .12); color: var(--bs-primary); }
-    .wlc-path-secondary { background: rgba(var(--bs-success-rgb), .12); color: var(--bs-success); }
-
-    /* ── Icon circles ─────────────────────────────────────────────────────────── */
-    .wlc-icon-circle {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 64px;
-        height: 64px;
-        border-radius: 50%;
-    }
-
-    .wlc-icon-light { background: rgba(255, 255, 255, .15); color: #fff; }
-
-    /* ── Feature icons ────────────────────────────────────────────────────────── */
-    .wlc-feature-icon { line-height: 1; }
-
-    /* ── Check items ──────────────────────────────────────────────────────────── */
-    .wlc-check-item {
-        display: flex;
-        align-items: flex-start;
-        gap: .75rem;
-    }
-
-    .wlc-check-icon {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 1.5rem;
-        height: 1.5rem;
-        min-width: 1.5rem;
-        border-radius: 50%;
-        background: rgba(var(--bs-success-rgb), .12);
-        color: var(--bs-success);
-        margin-top: .05rem;
-    }
-
-    /* ── Numbered circles ─────────────────────────────────────────────────────── */
-    .wlc-num-circle {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 2.5rem;
-        height: 2.5rem;
-        min-width: 2.5rem;
-        border-radius: 50%;
-        background: var(--bs-primary);
-        color: #fff;
-        font-size: .85rem;
+        font-size: .9rem;
         font-weight: 700;
     }
 
-    .wlc-num-secondary {
-        background: var(--bs-success);
+    .wlc-path-primary {
+        background: rgba(var(--bs-primary-rgb), .12);
+        color: var(--bs-primary);
+    }
+
+    .wlc-path-secondary {
+        background: rgba(var(--bs-success-rgb), .12);
+        color: var(--bs-success);
+    }
+
+    @@media (max-width: 575.98px) {
+        .wlc-trust-strip {
+            border-radius: 8px;
+            line-height: 1.35;
+        }
+
+        .wlc-hero .btn {
+            width: 100%;
+        }
     }
 </style>
 
 @code {
+    private const string DemoLoadedToast = "Loaded demo data - explore freely. Visit Settings page to clear demo data.";
     private bool _ready;
+    private bool _busy;
+    private bool _confirmDemoLoad;
+    private bool _showStartChoice;
+    private string? _error;
+    private WelcomeAction? _busyAction;
+
+    private enum WelcomeAction
+    {
+        TryDemo,
+        ClearData
+    }
 
     protected override void OnInitialized() => Pwa.StateChanged += OnPwaStateChanged;
 
     protected override async Task OnInitializedAsync()
     {
         await Pwa.EnsureInitializedAsync();
-
-        var relPath = Nav.ToBaseRelativePath(Nav.Uri).TrimEnd('/');
-        if (relPath == "")
-        {
-            var orgs = await Db.GetAllOrganizationsAsync();
-            if (orgs.Count > 0) { Nav.NavigateTo("organizations", replace: true); return; }
-            var resumes = await Db.GetAllBaseResumesAsync();
-            if (resumes.Count > 0) { Nav.NavigateTo("organizations", replace: true); return; }
-            var sessions = await Db.GetAllSessionsAsync();
-            if (sessions.Count > 0) { Nav.NavigateTo("organizations", replace: true); return; }
-        }
         _ready = true;
     }
 
     private void OnPwaStateChanged() => InvokeAsync(StateHasChanged);
+
+    private async Task TryDemoAsync()
+    {
+        _error = null;
+        var isEmpty = await Demo.IsDatabaseEmptyAsync();
+        if (isEmpty)
+        {
+            await LoadDemoAndNavigateAsync();
+        }
+        else
+        {
+            _confirmDemoLoad = true;
+        }
+    }
+
+    private async Task ConfirmLoadDemoDataAsync() => await LoadDemoAndNavigateAsync();
+
+    private async Task LoadDemoAndNavigateAsync()
+    {
+        _confirmDemoLoad = false;
+        _busy = true;
+        _busyAction = WelcomeAction.TryDemo;
+        try
+        {
+            await Demo.LoadDemoDataAsync();
+            Toasts.ShowSuccess(DemoLoadedToast);
+            NavigateToOrganizations();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to load demo data: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+            _busyAction = null;
+        }
+    }
+
+    private async Task StartFromScratchAsync()
+    {
+        _error = null;
+        var isEmpty = await Demo.IsDatabaseEmptyAsync();
+        if (isEmpty)
+        {
+            Toasts.ShowInfo("Start by adding an Organization");
+            NavigateToOrganizations();
+        }
+        else
+        {
+            _showStartChoice = true;
+        }
+    }
+
+    private async Task ClearDataAndContinueAsync()
+    {
+        _busy = true;
+        _busyAction = WelcomeAction.ClearData;
+        _showStartChoice = false;
+        _error = null;
+        try
+        {
+            await Db.ClearAllUserDataAsync();
+            Toasts.ShowSuccess("All data was cleared");
+            NavigateToOrganizations();
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to clear data: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+            _busyAction = null;
+        }
+    }
+
+    private void KeepDataAndContinue()
+    {
+        _showStartChoice = false;
+        NavigateToOrganizations();
+    }
+
+    private void CancelDemoLoad() => _confirmDemoLoad = false;
+
+    private void CancelStartChoice() => _showStartChoice = false;
+
+    private void NavigateToOrganizations() => Nav.NavigateTo("organizations");
+
+    private void GoToEvaluate() => Nav.NavigateTo("evaluate");
 
     private async Task InstallAsync() => await Pwa.PromptInstallAsync();
 
