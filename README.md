@@ -4,6 +4,8 @@ A browser-based opportunity management system for structured searches in any sec
 
 **[Live App on GitHub Pages](https://dbakuntsev.github.io/simply.job-application/)**
 
+![Screenshot of Welcome page](.github/screenshots/screenshot-1.png)
+
 ---
 
 ## Overview
