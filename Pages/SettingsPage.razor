@@ -3,6 +3,7 @@
 @inject IIndexedDbService Db
 @inject IAiProviderFactory Providers
 @inject IDemoDataService Demo
+@inject AppToastService Toasts
 
 <PageTitle>Settings — Simply Opportunity Tracker</PageTitle>
 
@@ -140,10 +141,6 @@
             </div>
         </div>
 
-        @if (_saved)
-        {
-            <div class="alert alert-success mt-3">Settings saved.</div>
-        }
         @if (_error is not null)
         {
             <div class="alert alert-danger mt-3">@_error</div>
@@ -325,7 +322,6 @@
     long _storageUsage;
     bool _storageLoaded;
 
-    bool _saved;
     bool _confirmClear;
     bool _confirmDemoLoad;
     bool _loadingDemo;
@@ -427,14 +423,12 @@
 
     void OnProviderChanged()
     {
-        if (_saved) _saved = false;
         LoadProviderFields();
     }
 
     async Task SaveAsync()
     {
         _error = null;
-        _saved = false;
         try
         {
             _settings.AiProvider = _selectedProvider;
@@ -442,7 +436,7 @@
             _settings.ProviderModels[_selectedProvider] = _selectedModel;
             _settings.OutputResumePages = _outputResumePages;
             await Db.SaveSettingsAsync(_settings);
-            _saved = true;
+            Toasts.ShowSuccess("Settings saved.");
         }
         catch (Exception ex)
         {
@@ -456,7 +450,8 @@
         try
         {
             await Db.ClearAllUserDataAsync();
-            _saved = true;
+            Toasts.ShowSuccess("All data was cleared.");
+            await LoadStorageUsageAsync();
         }
         catch (Exception ex)
         {
@@ -473,6 +468,7 @@
             var base64 = await Db.ExportDataAsync();
             var date = DateTime.Now.ToString("yyyy-MM-dd");
             await Db.DownloadGenericFileAsync($"simply-backup-{date}.json.gz", base64);
+            Toasts.ShowSuccess("Backup exported.");
         }
         catch (Exception ex)
         {
@@ -568,7 +564,7 @@
         {
             await Demo.LoadDemoDataAsync();
             await LoadStorageUsageAsync();
-            _saved = true;
+            Toasts.ShowSuccess("Loaded demo data - explore freely. Visit Settings page to clear demo data.");
         }
         catch (Exception ex)
         {
