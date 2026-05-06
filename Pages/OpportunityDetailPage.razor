@@ -1247,6 +1247,7 @@ else
 
         if (result == VersionedWriteResult.Success)
         {
+            _editOpp.Version++;
             if (changes.Count > 0)
             {
                 var histEntry = new OpportunityFieldHistory
@@ -1291,6 +1292,7 @@ else
         var result = await Db.VersionedWriteAsync("opportunities", _opp, new[] { $"opp:{_opp.Id}" });
         if (result == VersionedWriteResult.Success)
         {
+            _opp.Version++;
             var histEntry = new OpportunityFieldHistory
             {
                 OpportunityId = Id,
@@ -1378,6 +1380,7 @@ else
         var writeResult = await Db.VersionedWriteAsync("opportunities", _opp, new[] { $"opp:{_opp.Id}" });
         if (writeResult == VersionedWriteResult.Success)
         {
+            _opp.Version++;
             if (changes.Count > 0)
             {
                 var histEntry = new OpportunityFieldHistory

@@ -109,6 +109,50 @@ public class OpportunityDetailPageTests : BunitContext
     }
 
     [Fact]
+    public async Task EditMode_ConsecutivePostingUrlSaves_UsesUpdatedLocalVersion()
+    {
+        var opp = MakeOpp();
+        var db  = new TestIndexedDbBuilder().WithOpportunity(opp).WithOrganization(MakeOrg()).Build();
+        var storedVersion = opp.Version;
+        var versionsWritten = new List<int>();
+        db.VersionedWriteAsync("opportunities", Arg.Any<Opportunity>(), Arg.Any<string[]?>())
+            .Returns(call =>
+            {
+                var written = call.ArgAt<Opportunity>(1);
+                versionsWritten.Add(written.Version);
+                if (written.Version != storedVersion)
+                    return Task.FromResult(VersionedWriteResult.VersionMismatch);
+                storedVersion++;
+                return Task.FromResult(VersionedWriteResult.Success);
+            });
+
+        var (cut, _) = await Render(opp, db);
+
+        await AddPostingUrlAndSave(cut, "https://jobs.example.com/second");
+        await AddPostingUrlAndSave(cut, "https://jobs.example.com/third");
+
+        Assert.Equal(new[] { 1, 2 }, versionsWritten);
+        Assert.DoesNotContain("modified in another tab", cut.Markup);
+    }
+
+    private static async Task AddPostingUrlAndSave(IRenderedComponent<OpportunityDetailPage> cut, string url)
+    {
+        await EnterEditMode(cut);
+
+        var addUrlBtn = cut.FindAll("button").First(b => b.TextContent.Trim() == "+ Add URL");
+        await addUrlBtn.ClickAsync(new());
+
+        var urlInputs = cut.FindAll("input[placeholder='https://']");
+        await urlInputs.Last().ChangeAsync(new ChangeEventArgs { Value = url });
+
+        var saveBtn = cut.FindAll("button").First(b =>
+            b.TextContent.Trim() == "Save" || b.TextContent.Contains("Saving"));
+        await saveBtn.ClickAsync(new());
+
+        await cut.WaitForStateAsync(() => cut.FindAll("button").Any(b => b.TextContent.Trim() == "Edit"));
+    }
+
+    [Fact]
     public async Task EditMode_Cancel_RevertsAllDraftChanges()
     {
         var opp = MakeOpp();
