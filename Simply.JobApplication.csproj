@@ -17,6 +17,10 @@
     <Content Remove="Simply.JobApplication.Tests\**" />
     <None Remove="Simply.JobApplication.Tests\**" />
     <EmbeddedResource Remove="Simply.JobApplication.Tests\**" />
+    <Compile Remove="Tools\**" />
+    <Content Remove="Tools\**" />
+    <None Remove="Tools\**" />
+    <EmbeddedResource Remove="Tools\**" />
   </ItemGroup>
 
   <ItemGroup>

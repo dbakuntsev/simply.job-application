@@ -1,0 +1,201 @@
+@using Simply.JobApplication.Models
+
+@if (Show)
+{
+    <div class="modal d-block" tabindex="-1" role="dialog" aria-modal="true" aria-label="Ask Question"
+         style="background:rgba(0,0,0,.45);z-index:1055">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@Title</h5>
+                    <button class="btn-close" @onclick="Cancel" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Question</label>
+                        <textarea class="form-control" rows="4"
+                                  @bind="_questionText"
+                                  @bind:event="oninput"
+                                  placeholder="e.g. Why are you interested in this role?"
+                                  aria-label="Question text"></textarea>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Tone</label>
+                        <select class="form-select"
+                                value="@_tone.ToString()"
+                                @onchange="e => _tone = Enum.Parse<QuestionTone>((string)e.Value!)">
+                            <option value="Formal">Formal</option>
+                            <option value="Conversational">Conversational</option>
+                            <option value="Concise">Concise</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label fw-semibold mb-0">Output Length</label>
+                            @if (EstimateLength is not null)
+                            {
+                                <button type="button" class="btn btn-sm btn-outline-secondary"
+                                        disabled="@(_estimating || string.IsNullOrWhiteSpace(_questionText))"
+                                        @onclick="EstimateAsync"
+                                        title="Get a suggested length for this question"
+                                        aria-label="Estimate length">
+                                    @if (_estimating)
+                                    {
+                                        <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                                        <span>Estimating…</span>
+                                    }
+                                    else
+                                    {
+                                        <span>Estimate Length</span>
+                                    }
+                                </button>
+                            }
+                        </div>
+                        <div class="input-group">
+                            <input type="number" class="form-control" min="1" max="20"
+                                   @bind="_lengthValue"
+                                   @bind:event="oninput"
+                                   aria-label="Length value" />
+                            <select class="form-select" style="max-width:140px"
+                                    value="@_lengthUnit.ToString()"
+                                    @onchange="e => _lengthUnit = Enum.Parse<QuestionLengthUnit>((string)e.Value!)">
+                                <option value="Sentences">Sentences</option>
+                                <option value="Paragraphs">Paragraphs</option>
+                            </select>
+                        </div>
+                        @if (_estimate is { } est)
+                        {
+                            var differs = est.Value != _lengthValue || est.Unit != _lengthUnit;
+                            <div class="form-text mt-1">
+                                <span class="@(differs ? "text-warning-emphasis" : "text-success-emphasis")">
+                                    Suggested: <strong>@est.Value @est.Unit.ToString().ToLowerInvariant()</strong>
+                                </span>
+                                @if (!string.IsNullOrWhiteSpace(est.Rationale))
+                                {
+                                    <span class="text-muted"> — @est.Rationale</span>
+                                }
+                                @if (differs)
+                                {
+                                    <button type="button" class="btn btn-link btn-sm p-0 ms-2 align-baseline"
+                                            @onclick="ApplyEstimate"
+                                            aria-label="Apply suggested length">
+                                        Apply
+                                    </button>
+                                }
+                            </div>
+                        }
+                        else if (!string.IsNullOrWhiteSpace(_estimateError))
+                        {
+                            <div class="form-text mt-1 text-danger-emphasis">@_estimateError</div>
+                        }
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-secondary" @onclick="Cancel">Cancel</button>
+                    <button class="btn btn-primary"
+                            disabled="@(string.IsNullOrWhiteSpace(_questionText) || _lengthValue < 1)"
+                            @onclick="Submit">
+                        Generate Answer
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Show { get; set; }
+    [Parameter] public string Title { get; set; } = "Ask Question";
+    [Parameter] public QuestionAnswerEntry? Prefill { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    [Parameter] public EventCallback<AskQuestionRequest> OnSubmit { get; set; }
+
+    // Optional. When provided, the modal renders an "Estimate Length" button
+    // that invokes this callback. The parent page owns the AI provider, API
+    // key, and model selection — keeps the modal pure-UI.
+    [Parameter] public Func<EstimateLengthRequest, Task<AnswerLengthEstimate>>? EstimateLength { get; set; }
+
+    string _questionText = "";
+    QuestionTone _tone = QuestionTone.Formal;
+    int _lengthValue = 3;
+    QuestionLengthUnit _lengthUnit = QuestionLengthUnit.Sentences;
+
+    bool _estimating;
+    AnswerLengthEstimate? _estimate;
+    string? _estimateError;
+
+    protected override void OnParametersSet()
+    {
+        if (Prefill is not null)
+        {
+            _questionText = Prefill.QuestionText;
+            _tone         = Prefill.Tone;
+            _lengthValue  = Prefill.LengthValue;
+            _lengthUnit   = Prefill.LengthUnit;
+        }
+        else if (!Show)
+        {
+            _questionText   = "";
+            _tone           = QuestionTone.Formal;
+            _lengthValue    = 3;
+            _lengthUnit     = QuestionLengthUnit.Sentences;
+            _estimate       = null;
+            _estimateError  = null;
+            _estimating     = false;
+        }
+    }
+
+    async Task EstimateAsync()
+    {
+        if (EstimateLength is null) return;
+        if (string.IsNullOrWhiteSpace(_questionText)) return;
+
+        _estimating    = true;
+        _estimateError = null;
+        StateHasChanged();
+
+        try
+        {
+            var req = new EstimateLengthRequest(_questionText.Trim(), _tone);
+            _estimate = await EstimateLength(req);
+        }
+        catch (Exception ex)
+        {
+            _estimateError = $"Could not estimate length: {ex.Message}";
+        }
+        finally
+        {
+            _estimating = false;
+            StateHasChanged();
+        }
+    }
+
+    void ApplyEstimate()
+    {
+        if (_estimate is null) return;
+        _lengthValue = _estimate.Value;
+        _lengthUnit  = _estimate.Unit;
+    }
+
+    async Task Submit()
+    {
+        if (string.IsNullOrWhiteSpace(_questionText) || _lengthValue < 1) return;
+        var request = new AskQuestionRequest(
+            _questionText.Trim(), _tone, _lengthValue, _lengthUnit, _estimate);
+        await OnSubmit.InvokeAsync(request);
+    }
+
+    async Task Cancel() => await OnCancel.InvokeAsync();
+
+    // Submit payload. Carries the user's choices plus, when the user clicked
+    // Estimate Length during this dialog session, the most recent estimator
+    // output so the parent can persist it on the entry as advisory.
+    public sealed record AskQuestionRequest(
+        string                Question,
+        QuestionTone          Tone,
+        int                   LengthValue,
+        QuestionLengthUnit    LengthUnit,
+        AnswerLengthEstimate? Estimate);
+
+    public sealed record EstimateLengthRequest(string Question, QuestionTone Tone);
+}

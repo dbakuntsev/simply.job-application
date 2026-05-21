@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using Simply.JobApplication.Services.AI.OpenAi;
 
 namespace Simply.JobApplication.Services.AI;
@@ -6,9 +7,9 @@ public class AiProviderFactory : IAiProviderFactory
 {
     private readonly Dictionary<string, IAiProvider> _providers;
 
-    public AiProviderFactory(HttpClient httpClient)
+    public AiProviderFactory(IServiceProvider serviceProvider)
     {
-        var openAi = new OpenAiProvider(httpClient);
+        var openAi = serviceProvider.GetRequiredService<OpenAiProvider>();
         _providers = new Dictionary<string, IAiProvider>
         {
             [openAi.ProviderId] = openAi,

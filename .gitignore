@@ -31,3 +31,7 @@ _ReSharper*/
 #Nuget packages folder
 packages/
 .local/
+# Q&A harness output and local API key file
+Tools/QnA.Harness/runs/
+Tools/QnA.Harness/comparisons/
+.env

@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>Simply.JobApplication.Tools.QnA.Harness</RootNamespace>
+    <AssemblyName>qna-harness</AssemblyName>
+    <!--
+      The main project is a Blazor WebAssembly SDK project. A console SDK project
+      can ProjectReference it for type access; we just don't run anything that
+      requires the WASM runtime (we stub IWebAssemblyHostEnvironment ourselves).
+    -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\Simply.JobApplication.csproj" />
+  </ItemGroup>
+
+</Project>

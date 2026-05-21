@@ -35,4 +35,8 @@ public class SessionRecord : IVersioned
     public string? TailoredResumeFileId { get; set; }
     public string? CoverLetterFileId { get; set; }
     public bool ArtifactsGenerated { get; set; }
+    public string TailoredResumeMarkdown { get; set; } = "";
+
+    // Q&A entries
+    public List<QuestionAnswerEntry> Questions { get; set; } = new();
 }

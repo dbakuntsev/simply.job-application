@@ -2,6 +2,7 @@
 @implements IAsyncDisposable
 @inject IIndexedDbService Db
 @inject IDocxService Docx
+@inject IAiProviderFactory Providers
 @inject IDataSyncService DataSync
 @inject NavigationManager Nav
 @inject IJSRuntime JS
@@ -91,7 +92,16 @@ else
                                     }
                                 </div>
                                 <div class="col-sm-6">
-                                    <p class="text-muted small mb-0">Opportunity</p>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <p class="text-muted small mb-0">Opportunity</p>
+                                        @if (_session.OpportunityId is null)
+                                        {
+                                            <button class="btn btn-sm btn-outline-primary py-0"
+                                                    @onclick="() => _showSaveOppModal = true">
+                                                Save Opportunity
+                                            </button>
+                                        }
+                                    </div>
                                     @if (!string.IsNullOrEmpty(_oppDisplay.Text))
                                     {
                                         @if (_oppDisplay.Url is not null)
@@ -276,6 +286,74 @@ else
                             </div>
                         </div>
                     }
+
+                    @if (_session.ArtifactsGenerated)
+                    {
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <span>Questions &amp; Answers</span>
+                                    <button class="btn btn-sm btn-outline-primary"
+                                            disabled="@AnyQaGenerating"
+                                            @onclick="() => { _qaRegenerateEntry = null; _showAskQuestionModal = true; }">
+                                        Ask Question
+                                    </button>
+                                </div>
+                                <div class="card-body">
+                                    @if (_session.Questions.Count == 0)
+                                    {
+                                        <p class="text-muted small mb-0">No questions yet. Click "Ask Question" to generate a tailored answer.</p>
+                                    }
+                                    else
+                                    {
+                                        <div class="list-group list-group-flush">
+                                            @foreach (var qa in _session.Questions)
+                                            {
+                                                var entry = qa;
+                                                <div class="list-group-item px-0 d-flex align-items-center gap-2">
+                                                    <button class="flex-grow-1 btn btn-link text-start p-0 text-decoration-none text-body"
+                                                            style="min-width:0;overflow:hidden"
+                                                            disabled="@(entry.Status == QuestionAnswerStatus.Generating)"
+                                                            @onclick="() => OpenQaDetailModal(entry)">
+                                                        <span class="fw-semibold" style="max-width:40%;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom">@entry.QuestionText</span>
+                                                        <span class="text-muted mx-1">—</span>
+                                                        @if (entry.Status == QuestionAnswerStatus.Generating)
+                                                        {
+                                                            <span class="spinner-border spinner-border-sm text-secondary" role="status" aria-label="Generating…"></span>
+                                                        }
+                                                        else if (entry.Status == QuestionAnswerStatus.Error)
+                                                        {
+                                                            <span class="text-danger small">Generation failed</span>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="text-muted small" style="display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom">@entry.AnswerText</span>
+                                                        }
+                                                    </button>
+                                                    <div class="d-flex gap-1 flex-shrink-0">
+                                                        <button class="btn btn-sm btn-outline-secondary"
+                                                                title="@(entry.Status == QuestionAnswerStatus.Error ? "Retry" : "Regenerate")"
+                                                                disabled="@AnyQaGenerating"
+                                                                @onclick="() => OpenRegenerateModal(entry)"
+                                                                aria-label="Regenerate answer">
+                                                            ↺
+                                                        </button>
+                                                        <button class="btn btn-sm btn-outline-danger"
+                                                                title="Delete"
+                                                                disabled="@(entry.Status == QuestionAnswerStatus.Generating)"
+                                                                @onclick="async () => await DeleteQuestionAsync(entry)"
+                                                                aria-label="Delete question">
+                                                            ✕
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            }
+                                        </div>
+                                    }
+                                </div>
+                            </div>
+                        </div>
+                    }
                 </div>
             </div>
         </section>
@@ -304,6 +382,28 @@ else
                     Message="@_deletionMessage"
                     OnDismiss="HandleDeletionDismiss" />
 
+<AskQuestionModal Show="@_showAskQuestionModal"
+                  Title="@(_qaRegenerateEntry is null ? "Ask Question" : "Regenerate Answer")"
+                  Prefill="@_qaRegenerateEntry"
+                  EstimateLength="@EstimateLengthAsync"
+                  OnCancel="@(() => { _showAskQuestionModal = false; _qaRegenerateEntry = null; })"
+                  OnSubmit="@(async req => await HandleAskQuestionSubmitAsync(req))" />
+
+<QuestionAnswerDetailModal Show="@_showQaDetailModal"
+                           Entry="@_qaDetailEntry"
+                           OnClose="@(() => { _showQaDetailModal = false; _qaDetailEntry = null; })" />
+
+@if (_session is not null)
+{
+    <SaveOpportunityModal @bind-Show="_showSaveOppModal"
+                          Role="@_session.Role"
+                          RoleDescription="@_session.RoleDescription"
+                          SuggestedOrgName="@_session.OrganizationNameSnapshot"
+                          LinkedOrgId="@_session.OrganizationId"
+                          LinkedOrgName="@(_session.OrganizationId is null ? null : _session.OrganizationNameSnapshot)"
+                          OnSaved="HandleOpportunitySavedAsync" />
+}
+
 @code {
     [Parameter] public string Id { get; set; } = "";
 
@@ -324,6 +424,14 @@ else
     string _diffFooterLabel = "";
     string _deletionMessage = "";
     string? _error;
+
+    bool _showAskQuestionModal;
+    bool _showQaDetailModal;
+    bool _showSaveOppModal;
+    QuestionAnswerEntry? _qaDetailEntry;
+    QuestionAnswerEntry? _qaRegenerateEntry;
+
+    bool AnyQaGenerating => _session?.Questions.Any(q => q.Status == QuestionAnswerStatus.Generating) ?? false;
 
     protected override async Task OnInitializedAsync()
     {
@@ -385,11 +493,19 @@ else
     private async Task StartCompareAsync()
     {
         if (_resumeVersion is null || _session?.TailoredResumeFileId is null) return;
-        var tailored = await Db.GetFileAsync(_session.TailoredResumeFileId);
-        if (tailored is null) { _error = "Tailored resume file no longer in storage."; return; }
 
         _diffOriginal = Docx.ExtractTextAsMarkdown(Convert.FromBase64String(_resumeVersion.FileDataBase64));
-        _diffModified = Docx.ExtractTextAsMarkdown(Convert.FromBase64String(tailored.DataBase64));
+
+        if (!string.IsNullOrEmpty(_session.TailoredResumeMarkdown))
+        {
+            _diffModified = _session.TailoredResumeMarkdown;
+        }
+        else
+        {
+            var tailored = await Db.GetFileAsync(_session.TailoredResumeFileId);
+            if (tailored is null) { _error = "Tailored resume file no longer in storage."; return; }
+            _diffModified = Docx.ExtractTextAsMarkdown(Convert.FromBase64String(tailored.DataBase64));
+        }
         _diffFooterLabel = $"Left: {_session.BaseResumeNameSnapshot} v{_session.BaseResumeVersionNumberSnapshot}  |  Right: Tailored Resume";
         _showDiff = true;
     }
@@ -458,6 +574,166 @@ else
     }
 
     private void HandleDeletionDismiss() => Nav.NavigateTo("history");
+
+    // ── Save Opportunity ─────────────────────────────────────────────────────
+
+    private async Task HandleOpportunitySavedAsync(SaveOpportunityModal.SaveResult result)
+    {
+        if (_session is null) return;
+
+        _session.OrganizationId           = result.OrganizationId;
+        _session.OrganizationNameSnapshot = result.OrganizationName;
+        _session.OpportunityId            = result.OpportunityId;
+        _session.OpportunityRoleSnapshot  = result.OpportunityRole;
+        _session.Version++;
+        await Db.SaveSessionAsync(_session);
+        await DataSync.BroadcastAsync("session", _session.Id, "updated");
+
+        if (result.CreatedNewOrganization || result.CreatedNewOpportunity)
+        {
+            var orgProj = await Db.GetOrganizationProjectionsAsync();
+            _orgMap = orgProj.ToDictionary(o => o.Id);
+            var oppProj = await Db.GetOpportunityProjectionsAsync();
+            _oppMap = oppProj.ToDictionary(o => o.Id);
+        }
+        _orgDisplay = SessionDisplayHelper.ResolveOrg(_session, _orgMap);
+        _oppDisplay = SessionDisplayHelper.ResolveOpp(_session, _oppMap);
+        _isAdHoc = _session.OrganizationId is null;
+
+        StateHasChanged();
+    }
+
+    // ── Q&A handlers ─────────────────────────────────────────────────────────
+
+    private void OpenQaDetailModal(QuestionAnswerEntry entry)
+    {
+        _qaDetailEntry = entry;
+        _showQaDetailModal = true;
+    }
+
+    private void OpenRegenerateModal(QuestionAnswerEntry entry)
+    {
+        _qaRegenerateEntry = entry;
+        _showAskQuestionModal = true;
+    }
+
+    private async Task HandleAskQuestionSubmitAsync(AskQuestionModal.AskQuestionRequest req)
+    {
+        if (_session is null) return;
+        _showAskQuestionModal = false;
+
+        if (_qaRegenerateEntry is not null)
+        {
+            var entry = _qaRegenerateEntry;
+            _qaRegenerateEntry = null;
+            entry.QuestionText             = req.Question;
+            entry.Tone                     = req.Tone;
+            entry.LengthValue              = req.LengthValue;
+            entry.LengthUnit               = req.LengthUnit;
+            entry.SuggestedLengthValue     = req.Estimate?.Value;
+            entry.SuggestedLengthUnit      = req.Estimate?.Unit;
+            entry.SuggestedLengthRationale = req.Estimate?.Rationale;
+            entry.AnswerText               = null;
+            entry.Status                   = QuestionAnswerStatus.Generating;
+            entry.ErrorMessage             = null;
+            StateHasChanged();
+            await RunQaGenerationAsync(entry);
+        }
+        else
+        {
+            var entry = new QuestionAnswerEntry
+            {
+                QuestionText             = req.Question,
+                Tone                     = req.Tone,
+                LengthValue              = req.LengthValue,
+                LengthUnit               = req.LengthUnit,
+                SuggestedLengthValue     = req.Estimate?.Value,
+                SuggestedLengthUnit      = req.Estimate?.Unit,
+                SuggestedLengthRationale = req.Estimate?.Rationale,
+            };
+            _session.Questions.Add(entry);
+            StateHasChanged();
+            await RunQaGenerationAsync(entry);
+        }
+    }
+
+    // Invoked from AskQuestionModal when the user clicks "Estimate Length".
+    // Looks up the current provider/model/key from settings and dispatches.
+    private async Task<AnswerLengthEstimate> EstimateLengthAsync(AskQuestionModal.EstimateLengthRequest req)
+    {
+        if (_session is null) throw new InvalidOperationException("Session not loaded");
+
+        var settings = await Db.GetSettingsAsync();
+        var apiKey   = settings.ProviderApiKeys.GetValueOrDefault(settings.AiProvider) ?? "";
+        var modelId  = settings.ProviderModels.GetValueOrDefault(settings.AiProvider)
+                       ?? Providers.Get(settings.AiProvider).DefaultModelId;
+        var provider = Providers.Get(settings.AiProvider);
+
+        return await provider.EstimateAnswerLengthAsync(
+            questionText:    req.Question,
+            tone:            req.Tone,
+            orgName:         _session.OrganizationNameSnapshot,
+            roleName:        _session.Role,
+            roleDescription: _session.RoleDescription,
+            modelId:         modelId,
+            apiKey:          apiKey);
+    }
+
+    private async Task RunQaGenerationAsync(QuestionAnswerEntry entry)
+    {
+        if (_session is null) return;
+        try
+        {
+            var settings = await Db.GetSettingsAsync();
+            var apiKey   = settings.ProviderApiKeys.GetValueOrDefault(settings.AiProvider) ?? "";
+            var modelId  = settings.ProviderModels.GetValueOrDefault(settings.AiProvider)
+                           ?? Providers.Get(settings.AiProvider).DefaultModelId;
+            var provider = Providers.Get(settings.AiProvider);
+
+            string? orgDescription = null;
+            if (_session.OrganizationId is not null)
+            {
+                var org = await Db.GetOrganizationAsync(_session.OrganizationId);
+                orgDescription = org?.Description?.Trim() is { Length: > 0 } d ? d : null;
+            }
+
+            entry.AnswerText = await provider.AnswerQuestionAsync(
+                entry.QuestionText,
+                entry.Tone,
+                entry.LengthValue,
+                entry.LengthUnit,
+                _session.OrganizationNameSnapshot,
+                orgDescription,
+                _session.Role,
+                _session.RoleDescription,
+                _session.TailoredResumeMarkdown,
+                modelId,
+                apiKey);
+
+            entry.Status = QuestionAnswerStatus.Done;
+        }
+        catch (Exception ex)
+        {
+            entry.Status       = QuestionAnswerStatus.Error;
+            entry.ErrorMessage = ex.Message;
+        }
+        finally
+        {
+            StateHasChanged();
+            _session.Version++;
+            await Db.SaveSessionAsync(_session);
+            await DataSync.BroadcastAsync("session", _session.Id, "updated");
+        }
+    }
+
+    private async Task DeleteQuestionAsync(QuestionAnswerEntry entry)
+    {
+        if (_session is null || entry.Status == QuestionAnswerStatus.Generating) return;
+        _session.Questions.Remove(entry);
+        _session.Version++;
+        await Db.SaveSessionAsync(_session);
+        await DataSync.BroadcastAsync("session", _session.Id, "updated");
+    }
 
     public async ValueTask DisposeAsync()
     {

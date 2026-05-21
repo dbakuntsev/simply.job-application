@@ -9,9 +9,14 @@ namespace Simply.JobApplication.Services;
 public class AppStartupService
 {
     private readonly IIndexedDbService _db;
+    private readonly IDocxService _docx;
     private bool _initialized;
 
-    public AppStartupService(IIndexedDbService db) => _db = db;
+    public AppStartupService(IIndexedDbService db, IDocxService docx)
+    {
+        _db   = db;
+        _docx = docx;
+    }
 
     public async Task InitializeAsync()
     {
@@ -27,11 +32,46 @@ public class AppStartupService
     private async Task RunMigrationAsync()
     {
         var version = await _db.GetSchemaVersionAsync();
-        if (version >= 2) return;
 
-        await _db.ClearSessionsAsync();
-        await _db.ClearFilesAsync();
-        await _db.SetSchemaVersionAsync(2);
+        if (version < 2)
+        {
+            await _db.ClearSessionsAsync();
+            await _db.ClearFilesAsync();
+            version = 2;
+            await _db.SetSchemaVersionAsync(version);
+        }
+
+        if (version < 3)
+        {
+            await MigrateTailoredResumeMarkdownAsync();
+            await _db.SetSchemaVersionAsync(3);
+        }
+    }
+
+    // Backfills TailoredResumeMarkdown on sessions that have a tailored resume DOCX
+    // but were saved before the field was introduced.
+    private async Task MigrateTailoredResumeMarkdownAsync()
+    {
+        var sessions = await _db.GetAllSessionsAsync();
+        foreach (var session in sessions)
+        {
+            if (session.TailoredResumeFileId is null || !string.IsNullOrEmpty(session.TailoredResumeMarkdown))
+                continue;
+
+            var file = await _db.GetFileAsync(session.TailoredResumeFileId);
+            if (file is null) continue;
+
+            try
+            {
+                var bytes = Convert.FromBase64String(file.DataBase64);
+                session.TailoredResumeMarkdown = _docx.ExtractTextAsMarkdown(bytes);
+                await _db.SaveSessionAsync(session);
+            }
+            catch
+            {
+                // Skip sessions whose DOCX cannot be parsed; they simply won't have markdown context.
+            }
+        }
     }
 
     // ── Lookup seeding ────────────────────────────────────────────────────────

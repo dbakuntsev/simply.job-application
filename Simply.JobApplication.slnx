@@ -1,4 +1,5 @@
 <Solution>
   <Project Path="Simply.JobApplication.csproj" />
   <Project Path="Simply.JobApplication.Tests/Simply.JobApplication.Tests.csproj" />
+  <Project Path="Tools/QnA.Harness/Tools.QnA.Harness.csproj" />
 </Solution>

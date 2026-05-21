@@ -1,0 +1,107 @@
+@using Simply.JobApplication.Models
+@inject IJSRuntime JS
+
+@if (Show && Entry is not null)
+{
+    <div class="modal d-block" tabindex="-1" role="dialog" aria-modal="true" aria-label="Question &amp; Answer Detail"
+         style="background:rgba(0,0,0,.45);z-index:1060">
+        <div class="modal-dialog modal-dialog-centered modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Question &amp; Answer</h5>
+                    <button class="btn-close" @onclick="Close" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <dl class="row mb-3">
+                        <dt class="col-sm-3">Tone</dt>
+                        <dd class="col-sm-9">@Entry.Tone</dd>
+
+                        <dt class="col-sm-3">Length</dt>
+                        <dd class="col-sm-9">
+                            @Entry.LengthValue @Entry.LengthUnit.ToString().ToLower()
+                            @if (ShowLengthAdvisory)
+                            {
+                                <div class="text-muted small mt-1" title="@(Entry.SuggestedLengthRationale ?? "")">
+                                    @AdvisoryText
+                                </div>
+                            }
+                        </dd>
+                    </dl>
+
+                    <div class="mb-3">
+                        <div class="fw-semibold mb-1">Question</div>
+                        <div class="border rounded p-2 bg-light small">@Entry.QuestionText</div>
+                    </div>
+
+                    <div class="mb-1">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <span class="fw-semibold">Answer</span>
+                            @if (!string.IsNullOrEmpty(Entry.AnswerText))
+                            {
+                                <button class="btn btn-sm btn-outline-secondary" @onclick="CopyAnswerAsync"
+                                        aria-label="Copy answer to clipboard">
+                                    @(_copied ? "Copied!" : "Copy")
+                                </button>
+                            }
+                        </div>
+                        @if (Entry.Status == QuestionAnswerStatus.Error)
+                        {
+                            <div class="alert alert-danger mb-0 small">@Entry.ErrorMessage</div>
+                        }
+                        else
+                        {
+                            <div class="border rounded p-2 small" style="white-space:pre-wrap">@Entry.AnswerText</div>
+                        }
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-secondary" @onclick="Close">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Show { get; set; }
+    [Parameter] public QuestionAnswerEntry? Entry { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+
+    bool _copied;
+
+    // The advisory is shown only when (a) we have a suggested length, (b) its
+    // unit matches the user's chosen unit (mixing sentences vs. paragraphs in
+    // a comparison would be misleading), and (c) the suggestion differs from
+    // what the user picked. Equal-length suggestions are silent — the expected
+    // case.
+    bool ShowLengthAdvisory =>
+        Entry is { SuggestedLengthValue: > 0 } e
+        && e.SuggestedLengthUnit == e.LengthUnit
+        && e.SuggestedLengthValue!.Value != e.LengthValue;
+
+    string AdvisoryText
+    {
+        get
+        {
+            if (Entry is null || Entry.SuggestedLengthValue is not int suggested) return "";
+            var unit  = Entry.LengthUnit.ToString().ToLowerInvariant();
+            var chose = Entry.LengthValue;
+            return suggested > chose
+                ? $"Suggested: {suggested} {unit} — some supporting detail may be omitted."
+                : $"Suggested: {suggested} {unit} — the answer may include filler.";
+        }
+    }
+
+    async Task CopyAnswerAsync()
+    {
+        if (string.IsNullOrEmpty(Entry?.AnswerText)) return;
+        await JS.InvokeVoidAsync("navigator.clipboard.writeText", Entry.AnswerText);
+        _copied = true;
+        StateHasChanged();
+        await Task.Delay(1500);
+        _copied = false;
+        StateHasChanged();
+    }
+
+    async Task Close() => await OnClose.InvokeAsync();
+}

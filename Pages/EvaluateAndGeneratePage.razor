@@ -251,7 +251,7 @@
             {
                 <button class="btn btn-outline-primary"
                         disabled="@(_evaluating || _generating)"
-                        @onclick="OpenSaveOppModal">
+                        @onclick="() => _showSaveOppModal = true">
                     Save Opportunity
                 </button>
             }
@@ -597,6 +597,70 @@
                         </div>
                     </div>
                 </div>
+                <div class="col-12">
+                    <div class="card">
+                        <div class="card-header d-flex justify-content-between align-items-center">
+                            <span>Questions &amp; Answers</span>
+                            <button class="btn btn-sm btn-outline-primary"
+                                    disabled="@(AnyQaGenerating || !_hasApiKey)"
+                                    @onclick="() => { _qaRegenerateEntry = null; _showAskQuestionModal = true; }">
+                                Ask Question
+                            </button>
+                        </div>
+                        <div class="card-body">
+                            @if (_questions.Count == 0)
+                            {
+                                <p class="text-muted small mb-0">No questions yet. Click "Ask Question" to generate a tailored answer.</p>
+                            }
+                            else
+                            {
+                                <div class="list-group list-group-flush">
+                                    @foreach (var qa in _questions)
+                                    {
+                                        var entry = qa;
+                                        <div class="list-group-item px-0 d-flex align-items-center gap-2">
+                                            <button class="flex-grow-1 btn btn-link text-start p-0 text-decoration-none text-body"
+                                                    style="min-width:0;overflow:hidden"
+                                                    disabled="@(entry.Status == QuestionAnswerStatus.Generating)"
+                                                    @onclick="() => OpenQaDetailModal(entry)">
+                                                <span class="fw-semibold" style="max-width:40%;display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom">@entry.QuestionText</span>
+                                                <span class="text-muted mx-1">—</span>
+                                                @if (entry.Status == QuestionAnswerStatus.Generating)
+                                                {
+                                                    <span class="spinner-border spinner-border-sm text-secondary" role="status" aria-label="Generating…"></span>
+                                                }
+                                                else if (entry.Status == QuestionAnswerStatus.Error)
+                                                {
+                                                    <span class="text-danger small">Generation failed</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="text-muted small" style="display:inline-block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:bottom">@entry.AnswerText</span>
+                                                }
+                                            </button>
+                                            <div class="d-flex gap-1 flex-shrink-0">
+                                                <button class="btn btn-sm btn-outline-secondary"
+                                                        title="@(entry.Status == QuestionAnswerStatus.Error ? "Retry" : "Regenerate")"
+                                                        disabled="@AnyQaGenerating"
+                                                        @onclick="() => OpenRegenerateModal(entry)"
+                                                        aria-label="Regenerate answer">
+                                                    ↺
+                                                </button>
+                                                <button class="btn btn-sm btn-outline-danger"
+                                                        title="Delete"
+                                                        disabled="@(entry.Status == QuestionAnswerStatus.Generating)"
+                                                        @onclick="async () => await DeleteQuestionAsync(entry)"
+                                                        aria-label="Delete question">
+                                                    ✕
+                                                </button>
+                                            </div>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                </div>
             </div>
         }
 
@@ -683,6 +747,19 @@
                       OnLeave="() => OnGuardLeave()" />
 <NavigationLock OnBeforeInternalNavigation="HandleLocationChanging" />
 
+<!-- ── Ask Question Modal ─────────────────────────────────────── -->
+<AskQuestionModal Show="@_showAskQuestionModal"
+                  Title="@(_qaRegenerateEntry is null ? "Ask Question" : "Regenerate Answer")"
+                  Prefill="@_qaRegenerateEntry"
+                  EstimateLength="@EstimateLengthAsync"
+                  OnCancel="@(() => { _showAskQuestionModal = false; _qaRegenerateEntry = null; })"
+                  OnSubmit="@(async req => await HandleAskQuestionSubmitAsync(req))" />
+
+<!-- ── Q&A Detail Modal ───────────────────────────────────────── -->
+<QuestionAnswerDetailModal Show="@_showQaDetailModal"
+                           Entry="@_qaDetailEntry"
+                           OnClose="@(() => { _showQaDetailModal = false; _qaDetailEntry = null; })" />
+
 <!-- ── New + Banner Modal ─────────────────────────────────────── -->
 @if (_showNewWithBannerModal)
 {
@@ -706,145 +783,13 @@
 }
 
 <!-- ── Save Opportunity Modal ──────────────────────────────────── -->
-@if (_showSaveOppModal)
-{
-    <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4);z-index:1055" role="dialog" aria-modal="true" aria-label="Save Opportunity">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Save Opportunity</h5>
-                    <button class="btn-close" @onclick="CloseSaveOppModal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    @if (_saveOppStep == 0)
-                    {
-                        <!-- Form -->
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Organization</label>
-                            @if (_linkedOrgId is not null)
-                            {
-                                <input class="form-control" value="@_linkedOrgName" readonly />
-                            }
-                            else
-                            {
-                                <input class="form-control"
-                                       @bind="_saveOppOrgName"
-                                       @bind:event="oninput"
-                                       @bind:after="() => _saveOppOrgName = _saveOppOrgName.Trim()"
-                                       placeholder="Organization name" />
-                            }
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Role</label>
-                            <input class="form-control" value="@_role" readonly />
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label fw-semibold">Role Description</label>
-                            <textarea class="form-control" rows="4" value="@_roleDescription" readonly></textarea>
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Posting URL</label>
-                            <input class="form-control" @bind="_saveOppPostingUrl"
-                                   @bind:after="() => _saveOppPostingUrl = _saveOppPostingUrl.Trim()"
-                                   placeholder="https://…" />
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Compensation Range</label>
-                            <input class="form-control" @bind="_saveOppCompensationRange"
-                                   @bind:after="() => _saveOppCompensationRange = _saveOppCompensationRange.Trim()"
-                                   placeholder="e.g. $120k–$150k" />
-                        </div>
-                        <div class="mb-3">
-                            <label class="form-label">Work Arrangement</label>
-                            <select class="form-select" value="@(_saveOppWorkArrangement?.ToString() ?? "")"
-                                    @onchange="e => _saveOppWorkArrangement = string.IsNullOrEmpty((string?)e.Value) ? null : Enum.Parse<WorkArrangement>((string)e.Value!)">
-                                <option value="">-- Not specified --</option>
-                                <option value="Remote">Remote</option>
-                                <option value="Hybrid">Hybrid</option>
-                                <option value="OnSite">On-site</option>
-                            </select>
-                        </div>
-                        @if (_saveOppError is not null)
-                        {
-                            <div class="alert alert-danger">@_saveOppError</div>
-                        }
-                    }
-                    else if (_saveOppStep == 1)
-                    {
-                        <!-- Org conflict resolution -->
-                        <p>An organization named <strong>@_saveOppConflictOrg?.Name</strong> already exists. What would you like to do?</p>
-                        <div class="d-flex flex-column gap-2">
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" id="soo-link" name="soo-org"
-                                       checked="@_saveOppOrgChoiceLink"
-                                       @onchange="SelectExistingOrgForSaveOpp" />
-                                <label class="form-check-label" for="soo-link">Link to existing organization</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" id="soo-new" name="soo-org"
-                                       checked="@(!_saveOppOrgChoiceLink)"
-                                       @onchange="() => { _saveOppOrgChoiceLink = false; _saveOppNewOrgName = _saveOppOrgName; }" />
-                                <label class="form-check-label" for="soo-new">Create new organization</label>
-                            </div>
-                            @if (!_saveOppOrgChoiceLink)
-                            {
-                                <div class="ms-4">
-                                    <label class="form-label small">New organization name</label>
-                                    <input class="form-control form-control-sm" @bind="_saveOppNewOrgName"
-                                           @bind:event="oninput"
-                                           @bind:after="() => _saveOppNewOrgName = _saveOppNewOrgName.Trim()" />
-                                </div>
-                            }
-                        </div>
-                    }
-                    else if (_saveOppStep == 2)
-                    {
-                        <!-- Opp conflict resolution -->
-                        @if (_saveOppOppExactMatch)
-                        {
-                            <p>An opportunity with the same Role and Role Description already exists: <strong>@_saveOppConflictOpp?.Role</strong>. Would you like to link to it instead of creating a new one?</p>
-                            <div class="form-check mb-2">
-                                <input class="form-check-input" type="radio" id="soo-opp-link" name="soo-opp"
-                                       checked="@_saveOppOppChoiceLink"
-                                       @onchange="() => _saveOppOppChoiceLink = true" />
-                                <label class="form-check-label" for="soo-opp-link">Link to existing opportunity</label>
-                            </div>
-                            <div class="form-check">
-                                <input class="form-check-input" type="radio" id="soo-opp-new" name="soo-opp"
-                                       checked="@(!_saveOppOppChoiceLink)"
-                                       @onchange="() => _saveOppOppChoiceLink = false" />
-                                <label class="form-check-label" for="soo-opp-new">Create new opportunity</label>
-                            </div>
-                        }
-                        else
-                        {
-                            <p class="text-warning">An opportunity with the same Role but a different description already exists: <strong>@_saveOppConflictOpp?.Role</strong>. A new opportunity with a duplicate role name will be created. Continue?</p>
-                        }
-                    }
-                </div>
-                <div class="modal-footer">
-                    <button class="btn btn-outline-secondary" @onclick="CloseSaveOppModal">Cancel</button>
-                    @if (_saveOppStep == 0)
-                    {
-                        <button class="btn btn-primary" disabled="@(_saveOppSaving || string.IsNullOrWhiteSpace(_linkedOrgId is null ? _saveOppOrgName : _linkedOrgName))"
-                                @onclick="SaveOppNextAsync">
-                            @if (_saveOppSaving) { <span class="spinner-border spinner-border-sm me-1"></span> }
-                            Next
-                        </button>
-                    }
-                    else
-                    {
-                        <button class="btn btn-primary" disabled="@_saveOppSaving"
-                                @onclick="SaveOppNextAsync">
-                            @if (_saveOppSaving) { <span class="spinner-border spinner-border-sm me-1"></span> }
-                            @(_saveOppStep == 2 ? "Save" : "Next")
-                        </button>
-                    }
-                </div>
-            </div>
-        </div>
-    </div>
-}
+<SaveOpportunityModal @bind-Show="_showSaveOppModal"
+                      Role="@_role"
+                      RoleDescription="@_roleDescription"
+                      SuggestedOrgName="@_orgText"
+                      LinkedOrgId="@_linkedOrgId"
+                      LinkedOrgName="@_linkedOrgName"
+                      OnSaved="HandleOpportunitySavedAsync" />
 
 <!-- ── Remote Change Notice Modal ──────────────────────────────── -->
 @if (_showRemoteChangeNoticeModal)
@@ -1011,6 +956,16 @@
     string? _pendingDeleteTailoredFileId;
     string? _pendingDeleteCoverLetterFileId;
 
+    // ── Q&A ───────────────────────────────────────────────────────────────────
+    readonly List<QuestionAnswerEntry> _questions = new();
+    List<QuestionAnswerEntry>? _backedUpQuestions;
+    bool _showAskQuestionModal;
+    bool _showQaDetailModal;
+    QuestionAnswerEntry? _qaDetailEntry;
+    QuestionAnswerEntry? _qaRegenerateEntry;
+
+    bool AnyQaGenerating => _questions.Any(q => q.Status == QuestionAnswerStatus.Generating);
+
     // ── Keywords ──────────────────────────────────────────────────────────────
     readonly List<SuggestedKeyword> _confirmedKeywords = new();
     string _customKeywords = "";
@@ -1023,19 +978,6 @@
 
     // ── Save Opportunity modal ─────────────────────────────────────────
     bool _showSaveOppModal;
-    int _saveOppStep;
-    string _saveOppOrgName = "";
-    Organization? _saveOppConflictOrg;
-    bool _saveOppOrgChoiceLink = true;
-    string _saveOppNewOrgName = "";
-    Opportunity? _saveOppConflictOpp;
-    bool _saveOppOppExactMatch;
-    bool _saveOppOppChoiceLink = true;
-    string _saveOppPostingUrl = "";
-    string _saveOppCompensationRange = "";
-    WorkArrangement? _saveOppWorkArrangement;
-    bool _saveOppSaving;
-    string? _saveOppError;
 
     // ── Remote event modals ────────────────────────────────────────────
     bool _showRemoteChangeNoticeModal;
@@ -1340,6 +1282,7 @@
         _backedUpTailoredResumeFileId = _tailoredResumeFileId;
         _backedUpCoverLetterFileId = _coverLetterFileId;
         _backedUpResumeMarkdown = _resumeMarkdown;
+        _backedUpQuestions = new List<QuestionAnswerEntry>(_questions);
     }
 
     void CheckRoleEditState()
@@ -1352,6 +1295,12 @@
             _tailoredResumeFileId = _backedUpTailoredResumeFileId;
             _coverLetterFileId = _backedUpCoverLetterFileId;
             _resumeMarkdown = _backedUpResumeMarkdown;
+            if (_backedUpQuestions is not null)
+            {
+                _questions.Clear();
+                _questions.AddRange(_backedUpQuestions);
+                _backedUpQuestions = null;
+            }
             _roleFieldsLocked = true;
             _editingPostEvaluate = false;
         }
@@ -1448,6 +1397,8 @@
         _backedUpTailoredResumeFileId = null;
         _backedUpCoverLetterFileId = null;
         _backedUpResumeMarkdown = null;
+        _questions.Clear();
+        _backedUpQuestions = null;
         _confirmedKeywords.Clear();
         _customKeywords = "";
         _evalError = null;
@@ -1616,6 +1567,8 @@
         _materials = null;
         _tailoredResumeFileId = null;
         _coverLetterFileId = null;
+        _questions.Clear();
+        _backedUpQuestions = null;
         _reevaluating = true;
 
         try
@@ -1679,8 +1632,131 @@
             TailoredResumeFileId            = _tailoredResumeFileId,
             CoverLetterFileId               = _coverLetterFileId,
             ArtifactsGenerated              = _materials is not null,
+            TailoredResumeMarkdown          = _materials?.ResumeMarkdown ?? "",
+            Questions                       = _questions.Where(q => q.Status != QuestionAnswerStatus.Generating).ToList(),
         };
         await Db.SaveSessionAsync(session);
+    }
+
+    // ── Q&A handlers ─────────────────────────────────────────────────────────
+
+    void OpenQaDetailModal(QuestionAnswerEntry entry)
+    {
+        _qaDetailEntry = entry;
+        _showQaDetailModal = true;
+    }
+
+    void OpenRegenerateModal(QuestionAnswerEntry entry)
+    {
+        _qaRegenerateEntry = entry;
+        _showAskQuestionModal = true;
+    }
+
+    async Task HandleAskQuestionSubmitAsync(AskQuestionModal.AskQuestionRequest req)
+    {
+        _showAskQuestionModal = false;
+
+        if (_qaRegenerateEntry is not null)
+        {
+            var entry = _qaRegenerateEntry;
+            _qaRegenerateEntry = null;
+            entry.QuestionText             = req.Question;
+            entry.Tone                     = req.Tone;
+            entry.LengthValue              = req.LengthValue;
+            entry.LengthUnit               = req.LengthUnit;
+            entry.SuggestedLengthValue     = req.Estimate?.Value;
+            entry.SuggestedLengthUnit      = req.Estimate?.Unit;
+            entry.SuggestedLengthRationale = req.Estimate?.Rationale;
+            entry.AnswerText               = null;
+            entry.Status                   = QuestionAnswerStatus.Generating;
+            entry.ErrorMessage             = null;
+            StateHasChanged();
+            await RunQaGenerationAsync(entry);
+        }
+        else
+        {
+            var entry = new QuestionAnswerEntry
+            {
+                QuestionText             = req.Question,
+                Tone                     = req.Tone,
+                LengthValue              = req.LengthValue,
+                LengthUnit               = req.LengthUnit,
+                SuggestedLengthValue     = req.Estimate?.Value,
+                SuggestedLengthUnit      = req.Estimate?.Unit,
+                SuggestedLengthRationale = req.Estimate?.Rationale,
+            };
+            _questions.Add(entry);
+            StateHasChanged();
+            await RunQaGenerationAsync(entry);
+        }
+    }
+
+    // Invoked from AskQuestionModal when the user clicks "Estimate Length".
+    async Task<AnswerLengthEstimate> EstimateLengthAsync(AskQuestionModal.EstimateLengthRequest req)
+    {
+        _settings = await Db.GetSettingsAsync();
+        var apiKey   = _settings.ProviderApiKeys.GetValueOrDefault(_settings.AiProvider) ?? "";
+        var modelId  = _settings.ProviderModels.GetValueOrDefault(_settings.AiProvider)
+                       ?? Providers.Get(_settings.AiProvider).DefaultModelId;
+        var provider = Providers.Get(_settings.AiProvider);
+
+        return await provider.EstimateAnswerLengthAsync(
+            questionText:    req.Question,
+            tone:            req.Tone,
+            orgName:         _linkedOrgName ?? _orgText,
+            roleName:        _role,
+            roleDescription: _roleDescription,
+            modelId:         modelId,
+            apiKey:          apiKey);
+    }
+
+    async Task RunQaGenerationAsync(QuestionAnswerEntry entry)
+    {
+        try
+        {
+            _settings = await Db.GetSettingsAsync();
+            var apiKey   = _settings.ProviderApiKeys.GetValueOrDefault(_settings.AiProvider) ?? "";
+            var modelId  = _settings.ProviderModels.GetValueOrDefault(_settings.AiProvider)
+                           ?? Providers.Get(_settings.AiProvider).DefaultModelId;
+            var provider = Providers.Get(_settings.AiProvider);
+
+            var orgDescription = _linkedOrgId is null ? null
+                : (_organizations.FirstOrDefault(o => o.Id == _linkedOrgId)?.Description?.Trim() is { Length: > 0 } d ? d : null);
+
+            entry.AnswerText = await provider.AnswerQuestionAsync(
+                entry.QuestionText,
+                entry.Tone,
+                entry.LengthValue,
+                entry.LengthUnit,
+                _linkedOrgName ?? _orgText,
+                orgDescription,
+                _role,
+                _roleDescription,
+                _materials!.ResumeMarkdown,
+                modelId,
+                apiKey);
+
+            entry.Status = QuestionAnswerStatus.Done;
+        }
+        catch (Exception ex)
+        {
+            entry.Status       = QuestionAnswerStatus.Error;
+            entry.ErrorMessage = ex.Message;
+        }
+        finally
+        {
+            StateHasChanged();
+            await SaveSessionAsync();
+            await DataSync.BroadcastAsync("session", _sessionId!, "updated");
+        }
+    }
+
+    async Task DeleteQuestionAsync(QuestionAnswerEntry entry)
+    {
+        if (entry.Status == QuestionAnswerStatus.Generating) return;
+        _questions.Remove(entry);
+        await SaveSessionAsync();
+        await DataSync.BroadcastAsync("session", _sessionId!, "updated");
     }
 
     // ── Update Opportunity ──────────────────────────────────────────────
@@ -1773,6 +1849,8 @@
         _pendingDeleteTailoredFileId = null;
         _pendingDeleteCoverLetterFileId = null;
         _sessionId = null;
+        _questions.Clear();
+        _backedUpQuestions = null;
         _confirmedKeywords.Clear();
         _customKeywords = "";
         _evalError = null;
@@ -1794,200 +1872,23 @@
 
     // ── Save Opportunity modal ─────────────────────────────────────────
 
-    void OpenSaveOppModal()
+    async Task HandleOpportunitySavedAsync(SaveOpportunityModal.SaveResult result)
     {
-        _saveOppStep = 0;
-        _saveOppOrgName = _orgText;
-        _saveOppPostingUrl = "";
-        _saveOppCompensationRange = "";
-        _saveOppWorkArrangement = null;
-        _saveOppConflictOrg = null;
-        _saveOppOrgChoiceLink = true;
-        _saveOppNewOrgName = "";
-        _saveOppConflictOpp = null;
-        _saveOppOppExactMatch = false;
-        _saveOppOppChoiceLink = true;
-        _saveOppSaving = false;
-        _saveOppError = null;
-        _showSaveOppModal = true;
-    }
-
-    void CloseSaveOppModal() => _showSaveOppModal = false;
-
-    void SelectExistingOrgForSaveOpp() { _saveOppOrgChoiceLink = true; _saveOppNewOrgName = _saveOppConflictOrg?.Name ?? string.Empty; }
-
-    async Task SaveOppNextAsync()
-    {
-        _saveOppSaving = true;
-        _saveOppError = null;
-
-        try
-        {
-            if (_saveOppStep == 0)
-            {
-                // Resolve org
-                if (_linkedOrgId is null)
-                {
-                    var orgName = _saveOppOrgName.Trim();
-                    var existingOrg = _organizations.FirstOrDefault(o =>
-                        string.Equals(o.Name.Trim(), orgName, StringComparison.OrdinalIgnoreCase));
-                    if (existingOrg is not null)
-                    {
-                        _saveOppConflictOrg = existingOrg;
-                        _saveOppOrgChoiceLink = true;
-                        _saveOppNewOrgName = orgName;
-                        _saveOppStep = 1;
-                        return;
-                    }
-                }
-                // No org conflict — go straight to opp conflict check
-                await CheckOppConflictAsync();
-            }
-            else if (_saveOppStep == 1)
-            {
-                // Org conflict resolved — check opp conflict
-                await CheckOppConflictAsync();
-            }
-            else if (_saveOppStep == 2)
-            {
-                await CommitSaveOppAsync();
-            }
-        }
-        catch (Exception ex)
-        {
-            _saveOppError = ex.Message;
-        }
-        finally
-        {
-            _saveOppSaving = false;
-        }
-    }
-
-    async Task CheckOppConflictAsync()
-    {
-        var resolvedOrgId = await GetOrCreateOrgIdAsync(dryRun: true);
-        if (resolvedOrgId is null) return;
-
-        var orgOpps = await Db.GetOpportunitiesByOrganizationAsync(resolvedOrgId);
-        var exactMatch = orgOpps.FirstOrDefault(o =>
-            string.Equals(o.Role.Trim(), _role.Trim(), StringComparison.OrdinalIgnoreCase) &&
-            string.Equals(o.RoleDescription.Trim(), _roleDescription.Trim(), StringComparison.OrdinalIgnoreCase));
-        var roleMatch = exactMatch is null
-            ? orgOpps.FirstOrDefault(o =>
-                string.Equals(o.Role.Trim(), _role.Trim(), StringComparison.OrdinalIgnoreCase))
-            : null;
-
-        if (exactMatch is not null || roleMatch is not null)
-        {
-            _saveOppConflictOpp = exactMatch ?? roleMatch;
-            _saveOppOppExactMatch = exactMatch is not null;
-            _saveOppOppChoiceLink = exactMatch is not null;
-            _saveOppStep = 2;
-        }
-        else
-        {
-            await CommitSaveOppAsync();
-        }
-    }
-
-    async Task<string?> GetOrCreateOrgIdAsync(bool dryRun)
-    {
-        if (_linkedOrgId is not null) return _linkedOrgId;
-
-        if (_saveOppStep == 0 || (_saveOppStep >= 1 && _saveOppOrgChoiceLink && _saveOppConflictOrg is not null))
-        {
-            // Link to existing
-            if (_saveOppConflictOrg is not null) return _saveOppConflictOrg.Id;
-            // No conflict found — will create new
-        }
-
-        if (!dryRun)
-        {
-            var name = (_saveOppStep >= 1 && !_saveOppOrgChoiceLink)
-                ? _saveOppNewOrgName.Trim()
-                : _saveOppOrgName.Trim();
-            var newOrg = new Organization { Name = name };
-            await Db.SaveOrganizationAsync(newOrg);
-            await DataSync.BroadcastAsync("organization", newOrg.Id, "created");
+        if (result.CreatedNewOrganization)
             _organizations = await Db.GetAllOrganizationsAsync();
-            return newOrg.Id;
-        }
 
-        // Dry run: use a placeholder to load the org's existing opps
-        // For dry run when we'd create a new org, there are no existing opps
-        return "__new__";
-    }
-
-    async Task CommitSaveOppAsync()
-    {
-        // Resolve org
-        string resolvedOrgId;
-        string resolvedOrgName;
-
-        if (_linkedOrgId is not null)
-        {
-            resolvedOrgId = _linkedOrgId;
-            resolvedOrgName = _linkedOrgName!;
-        }
-        else if (_saveOppStep >= 1 && _saveOppOrgChoiceLink && _saveOppConflictOrg is not null)
-        {
-            resolvedOrgId = _saveOppConflictOrg.Id;
-            resolvedOrgName = _saveOppConflictOrg.Name;
-        }
-        else
-        {
-            var name = (_saveOppStep >= 1 && !_saveOppOrgChoiceLink)
-                ? _saveOppNewOrgName.Trim()
-                : _saveOppOrgName.Trim();
-            var newOrg = new Organization { Name = name };
-            await Db.SaveOrganizationAsync(newOrg);
-            await DataSync.BroadcastAsync("organization", newOrg.Id, "created");
-            _organizations = await Db.GetAllOrganizationsAsync();
-            resolvedOrgId = newOrg.Id;
-            resolvedOrgName = newOrg.Name;
-        }
-
-        // Resolve opp
-        string resolvedOppId;
-        string resolvedOppRole;
-
-        if (_saveOppStep >= 2 && _saveOppOppChoiceLink && _saveOppOppExactMatch && _saveOppConflictOpp is not null)
-        {
-            resolvedOppId = _saveOppConflictOpp.Id;
-            resolvedOppRole = _saveOppConflictOpp.Role;
-        }
-        else
-        {
-            var newOpp = new Opportunity
-            {
-                OrganizationId    = resolvedOrgId,
-                Role              = _role,
-                RoleDescription   = _roleDescription,
-                PostingUrls       = string.IsNullOrWhiteSpace(_saveOppPostingUrl) ? new() : new List<string> { _saveOppPostingUrl },
-                CompensationRange = _saveOppCompensationRange,
-                WorkArrangement   = _saveOppWorkArrangement,
-                Stage             = OpportunityStage.Open,
-            };
-            await Db.SaveOpportunityAsync(newOpp);
-            await DataSync.BroadcastAsync("opportunity", newOpp.Id, "created");
-            resolvedOppId = newOpp.Id;
-            resolvedOppRole = newOpp.Role;
-        }
-
-        // Update E&G state
-        _linkedOrgId = resolvedOrgId;
-        _linkedOrgName = resolvedOrgName;
-        _orgText = resolvedOrgName;
-        _linkedOppId = resolvedOppId;
-        _linkedOppRole = resolvedOppRole;
+        _linkedOrgId = result.OrganizationId;
+        _linkedOrgName = result.OrganizationName;
+        _orgText = result.OrganizationName;
+        _linkedOppId = result.OpportunityId;
+        _linkedOppRole = result.OpportunityRole;
         _linkedOppRoleDesc = _roleDescription;
         _entitySelectionLocked = true;
-        _opportunities = await Db.GetOpportunitiesByOrganizationAsync(resolvedOrgId);
+        _opportunities = await Db.GetOpportunitiesByOrganizationAsync(result.OrganizationId);
 
         await SaveSessionAsync();
         await DataSync.BroadcastAsync("session", _sessionId!, "updated");
 
-        _showSaveOppModal = false;
         RecalculateUnsavedChangesBanner();
     }
 

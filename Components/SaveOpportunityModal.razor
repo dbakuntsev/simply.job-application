@@ -1,0 +1,366 @@
+@inject IIndexedDbService Db
+@inject IDataSyncService DataSync
+
+@if (Show)
+{
+    <div class="modal d-block" tabindex="-1" style="background:rgba(0,0,0,.4);z-index:1055" role="dialog" aria-modal="true" aria-label="Save Opportunity">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Save Opportunity</h5>
+                    <button class="btn-close" @onclick="Close" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    @if (_step == 0)
+                    {
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Organization</label>
+                            @if (LinkedOrgId is not null)
+                            {
+                                <input class="form-control" value="@LinkedOrgName" readonly />
+                            }
+                            else
+                            {
+                                <input class="form-control"
+                                       @bind="_orgName"
+                                       @bind:event="oninput"
+                                       @bind:after="() => _orgName = _orgName.Trim()"
+                                       placeholder="Organization name" />
+                            }
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Role</label>
+                            <input class="form-control" value="@Role" readonly />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Role Description</label>
+                            <textarea class="form-control" rows="4" value="@RoleDescription" readonly></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Posting URL</label>
+                            <input class="form-control" @bind="_postingUrl"
+                                   @bind:after="() => _postingUrl = _postingUrl.Trim()"
+                                   placeholder="https://…" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Compensation Range</label>
+                            <input class="form-control" @bind="_compensationRange"
+                                   @bind:after="() => _compensationRange = _compensationRange.Trim()"
+                                   placeholder="e.g. $120k–$150k" />
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Work Arrangement</label>
+                            <select class="form-select" value="@(_workArrangement?.ToString() ?? "")"
+                                    @onchange="e => _workArrangement = string.IsNullOrEmpty((string?)e.Value) ? null : Enum.Parse<WorkArrangement>((string)e.Value!)">
+                                <option value="">-- Not specified --</option>
+                                <option value="Remote">Remote</option>
+                                <option value="Hybrid">Hybrid</option>
+                                <option value="OnSite">On-site</option>
+                            </select>
+                        </div>
+                        @if (_error is not null)
+                        {
+                            <div class="alert alert-danger">@_error</div>
+                        }
+                    }
+                    else if (_step == 1)
+                    {
+                        <p>An organization named <strong>@_conflictOrg?.Name</strong> already exists. What would you like to do?</p>
+                        <div class="d-flex flex-column gap-2">
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" id="som-link" name="som-org"
+                                       checked="@_orgChoiceLink"
+                                       @onchange="SelectExistingOrg" />
+                                <label class="form-check-label" for="som-link">Link to existing organization</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" id="som-new" name="som-org"
+                                       checked="@(!_orgChoiceLink)"
+                                       @onchange="() => { _orgChoiceLink = false; _newOrgName = _orgName; }" />
+                                <label class="form-check-label" for="som-new">Create new organization</label>
+                            </div>
+                            @if (!_orgChoiceLink)
+                            {
+                                <div class="ms-4">
+                                    <label class="form-label small">New organization name</label>
+                                    <input class="form-control form-control-sm" @bind="_newOrgName"
+                                           @bind:event="oninput"
+                                           @bind:after="() => _newOrgName = _newOrgName.Trim()" />
+                                </div>
+                            }
+                        </div>
+                    }
+                    else if (_step == 2)
+                    {
+                        @if (_oppExactMatch)
+                        {
+                            <p>An opportunity with the same Role and Role Description already exists: <strong>@_conflictOpp?.Role</strong>. Would you like to link to it instead of creating a new one?</p>
+                            <div class="form-check mb-2">
+                                <input class="form-check-input" type="radio" id="som-opp-link" name="som-opp"
+                                       checked="@_oppChoiceLink"
+                                       @onchange="() => _oppChoiceLink = true" />
+                                <label class="form-check-label" for="som-opp-link">Link to existing opportunity</label>
+                            </div>
+                            <div class="form-check">
+                                <input class="form-check-input" type="radio" id="som-opp-new" name="som-opp"
+                                       checked="@(!_oppChoiceLink)"
+                                       @onchange="() => _oppChoiceLink = false" />
+                                <label class="form-check-label" for="som-opp-new">Create new opportunity</label>
+                            </div>
+                        }
+                        else
+                        {
+                            <p class="text-warning">An opportunity with the same Role but a different description already exists: <strong>@_conflictOpp?.Role</strong>. A new opportunity with a duplicate role name will be created. Continue?</p>
+                        }
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button class="btn btn-outline-secondary" @onclick="Close">Cancel</button>
+                    @if (_step == 0)
+                    {
+                        <button class="btn btn-primary" disabled="@(_saving || string.IsNullOrWhiteSpace(LinkedOrgId is null ? _orgName : LinkedOrgName))"
+                                @onclick="NextAsync">
+                            @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                            Next
+                        </button>
+                    }
+                    else
+                    {
+                        <button class="btn btn-primary" disabled="@_saving"
+                                @onclick="NextAsync">
+                            @if (_saving) { <span class="spinner-border spinner-border-sm me-1"></span> }
+                            @(_step == 2 ? "Save" : "Next")
+                        </button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool Show { get; set; }
+    [Parameter] public EventCallback<bool> ShowChanged { get; set; }
+    [Parameter] public string Role { get; set; } = "";
+    [Parameter] public string RoleDescription { get; set; } = "";
+    [Parameter] public string SuggestedOrgName { get; set; } = "";
+    [Parameter] public string? LinkedOrgId { get; set; }
+    [Parameter] public string? LinkedOrgName { get; set; }
+    [Parameter] public EventCallback<SaveResult> OnSaved { get; set; }
+
+    public record SaveResult(
+        string OrganizationId,
+        string OrganizationName,
+        string OpportunityId,
+        string OpportunityRole,
+        bool CreatedNewOrganization,
+        bool CreatedNewOpportunity);
+
+    int _step;
+    string _orgName = "";
+    Organization? _conflictOrg;
+    bool _orgChoiceLink = true;
+    string _newOrgName = "";
+    Opportunity? _conflictOpp;
+    bool _oppExactMatch;
+    bool _oppChoiceLink = true;
+    string _postingUrl = "";
+    string _compensationRange = "";
+    WorkArrangement? _workArrangement;
+    bool _saving;
+    string? _error;
+
+    List<Organization> _organizations = new();
+    bool _wasShown;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (Show && !_wasShown)
+        {
+            _step = 0;
+            _orgName = SuggestedOrgName;
+            _postingUrl = "";
+            _compensationRange = "";
+            _workArrangement = null;
+            _conflictOrg = null;
+            _orgChoiceLink = true;
+            _newOrgName = "";
+            _conflictOpp = null;
+            _oppExactMatch = false;
+            _oppChoiceLink = true;
+            _saving = false;
+            _error = null;
+            _organizations = await Db.GetAllOrganizationsAsync();
+            _wasShown = true;
+        }
+        else if (!Show && _wasShown)
+        {
+            _wasShown = false;
+        }
+    }
+
+    async Task Close()
+    {
+        Show = false;
+        if (ShowChanged.HasDelegate) await ShowChanged.InvokeAsync(false);
+    }
+
+    void SelectExistingOrg()
+    {
+        _orgChoiceLink = true;
+        _newOrgName = _conflictOrg?.Name ?? string.Empty;
+    }
+
+    async Task NextAsync()
+    {
+        _saving = true;
+        _error = null;
+
+        try
+        {
+            if (_step == 0)
+            {
+                if (LinkedOrgId is null)
+                {
+                    var orgName = _orgName.Trim();
+                    var existingOrg = _organizations.FirstOrDefault(o =>
+                        string.Equals(o.Name.Trim(), orgName, StringComparison.OrdinalIgnoreCase));
+                    if (existingOrg is not null)
+                    {
+                        _conflictOrg = existingOrg;
+                        _orgChoiceLink = true;
+                        _newOrgName = orgName;
+                        _step = 1;
+                        return;
+                    }
+                }
+                await CheckOppConflictAsync();
+            }
+            else if (_step == 1)
+            {
+                await CheckOppConflictAsync();
+            }
+            else if (_step == 2)
+            {
+                await CommitAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = ex.Message;
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    async Task CheckOppConflictAsync()
+    {
+        var resolvedOrgId = ResolveOrgIdForDryRun();
+        if (resolvedOrgId is null) return;
+
+        // For a brand-new org (no conflict), there are no existing opps to collide with.
+        if (resolvedOrgId == "__new__")
+        {
+            await CommitAsync();
+            return;
+        }
+
+        var orgOpps = await Db.GetOpportunitiesByOrganizationAsync(resolvedOrgId);
+        var exactMatch = orgOpps.FirstOrDefault(o =>
+            string.Equals(o.Role.Trim(), Role.Trim(), StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(o.RoleDescription.Trim(), RoleDescription.Trim(), StringComparison.OrdinalIgnoreCase));
+        var roleMatch = exactMatch is null
+            ? orgOpps.FirstOrDefault(o =>
+                string.Equals(o.Role.Trim(), Role.Trim(), StringComparison.OrdinalIgnoreCase))
+            : null;
+
+        if (exactMatch is not null || roleMatch is not null)
+        {
+            _conflictOpp = exactMatch ?? roleMatch;
+            _oppExactMatch = exactMatch is not null;
+            _oppChoiceLink = exactMatch is not null;
+            _step = 2;
+        }
+        else
+        {
+            await CommitAsync();
+        }
+    }
+
+    string? ResolveOrgIdForDryRun()
+    {
+        if (LinkedOrgId is not null) return LinkedOrgId;
+        if (_step >= 1 && _orgChoiceLink && _conflictOrg is not null) return _conflictOrg.Id;
+        return "__new__";
+    }
+
+    async Task CommitAsync()
+    {
+        string resolvedOrgId;
+        string resolvedOrgName;
+        var createdNewOrg = false;
+
+        if (LinkedOrgId is not null)
+        {
+            resolvedOrgId = LinkedOrgId;
+            resolvedOrgName = LinkedOrgName ?? "";
+        }
+        else if (_step >= 1 && _orgChoiceLink && _conflictOrg is not null)
+        {
+            resolvedOrgId = _conflictOrg.Id;
+            resolvedOrgName = _conflictOrg.Name;
+        }
+        else
+        {
+            var name = (_step >= 1 && !_orgChoiceLink)
+                ? _newOrgName.Trim()
+                : _orgName.Trim();
+            var newOrg = new Organization { Name = name };
+            await Db.SaveOrganizationAsync(newOrg);
+            await DataSync.BroadcastAsync("organization", newOrg.Id, "created");
+            resolvedOrgId = newOrg.Id;
+            resolvedOrgName = newOrg.Name;
+            createdNewOrg = true;
+        }
+
+        string resolvedOppId;
+        string resolvedOppRole;
+        var createdNewOpp = false;
+
+        if (_step >= 2 && _oppChoiceLink && _oppExactMatch && _conflictOpp is not null)
+        {
+            resolvedOppId = _conflictOpp.Id;
+            resolvedOppRole = _conflictOpp.Role;
+        }
+        else
+        {
+            var newOpp = new Opportunity
+            {
+                OrganizationId    = resolvedOrgId,
+                Role              = Role,
+                RoleDescription   = RoleDescription,
+                PostingUrls       = string.IsNullOrWhiteSpace(_postingUrl) ? new() : new List<string> { _postingUrl },
+                CompensationRange = _compensationRange,
+                WorkArrangement   = _workArrangement,
+                Stage             = OpportunityStage.Open,
+            };
+            await Db.SaveOpportunityAsync(newOpp);
+            await DataSync.BroadcastAsync("opportunity", newOpp.Id, "created");
+            resolvedOppId = newOpp.Id;
+            resolvedOppRole = newOpp.Role;
+            createdNewOpp = true;
+        }
+
+        Show = false;
+        if (ShowChanged.HasDelegate) await ShowChanged.InvokeAsync(false);
+
+        if (OnSaved.HasDelegate)
+        {
+            await OnSaved.InvokeAsync(new SaveResult(
+                resolvedOrgId, resolvedOrgName, resolvedOppId, resolvedOppRole,
+                createdNewOrg, createdNewOpp));
+        }
+    }
+}

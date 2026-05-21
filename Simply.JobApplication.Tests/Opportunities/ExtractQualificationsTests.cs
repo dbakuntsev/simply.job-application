@@ -1,6 +1,8 @@
 using System.Net;
 using System.Text.Json;
+using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
 using Simply.JobApplication.Services.AI.OpenAi;
+using static Simply.JobApplication.Tests.Helpers.ProviderBuilder;
 
 namespace Simply.JobApplication.Tests.Opportunities;
 
@@ -49,9 +51,6 @@ public class ExtractQualificationsTests
         var json = JsonSerializer.Serialize(ev);
         return $"data: {json}\ndata: [DONE]\n";
     }
-
-    private static OpenAiProvider MakeProvider(HttpMessageHandler handler)
-        => new(new HttpClient(handler));
 
     // ── Tests ─────────────────────────────────────────────────────────────────
 
