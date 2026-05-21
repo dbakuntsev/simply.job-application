@@ -675,4 +675,121 @@ public class AnswerQuestionTests
         Assert.Equal(190_000, gate.Updates[1].Snapshot.RemainingTokens);
         Assert.Equal(189_400, gate.Updates[2].Snapshot.RemainingTokens);
     }
+
+    // ── Stage 1 / Stage 2 prompt-rule markers ──────────────────────────
+    //
+    // These tests pin the *substance* of recently-iterated Stage 1 and
+    // Stage 2 rules into the prompt. They assert on stable token
+    // combinations (not exact long sentences), so cosmetic prompt edits
+    // don't fail them — only deletion of the rule does. Each test maps
+    // to one detector in QualityRulesTests; together they keep the
+    // prompt and the rule library aligned (the drift mode the analyzer
+    // exists to prevent).
+    //
+    // Markers chosen here all appear only inside the rule paragraph,
+    // not elsewhere in the prompt, so a `Contains` match identifies the
+    // specific rule rather than coincidental vocabulary overlap.
+
+    [Fact]
+    public async Task AnswerQuestionAsync_Stage1Prompt_GapAcknowledgmentRule_RequiresLowercaseVerbPhraseFormat()
+    {
+        // Pairs with QualityRulesTests.GapSpliceMalformed_*. The Stage 1
+        // rule must specify (a) verb-phrase format, (b) the splice template
+        // Stage 2 will use, and (c) the strategy-gating carve-out so
+        // strict-factual / motivation strategies don't emit a gap at all.
+        var handler = new QueueHttpHandler(
+            OkSse(MakeFocusJson()),
+            OkSse("Answer."));
+
+        await CallAsync(MakeProvider(handler));
+
+        var stage1 = handler.CapturedBodies[0];
+
+        // Format requirement — verb phrase, lowercase, past-participle.
+        Assert.Contains("lowercase past-participle verb", stage1);
+        // Names the splice template so the model knows what shape its
+        // string is going into.
+        Assert.Contains("While I have not", stage1);
+        Assert.Contains("splice", stage1);
+        // Strategy-gating carve-outs.
+        Assert.Contains("MotivationNarrative", stage1);
+        Assert.Contains("CompensationOrLogistics", stage1);
+        Assert.Contains("EligibilityOrCompliance", stage1);
+    }
+
+    [Fact]
+    public async Task AnswerQuestionAsync_Stage1Prompt_ResumeEvidenceMustOriginateFromResumeBlock()
+    {
+        // Pairs with the comp-hallucination fix. Stage 1 must be told that
+        // resumeEvidence comes from the [RESUME] block, not from the role
+        // posting or organization description.
+        var handler = new QueueHttpHandler(
+            OkSse(MakeFocusJson()),
+            OkSse("Answer."));
+
+        await CallAsync(MakeProvider(handler));
+
+        var stage1 = handler.CapturedBodies[0];
+
+        Assert.Contains("originate from the resume markdown", stage1);
+        Assert.Contains("sourced from the [RESUME] block",    stage1);
+        // The "Echo-back" before-emission check is what catches the
+        // salary/schedule/sponsorship pattern; verifying the exact
+        // capitalisation prevents the rule from getting silently dropped.
+        Assert.Contains("Echo-back",                          stage1);
+    }
+
+    [Fact]
+    public async Task AnswerQuestionAsync_Stage1Prompt_CommaListRule_CoversOperationalNounsAndDecomposesSourceLists()
+    {
+        // Pairs with QualityRulesTests' comma-list coverage (and the
+        // existing detector). The original Stage 1 rule only listed
+        // activities and concerns; the events-fixture failure was an
+        // operational-noun list with an embedded metric, which the model
+        // didn't recognize as the same forbidden pattern.
+        var handler = new QueueHttpHandler(
+            OkSse(MakeFocusJson()),
+            OkSse("Answer."));
+
+        await CallAsync(MakeProvider(handler));
+
+        var stage1 = handler.CapturedBodies[0];
+
+        Assert.Contains("comma-separated list of three or more", stage1);
+        Assert.Contains("operational scope items",               stage1);
+        // The canonical bad example from the events fixture failure.
+        Assert.Contains("vendors, permits, and 220 volunteers",  stage1);
+        // The good-rewrite that promotes the metric-bearing item.
+        Assert.Contains("Coordinated 220 volunteers across a three-day outdoor festival", stage1);
+        // Decompose-source-resume instruction.
+        Assert.Contains("not text to be copied as-is",           stage1);
+    }
+
+    [Fact]
+    public async Task AnswerQuestionAsync_Stage2Prompt_CommaListRule_IsUnconditionalAndAllowsParaphraseOfLeakedList()
+    {
+        // Stage 2 acts as the defensive net when Stage 1 leaks a comma list
+        // through. The rule must be unconditional (not category-bounded)
+        // and explicitly permit paraphrasing of evidence that contains a
+        // comma list — otherwise the source-fidelity rule wins and the
+        // model copies the list verbatim.
+        var handler = new QueueHttpHandler(
+            OkSse(MakeFocusJson(strategy: "FitNarrative")),
+            OkSse("Answer."));
+
+        await CallAsync(MakeProvider(handler));
+
+        var stage2 = handler.CapturedBodies[1];
+
+        Assert.Contains("No comma-separated lists of three or more", stage2);
+        Assert.Contains("unconditional",                             stage2);
+        // Both bad examples — the inherited operational-noun list and the
+        // invented quality-attribute triple — are referenced in-rule.
+        Assert.Contains("vendors, permits, and 220 volunteers",      stage2);
+        Assert.Contains("clear, consistent, and usable",             stage2);
+        // The carve-out that allows rewriting evidence in this specific
+        // case. Without this carve-out, the source-fidelity rule defaults
+        // to "copy evidence verbatim" and the comma list survives.
+        Assert.Contains("may rewrite evidence",                      stage2);
+    }
 }
