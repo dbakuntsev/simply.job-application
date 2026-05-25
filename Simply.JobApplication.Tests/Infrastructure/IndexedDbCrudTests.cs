@@ -60,6 +60,14 @@ public class IndexedDbCrudTests
         Assert.Empty(result);
     }
 
+    [Fact]
+    public async Task GetAllResumeSubmissionsAsync_WhenJsReturnsNull_ReturnsEmptyList()
+    {
+        var (svc, _) = MakeService();
+        var result = await svc.GetAllResumeSubmissionsAsync();
+        Assert.Empty(result);
+    }
+
     // ── Organizations: save uses camelCase JSON ───────────────────────────────
 
     [Fact]

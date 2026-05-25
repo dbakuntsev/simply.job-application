@@ -28,6 +28,7 @@ public class TestIndexedDbBuilder
         _db.GetHistoryByOpportunityAsync(Arg.Any<string>()).Returns(Task.FromResult(new List<OpportunityFieldHistory>()));
 
         _db.GetCorrespondenceByOpportunityAsync(Arg.Any<string>()).Returns(Task.FromResult(new List<Correspondence>()));
+        _db.GetAllResumeSubmissionsAsync().Returns(Task.FromResult(new List<Correspondence>()));
         _db.GetCorrespondenceAsync(Arg.Any<string>()).Returns(Task.FromResult<Correspondence?>(null));
         _db.GetCorrespondenceFileCountAsync(Arg.Any<string>()).Returns(Task.FromResult(0));
 
@@ -131,6 +132,12 @@ public class TestIndexedDbBuilder
         _db.GetCorrespondenceByOpportunityAsync(oppId).Returns(Task.FromResult(items.ToList()));
         foreach (var c in items)
             _db.GetCorrespondenceAsync(c.Id).Returns(Task.FromResult<Correspondence?>(c));
+        return this;
+    }
+
+    public TestIndexedDbBuilder WithResumeSubmissions(params Correspondence[] items)
+    {
+        _db.GetAllResumeSubmissionsAsync().Returns(Task.FromResult(items.ToList()));
         return this;
     }
 
