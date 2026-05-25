@@ -23,6 +23,23 @@ window.sjaScrollTo = function (id) {
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
 };
 
+// Returns the locale's first day of week as a JS Date.getDay() index:
+// 0 = Sunday, 1 = Monday, ..., 6 = Saturday.
+// Intl.Locale.getWeekInfo() / .weekInfo uses ISO numbering (1 = Mon ... 7 = Sun);
+// translate back to the JS index. Falls back to Sunday (0) if the locale APIs
+// or properties aren't available.
+window.sjaGetFirstDayOfWeek = function () {
+    try {
+        var loc = new Intl.Locale(navigator.language || 'en-US');
+        var info = (typeof loc.getWeekInfo === 'function') ? loc.getWeekInfo() : loc.weekInfo;
+        var iso = info && info.firstDay;
+        if (typeof iso === 'number' && iso >= 1 && iso <= 7) {
+            return iso === 7 ? 0 : iso;
+        }
+    } catch (_) { /* fall through */ }
+    return 0;
+};
+
 // Hide every open popover. Called on Blazor navigation and before opening a new one.
 window.sjaHideAllPopovers = function () {
     document.querySelectorAll('[data-bs-toggle="popover"]').forEach(function (el) {

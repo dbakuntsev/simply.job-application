@@ -347,6 +347,14 @@ export async function getCorrespondence(id) {
     return (v === undefined || v === null) ? null : JSON.stringify(v);
 }
 
+// Returns every correspondence record of type ResumeSubmitted (enum ordinal 0).
+// Scans the full store — there is no type index. Used by the Weekly Report.
+export async function getAllResumeSubmissions() {
+    const v = await tx('correspondence', 'readonly', s => s.getAll());
+    const list = (v ?? []).filter(c => c && c.type === 0);
+    return JSON.stringify(list);
+}
+
 export async function saveCorrespondence(corr) {
     return tx('correspondence', 'readwrite', s => s.put(corr));
 }

@@ -1,0 +1,272 @@
+@page "/opportunities/weekly-report"
+@implements IDisposable
+@inject IIndexedDbService Db
+@inject IDataSyncService DataSync
+@inject NavigationManager Nav
+@inject IJSRuntime JS
+@using System.Globalization
+
+<PageTitle>Weekly Report — Simply Opportunity Tracker</PageTitle>
+
+<h4 class="mb-3">Weekly Report — Resume Submissions</h4>
+
+@if (_loading)
+{
+    <div class="text-center py-5"><div class="spinner-border" role="status"></div></div>
+}
+else
+{
+    <div class="d-flex align-items-center mb-3 gap-2">
+        <button class="btn btn-outline-secondary btn-sm"
+                disabled="@(!_hasPrev)"
+                @onclick="GoPrev"
+                title="@(_hasPrev ? "Previous week" : "No older submissions")">
+            &laquo; Prev
+        </button>
+        <button class="btn btn-outline-secondary btn-sm"
+                disabled="@(!_hasNext)"
+                @onclick="GoNext"
+                title="@(_hasNext ? "Next week" : "Cannot navigate past the current week")">
+            Next &raquo;
+        </button>
+        <div class="ms-2 fw-semibold">
+            Week of @_weekStart.ToString("D") &mdash; @_weekEnd.ToString("D")
+        </div>
+        @if (_isCurrentWeek)
+        {
+            <span class="badge bg-info text-dark ms-1">This week</span>
+        }
+        <div class="ms-auto text-muted small">
+            @_rowsThisWeek.Count submission@(_rowsThisWeek.Count == 1 ? "" : "s")
+        </div>
+    </div>
+
+    @if (_rowsThisWeek.Count == 0)
+    {
+        <div class="alert alert-secondary">
+            No resume submissions for this week.
+        </div>
+    }
+    else
+    {
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th style="width:170px">Submitted</th>
+                    <th>Role</th>
+                    <th>Organization</th>
+                    <th>Web Site</th>
+                    <th style="width:140px">Stage</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in _rowsThisWeek)
+                {
+                    <tr style="cursor:pointer" @onclick="() => NavigateToOpp(row.OpportunityId)">
+                        <td class="text-nowrap">@row.OccurredAt.ToLocalTime().ToString("g")</td>
+                        <td class="fw-semibold">
+                            <a href="@($"opportunities/{row.OpportunityId}")"
+                               @onclick:stopPropagation>@row.Role</a>
+                        </td>
+                        <td>
+                            <a href="@($"organizations/{row.OrganizationId}")"
+                               @onclick:stopPropagation>@row.OrganizationName</a>
+                        </td>
+                        <td>
+                            @if (!string.IsNullOrWhiteSpace(row.OrganizationWebsite))
+                            {
+                                <a href="@row.OrganizationWebsite"
+                                   target="_blank" rel="noopener noreferrer"
+                                   @onclick:stopPropagation>@row.OrganizationWebsite</a>
+                            }
+                        </td>
+                        <td>
+                            <span class="badge bg-secondary">@StageName(row.Stage)</span>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+
+@code {
+    private record Row(
+        string CorrespondenceId,
+        string OpportunityId,
+        string Role,
+        OpportunityStage Stage,
+        string OrganizationId,
+        string OrganizationName,
+        string OrganizationWebsite,
+        DateTime OccurredAt);
+
+    private bool _loading = true;
+    private int _firstDayOfWeek = 0; // 0 = Sunday
+    private List<Row> _allRows = new();          // all resume submissions, joined
+    private List<Row> _rowsThisWeek = new();     // filtered to displayed week
+    private DateTime _weekStart;                 // local-date midnight of week start
+    private DateTime _weekEnd;                   // inclusive end-of-week date (display only)
+    private DateTime _currentWeekStart;          // week containing today (local)
+    private bool _hasPrev;
+    private bool _hasNext;
+    private bool _isCurrentWeek;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            _firstDayOfWeek = await JS.InvokeAsync<int>("sjaGetFirstDayOfWeek");
+        }
+        catch { _firstDayOfWeek = 0; }
+
+        _currentWeekStart = WeekStart(DateTime.Now.Date);
+        _weekStart = ParseWeekFromUrl() ?? _currentWeekStart;
+
+        await LoadAsync();
+
+        DataSync.OnCorrespondenceChanged += HandleCorrespondenceChanged;
+        DataSync.OnOpportunityChanged    += HandleOpportunityChanged;
+        DataSync.OnOrganizationChanged   += HandleOrganizationChanged;
+    }
+
+    // Parse ?week=YYYY-MM-DD from the URL; snap to its week-start and clamp
+    // to the current week. Returns null if absent or unparseable.
+    private DateTime? ParseWeekFromUrl()
+    {
+        var raw = ReadQueryValue(new Uri(Nav.Uri).Query, "week");
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        if (!DateTime.TryParseExact(raw, "yyyy-MM-dd",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var parsed))
+            return null;
+        var snapped = WeekStart(parsed.Date);
+        return snapped > _currentWeekStart ? _currentWeekStart : snapped;
+    }
+
+    private static string? ReadQueryValue(string query, string key)
+    {
+        if (string.IsNullOrEmpty(query)) return null;
+        var s = query.StartsWith("?") ? query[1..] : query;
+        foreach (var pair in s.Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var eq = pair.IndexOf('=');
+            var name  = eq < 0 ? pair : pair[..eq];
+            var value = eq < 0 ? ""   : pair[(eq + 1)..];
+            if (string.Equals(Uri.UnescapeDataString(name), key, StringComparison.OrdinalIgnoreCase))
+                return Uri.UnescapeDataString(value);
+        }
+        return null;
+    }
+
+    // Update the URL to reflect _weekStart without adding a history entry,
+    // so the browser Back button from a child page lands on the chosen week.
+    private void SyncUrl()
+    {
+        var target = $"opportunities/weekly-report?week={_weekStart:yyyy-MM-dd}";
+        Nav.NavigateTo(target, forceLoad: false, replace: true);
+    }
+
+    public void Dispose()
+    {
+        DataSync.OnCorrespondenceChanged -= HandleCorrespondenceChanged;
+        DataSync.OnOpportunityChanged    -= HandleOpportunityChanged;
+        DataSync.OnOrganizationChanged   -= HandleOrganizationChanged;
+    }
+
+    private async Task LoadAsync()
+    {
+        _loading = true;
+
+        var submissions = await Db.GetAllResumeSubmissionsAsync();
+        var opps = await Db.GetAllOpportunitiesAsync();
+        var orgs = await Db.GetAllOrganizationsAsync();
+
+        var oppMap = opps.ToDictionary(o => o.Id);
+        var orgMap = orgs.ToDictionary(o => o.Id);
+
+        var rows = new List<Row>(submissions.Count);
+        foreach (var c in submissions)
+        {
+            if (!oppMap.TryGetValue(c.OpportunityId, out var opp)) continue;
+            orgMap.TryGetValue(opp.OrganizationId, out var org);
+
+            rows.Add(new Row(
+                CorrespondenceId:    c.Id,
+                OpportunityId:       opp.Id,
+                Role:                opp.Role,
+                Stage:               opp.Stage,
+                OrganizationId:      opp.OrganizationId,
+                OrganizationName:    org?.Name    ?? opp.OrganizationId,
+                OrganizationWebsite: org?.Website ?? "",
+                OccurredAt:          c.OccurredAt));
+        }
+
+        _allRows = rows;
+        RecomputeView();
+        _loading = false;
+    }
+
+    private void RecomputeView()
+    {
+        _weekEnd = _weekStart.AddDays(6);
+        var weekEndExclusive = _weekStart.AddDays(7);
+
+        _rowsThisWeek = _allRows
+            .Where(r =>
+            {
+                var local = r.OccurredAt.ToLocalTime();
+                return local >= _weekStart && local < weekEndExclusive;
+            })
+            .OrderByDescending(r => r.OccurredAt)
+            .ToList();
+
+        _hasPrev = _allRows.Any(r => r.OccurredAt.ToLocalTime() < _weekStart);
+        _isCurrentWeek = _weekStart == _currentWeekStart;
+        _hasNext = _weekStart < _currentWeekStart;
+    }
+
+    private void GoPrev()
+    {
+        if (!_hasPrev) return;
+        _weekStart = _weekStart.AddDays(-7);
+        RecomputeView();
+        SyncUrl();
+    }
+
+    private void GoNext()
+    {
+        if (!_hasNext) return;
+        _weekStart = _weekStart.AddDays(7);
+        if (_weekStart > _currentWeekStart) _weekStart = _currentWeekStart;
+        RecomputeView();
+        SyncUrl();
+    }
+
+    // Computes the week-start (local midnight) for the given local date,
+    // honoring the browser-supplied first day of week.
+    private DateTime WeekStart(DateTime localDate)
+    {
+        var day = (int)localDate.DayOfWeek; // 0 = Sunday
+        var diff = (day - _firstDayOfWeek + 7) % 7;
+        return localDate.AddDays(-diff).Date;
+    }
+
+    private void NavigateToOpp(string id) => Nav.NavigateTo("opportunities/" + id);
+
+    private void HandleCorrespondenceChanged(string? id, string @event)
+        => InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+
+    private void HandleOpportunityChanged(string? id, string @event)
+        => InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+
+    private void HandleOrganizationChanged(string? id, string @event)
+        => InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
+
+    private static string StageName(OpportunityStage stage) => stage switch
+    {
+        OpportunityStage.NotInterested => "Not Interested",
+        OpportunityStage.NotQualified  => "Not Qualified",
+        OpportunityStage.InProgress    => "In Progress",
+        _ => stage.ToString(),
+    };
+}

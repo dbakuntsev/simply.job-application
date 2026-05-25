@@ -15,10 +15,10 @@
                 <span class="navbar-toggler-icon"></span>
             </button>
             <div class="collapse navbar-collapse" id="navbarNav">
-                @if (_showEvalDropdown)
+                @if (_showEvalDropdown || _showOppDropdown)
                 {
                     <div class="position-fixed top-0 start-0 w-100 h-100" style="z-index:999"
-                         @onclick="() => _showEvalDropdown = false"></div>
+                         @onclick="CloseAllDropdowns"></div>
                 }
                 <ul class="navbar-nav ms-auto">
                     @if (!Pwa.IsStandalone)
@@ -54,8 +54,29 @@
                     <li class="nav-item">
                         <NavLink class="nav-link" href="organizations">Organizations</NavLink>
                     </li>
-                    <li class="nav-item">
-                        <NavLink class="nav-link" href="opportunities">Opportunities</NavLink>
+                    <li class="nav-item dropdown" style="position:relative;z-index:1000">
+                        <div class="d-flex align-items-center">
+                            <NavLink class="nav-link" href="opportunities">Opportunities</NavLink>
+                            <button class="btn btn-link nav-link px-1 py-0 border-0 lh-1"
+                                    @onclick="() => _showOppDropdown = !_showOppDropdown"
+                                    aria-expanded="@_showOppDropdown"
+                                    aria-label="Toggle opportunities sub-menu">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 16 16"
+                                     fill="currentColor" aria-hidden="true"
+                                     style="transition:transform .2s;transform:rotate(@(_showOppDropdown ? "180deg" : "0deg"))">
+                                    <path fill-rule="evenodd" d="M1.646 4.646a.5.5 0 0 1 .708 0L8 10.293l5.646-5.647a.5.5 0 0 1 .708.708l-6 6a.5.5 0 0 1-.708 0l-6-6a.5.5 0 0 1 0-.708z"/>
+                                </svg>
+                            </button>
+                        </div>
+                        @if (_showOppDropdown)
+                        {
+                            <ul class="dropdown-menu show">
+                                <li>
+                                    <NavLink class="dropdown-item" href="opportunities/weekly-report"
+                                             @onclick="() => _showOppDropdown = false">Weekly Report</NavLink>
+                                </li>
+                            </ul>
+                        }
                     </li>
                     <li class="nav-item">
                         <NavLink class="nav-link" href="resumes">My Resumes</NavLink>
@@ -135,6 +156,13 @@
     }
 
     private bool _showEvalDropdown;
+    private bool _showOppDropdown;
+
+    private void CloseAllDropdowns()
+    {
+        _showEvalDropdown = false;
+        _showOppDropdown = false;
+    }
 
     private void OnPwaStateChanged() => InvokeAsync(StateHasChanged);
 

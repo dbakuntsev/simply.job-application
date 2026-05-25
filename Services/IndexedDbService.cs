@@ -16,7 +16,7 @@ public class IndexedDbService : IIndexedDbService, IAsyncDisposable
     };
 
     // Version token is replaced at build time by the InjectDependencyVersion MSBuild target.
-    private const string _moduleUrl = "./js/indexeddb.js?v=E4A69BEEEF8915F162658EFAF327BE8C371B65AF2C2636C456020A4BC3B4AB7C";
+    private const string _moduleUrl = "./js/indexeddb.js?v=49B123F82E10739C11C300B06AFD3B5CC588009F2140AF6C950C6B11D4B86815";
 
     public IndexedDbService(IJSRuntime js) => _js = js;
 
@@ -401,6 +401,14 @@ public class IndexedDbService : IIndexedDbService, IAsyncDisposable
         var raw = await m.InvokeAsync<string?>("getCorrespondence", id);
         if (string.IsNullOrEmpty(raw)) return null;
         return JsonSerializer.Deserialize<Correspondence>(raw, _jsonOpts);
+    }
+
+    public async Task<List<Correspondence>> GetAllResumeSubmissionsAsync()
+    {
+        var m = await ModuleAsync();
+        var raw = await m.InvokeAsync<string?>("getAllResumeSubmissions");
+        if (string.IsNullOrEmpty(raw)) return new();
+        return JsonSerializer.Deserialize<List<Correspondence>>(raw, _jsonOpts) ?? new();
     }
 
     public async Task SaveCorrespondenceAsync(Correspondence correspondence)

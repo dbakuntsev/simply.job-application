@@ -64,6 +64,7 @@ public interface IIndexedDbService
     Task DeleteHistoryByOpportunityAsync(string oppId);
 
     Task<List<Correspondence>> GetCorrespondenceByOpportunityAsync(string oppId);
+    Task<List<Correspondence>> GetAllResumeSubmissionsAsync();
     Task<Correspondence?> GetCorrespondenceAsync(string id);
     Task SaveCorrespondenceAsync(Correspondence correspondence);
     Task DeleteCorrespondenceAsync(string id);
