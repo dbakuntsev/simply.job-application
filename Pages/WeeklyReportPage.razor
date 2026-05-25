@@ -62,15 +62,41 @@ else
             <tbody>
                 @foreach (var row in _rowsThisWeek)
                 {
+                    var roleCopied = _copiedKey == row.CorrespondenceId + ":role";
+                    var orgCopied  = _copiedKey == row.CorrespondenceId + ":org";
+                    var webCopied  = _copiedKey == row.CorrespondenceId + ":web";
+
                     <tr style="cursor:pointer" @onclick="() => NavigateToOpp(row.OpportunityId)">
                         <td class="text-nowrap">@row.OccurredAt.ToLocalTime().ToString("g")</td>
                         <td class="fw-semibold">
                             <a href="@($"opportunities/{row.OpportunityId}")"
                                @onclick:stopPropagation>@row.Role</a>
+                            @if (!string.IsNullOrEmpty(row.Role))
+                            {
+                                <button type="button"
+                                        class="sja-copy-btn @(roleCopied ? "copied" : "")"
+                                        title="Copy to Clipboard"
+                                        aria-label="Copy to Clipboard"
+                                        @onclick="() => CopyRoleAsync(row)"
+                                        @onclick:stopPropagation>
+                                    @(roleCopied ? _checkIcon : _clipboardIcon)
+                                </button>
+                            }
                         </td>
                         <td>
                             <a href="@($"organizations/{row.OrganizationId}")"
                                @onclick:stopPropagation>@row.OrganizationName</a>
+                            @if (!string.IsNullOrEmpty(row.OrganizationName))
+                            {
+                                <button type="button"
+                                        class="sja-copy-btn @(orgCopied ? "copied" : "")"
+                                        title="Copy to Clipboard"
+                                        aria-label="Copy to Clipboard"
+                                        @onclick="() => CopyOrgAsync(row)"
+                                        @onclick:stopPropagation>
+                                    @(orgCopied ? _checkIcon : _clipboardIcon)
+                                </button>
+                            }
                         </td>
                         <td>
                             @if (!string.IsNullOrWhiteSpace(row.OrganizationWebsite))
@@ -78,6 +104,14 @@ else
                                 <a href="@row.OrganizationWebsite"
                                    target="_blank" rel="noopener noreferrer"
                                    @onclick:stopPropagation>@row.OrganizationWebsite</a>
+                                <button type="button"
+                                        class="sja-copy-btn @(webCopied ? "copied" : "")"
+                                        title="Copy to Clipboard"
+                                        aria-label="Copy to Clipboard"
+                                        @onclick="() => CopyWebAsync(row)"
+                                        @onclick:stopPropagation>
+                                    @(webCopied ? _checkIcon : _clipboardIcon)
+                                </button>
                             }
                         </td>
                         <td>
@@ -252,6 +286,42 @@ else
     }
 
     private void NavigateToOpp(string id) => Nav.NavigateTo("opportunities/" + id);
+
+    // ── Copy-to-clipboard ────────────────────────────────────────────────────
+
+    private string? _copiedKey;
+    private int _copyVersion;
+
+    // "Two overlapping pages" copy glyph — Bootstrap-Icons `files`.
+    private static readonly MarkupString _clipboardIcon = new(
+        @"<svg xmlns=""http://www.w3.org/2000/svg"" width=""14"" height=""14"" viewBox=""0 0 16 16"" fill=""currentColor"" aria-hidden=""true"">"
+      + @"<path d=""M13 0H6a2 2 0 0 0-2 2 2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h7a2 2 0 0 0 2-2 2 2 0 0 0 2-2V2a2 2 0 0 0-2-2zm0 13V4a2 2 0 0 0-2-2H5a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1zM3 4a1 1 0 0 1 1-1h7a1 1 0 0 1 1 1v10a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1z""/>"
+      + @"</svg>");
+
+    private static readonly MarkupString _checkIcon = new(
+        @"<svg xmlns=""http://www.w3.org/2000/svg"" width=""14"" height=""14"" viewBox=""0 0 16 16"" fill=""currentColor"" aria-hidden=""true"">"
+      + @"<path d=""M13.854 3.646a.5.5 0 0 1 0 .708l-7 7a.5.5 0 0 1-.708 0l-3.5-3.5a.5.5 0 1 1 .708-.708L6.5 10.293l6.646-6.647a.5.5 0 0 1 .708 0z""/>"
+      + @"</svg>");
+
+    private Task CopyRoleAsync(Row r) => CopyAsync(r.CorrespondenceId + ":role", r.Role);
+    private Task CopyOrgAsync(Row r)  => CopyAsync(r.CorrespondenceId + ":org",  r.OrganizationName);
+    private Task CopyWebAsync(Row r)  => CopyAsync(r.CorrespondenceId + ":web",  r.OrganizationWebsite);
+
+    private async Task CopyAsync(string key, string text)
+    {
+        if (string.IsNullOrEmpty(text)) return;
+        try { await JS.InvokeVoidAsync("navigator.clipboard.writeText", text); }
+        catch { return; } // browser blocked clipboard access — leave UI silent
+        _copiedKey = key;
+        var version = ++_copyVersion;
+        StateHasChanged();
+        await Task.Delay(1200);
+        if (version == _copyVersion)
+        {
+            _copiedKey = null;
+            StateHasChanged();
+        }
+    }
 
     private void HandleCorrespondenceChanged(string? id, string @event)
         => InvokeAsync(async () => { await LoadAsync(); StateHasChanged(); });
