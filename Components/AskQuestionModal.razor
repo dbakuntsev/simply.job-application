@@ -20,6 +20,15 @@
                                   aria-label="Question text"></textarea>
                     </div>
                     <div class="mb-3">
+                        <label class="form-label fw-semibold">Additional Context <span class="text-muted fw-normal">(optional)</span></label>
+                        <textarea class="form-control" rows="3"
+                                  @bind="_additionalContext"
+                                  @bind:event="oninput"
+                                  placeholder="Facts not in your resume that may be relevant to this question (a side project, recent course, non-resume credential, current availability, etc.)"
+                                  aria-label="Additional applicant context"></textarea>
+                        <div class="form-text">Used only for this question. Not saved.</div>
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label fw-semibold">Tone</label>
                         <select class="form-select"
                                 value="@_tone.ToString()"
@@ -116,6 +125,7 @@
     [Parameter] public Func<EstimateLengthRequest, Task<AnswerLengthEstimate>>? EstimateLength { get; set; }
 
     string _questionText = "";
+    string _additionalContext = "";
     QuestionTone _tone = QuestionTone.Formal;
     int _lengthValue = 3;
     QuestionLengthUnit _lengthUnit = QuestionLengthUnit.Sentences;
@@ -128,20 +138,24 @@
     {
         if (Prefill is not null)
         {
-            _questionText = Prefill.QuestionText;
-            _tone         = Prefill.Tone;
-            _lengthValue  = Prefill.LengthValue;
-            _lengthUnit   = Prefill.LengthUnit;
+            _questionText      = Prefill.QuestionText;
+            _tone              = Prefill.Tone;
+            _lengthValue       = Prefill.LengthValue;
+            _lengthUnit        = Prefill.LengthUnit;
+            // AdditionalContext is transient — never persisted on the entry —
+            // so a regenerate always starts with an empty extra-context field.
+            _additionalContext = "";
         }
         else if (!Show)
         {
-            _questionText   = "";
-            _tone           = QuestionTone.Formal;
-            _lengthValue    = 3;
-            _lengthUnit     = QuestionLengthUnit.Sentences;
-            _estimate       = null;
-            _estimateError  = null;
-            _estimating     = false;
+            _questionText      = "";
+            _additionalContext = "";
+            _tone              = QuestionTone.Formal;
+            _lengthValue       = 3;
+            _lengthUnit        = QuestionLengthUnit.Sentences;
+            _estimate          = null;
+            _estimateError     = null;
+            _estimating        = false;
         }
     }
 
@@ -180,8 +194,9 @@
     async Task Submit()
     {
         if (string.IsNullOrWhiteSpace(_questionText) || _lengthValue < 1) return;
+        var extra = string.IsNullOrWhiteSpace(_additionalContext) ? null : _additionalContext.Trim();
         var request = new AskQuestionRequest(
-            _questionText.Trim(), _tone, _lengthValue, _lengthUnit, _estimate);
+            _questionText.Trim(), _tone, _lengthValue, _lengthUnit, _estimate, extra);
         await OnSubmit.InvokeAsync(request);
     }
 
@@ -190,12 +205,16 @@
     // Submit payload. Carries the user's choices plus, when the user clicked
     // Estimate Length during this dialog session, the most recent estimator
     // output so the parent can persist it on the entry as advisory.
+    // AdditionalContext is per-question free-text (e.g. facts not in the resume
+    // that bear on this specific question); transient — not persisted on the
+    // entry — so a later regenerate starts with the field empty.
     public sealed record AskQuestionRequest(
         string                Question,
         QuestionTone          Tone,
         int                   LengthValue,
         QuestionLengthUnit    LengthUnit,
-        AnswerLengthEstimate? Estimate);
+        AnswerLengthEstimate? Estimate,
+        string?               AdditionalContext);
 
     public sealed record EstimateLengthRequest(string Question, QuestionTone Tone);
 }

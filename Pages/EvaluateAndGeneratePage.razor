@@ -1671,7 +1671,7 @@
             entry.Status                   = QuestionAnswerStatus.Generating;
             entry.ErrorMessage             = null;
             StateHasChanged();
-            await RunQaGenerationAsync(entry);
+            await RunQaGenerationAsync(entry, req.AdditionalContext);
         }
         else
         {
@@ -1687,7 +1687,7 @@
             };
             _questions.Add(entry);
             StateHasChanged();
-            await RunQaGenerationAsync(entry);
+            await RunQaGenerationAsync(entry, req.AdditionalContext);
         }
     }
 
@@ -1710,7 +1710,7 @@
             apiKey:          apiKey);
     }
 
-    async Task RunQaGenerationAsync(QuestionAnswerEntry entry)
+    async Task RunQaGenerationAsync(QuestionAnswerEntry entry, string? additionalContext = null)
     {
         try
         {
@@ -1734,7 +1734,8 @@
                 _roleDescription,
                 _materials!.ResumeMarkdown,
                 modelId,
-                apiKey);
+                apiKey,
+                additionalContext: additionalContext);
 
             entry.Status = QuestionAnswerStatus.Done;
         }

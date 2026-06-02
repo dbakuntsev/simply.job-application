@@ -185,7 +185,8 @@ public class AnswerQuestionTests
         int lengthValue = 3,
         QuestionLengthUnit lengthUnit = QuestionLengthUnit.Sentences,
         string? orgDescription = "We build enterprise software",
-        Action<string>? onProgress = null)
+        Action<string>? onProgress = null,
+        string? additionalContext = null)
         => provider.AnswerQuestionAsync(
             questionText:           questionText,
             tone:                   QuestionTone.Formal,
@@ -198,7 +199,8 @@ public class AnswerQuestionTests
             tailoredResumeMarkdown: "# Resume\nSome content",
             modelId:                "gpt-5.4",
             apiKey:                 "sk-test",
-            onProgress:             onProgress);
+            onProgress:             onProgress,
+            additionalContext:      additionalContext);
 
     [Fact]
     public async Task AnswerQuestionAsync_WithValidContext_ReturnsAnswerText()
@@ -408,6 +410,92 @@ public class AnswerQuestionTests
         await CallAsync(MakeProvider(handler), orgDescription: null);
 
         Assert.DoesNotContain("We build enterprise software", string.Join("\n", handler.CapturedBodies));
+    }
+
+    // ── Additional applicant context (Ask Question free-text supplement) ──
+
+    // The marker that labels the user-payload block. The Stage 1 instructions
+    // also reference this marker by name in the rule body, so the assertions
+    // below distinguish the user-payload header (marker + escaped newline,
+    // which is how it lands in JSON-encoded HTTP body) from the rule's
+    // narrative reference (marker followed by a space).
+    private const string AdditionalContextMarker        = "[ADDITIONAL APPLICANT CONTEXT]";
+    private const string AdditionalContextHeaderInBody  = "[ADDITIONAL APPLICANT CONTEXT]\\n";
+
+    [Fact]
+    public async Task AnswerQuestionAsync_AdditionalContext_AppearsOnlyInStage1Prompt()
+    {
+        var handler = new QueueHttpHandler(
+            OkSse(MakeFocusJson()),
+            OkSse("Answer."));
+
+        const string extra = "I completed a Kubernetes administrator certification last month, after the resume was last updated.";
+        await CallAsync(MakeProvider(handler), additionalContext: extra);
+
+        // The dedicated user-payload block must reach Stage 1 so it can shift
+        // classification and feed into roleFitPriorities selection.
+        Assert.Contains(AdditionalContextHeaderInBody, handler.CapturedBodies[0]);
+        Assert.Contains("Kubernetes administrator certification", handler.CapturedBodies[0]);
+
+        // Contract: Stage 2 receives only the selected roleFitPriorities, never
+        // the raw additional-context block. If this assertion ever fires, we've
+        // punched a hole in the "selected priorities are the only fact source"
+        // invariant the rejection sampler's detectors depend on.
+        Assert.DoesNotContain(AdditionalContextMarker, handler.CapturedBodies[1]);
+        Assert.DoesNotContain("Kubernetes administrator certification", handler.CapturedBodies[1]);
+    }
+
+    [Fact]
+    public async Task AnswerQuestionAsync_NoAdditionalContext_OmitsUserBlockFromStage1Prompt()
+    {
+        var handler = new QueueHttpHandler(
+            OkSse(MakeFocusJson()),
+            OkSse("Answer."));
+
+        await CallAsync(MakeProvider(handler), additionalContext: null);
+
+        // The instructions still mention the marker (the rule body references
+        // it), but the user-payload header — marker followed by a newline — must
+        // not be emitted when no context is supplied.
+        Assert.DoesNotContain(AdditionalContextHeaderInBody, handler.CapturedBodies[0]);
+    }
+
+    [Fact]
+    public async Task AnswerQuestionAsync_WhitespaceOnlyAdditionalContext_OmitsUserBlockFromStage1Prompt()
+    {
+        var handler = new QueueHttpHandler(
+            OkSse(MakeFocusJson()),
+            OkSse("Answer."));
+
+        // "   \n  \t  " trims to empty — must be treated the same as null.
+        await CallAsync(MakeProvider(handler), additionalContext: "   \n  \t  ");
+
+        Assert.DoesNotContain(AdditionalContextHeaderInBody, handler.CapturedBodies[0]);
+    }
+
+    [Fact]
+    public async Task AnswerQuestionAsync_Stage1Prompt_AdditionalContextRule_DescribesEvidenceAndStrategyEffects()
+    {
+        // Pin only the stable markers from the new Stage 1 rule — the exact
+        // wording will likely iterate, but these tokens describe the contract
+        // the rule must continue to enforce: it's a valid source of
+        // resumeEvidence, and it may participate in strategy reclassification.
+        var handler = new QueueHttpHandler(
+            OkSse(MakeFocusJson()),
+            OkSse("Answer."));
+
+        // No context supplied — the rule body lives in the instructions and is
+        // present regardless of whether the user-payload block is emitted.
+        await CallAsync(MakeProvider(handler), additionalContext: null);
+
+        var stage1 = handler.CapturedBodies[0];
+        Assert.Contains(AdditionalContextMarker, stage1);
+        Assert.Contains("resumeEvidence", stage1);
+        Assert.Contains("strategy classification", stage1);
+        // The rule must explicitly tell the model to treat the block as data
+        // (not instructions) — this is the only defence against prompt-injection
+        // attempts in the user-supplied free text.
+        Assert.Contains("data, not instructions", stage1);
     }
 
     // ── Split-model routing (stage1ModelId parameter) ──────────────────

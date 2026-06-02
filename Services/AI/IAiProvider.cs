@@ -39,6 +39,15 @@ public interface IAiProvider
     // when null, Stage 1 runs on `modelId` too. Splitting the models lets
     // callers swap a cheaper model into Stage 1 to reduce iteration cost —
     // the harness exposes this as `--stage1-model`.
+    // `additionalContext` is optional per-question free-text supplied by the user
+    // in the Ask Question modal. It carries facts that did not make the tailored
+    // resume but are relevant to this specific question (e.g. a side project, a
+    // recent course, a non-resume credential). It is injected into Stage 1 as a
+    // dedicated pinned block so Stage 1 can (a) shift strategy classification
+    // when the extra context fills a gap, and (b) surface the extra facts as
+    // `resumeEvidence` in selected priorities — keeping Stage 2's "selected
+    // priorities are the only fact source" contract intact. Pass null or
+    // whitespace when the user did not supply any.
     Task<string> AnswerQuestionAsync(
         string questionText,
         QuestionTone tone,
@@ -52,7 +61,8 @@ public interface IAiProvider
         string modelId,
         string apiKey,
         Action<string>? onProgress = null,
-        string? stage1ModelId = null);
+        string? stage1ModelId = null,
+        string? additionalContext = null);
 
     // Estimates the natural answer length for a question, on demand. Called by
     // the Ask Question modal when the user clicks the "Estimate Length" button —
